@@ -7,14 +7,14 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		A10001 /* PicSortApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20001; };
+		A10001 /* HayateApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20001; };
 		A10002 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20002; };
 		A10003 /* MetalImageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20003; };
 		A10004 /* ImageDecoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20004; };
 		A10005 /* PrefetchManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20005; };
 		A10006 /* CullingSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20006; };
 		A10007 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A20007; };
-		A10008 /* PicSort.entitlements in Resources */ = {isa = PBXBuildFile; fileRef = A20008; };
+		A10008 /* Hayate.entitlements in Resources */ = {isa = PBXBuildFile; fileRef = A20008; };
 		B10001 /* CullingSessionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20001; };
 /* End PBXBuildFile section */
 
@@ -24,22 +24,22 @@
 			containerPortal = A00001 /* Project object */;
 			proxyType = 1;
 			remoteGlobalIDString = A60001;
-			remoteInfo = PicSort;
+			remoteInfo = Hayate;
 		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
-		A20001 /* PicSortApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PicSortApp.swift; sourceTree = "<group>"; };
+		A20001 /* HayateApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HayateApp.swift; sourceTree = "<group>"; };
 		A20002 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		A20003 /* MetalImageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetalImageView.swift; sourceTree = "<group>"; };
 		A20004 /* ImageDecoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageDecoder.swift; sourceTree = "<group>"; };
 		A20005 /* PrefetchManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrefetchManager.swift; sourceTree = "<group>"; };
 		A20006 /* CullingSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CullingSession.swift; sourceTree = "<group>"; };
 		A20007 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
-		A20008 /* PicSort.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = PicSort.entitlements; sourceTree = "<group>"; };
-		A30001 /* PicSort.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PicSort.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A20008 /* Hayate.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Hayate.entitlements; sourceTree = "<group>"; };
+		A30001 /* Hayate.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Hayate.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		B20001 /* CullingSessionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CullingSessionTests.swift; sourceTree = "<group>"; };
-		B30001 /* PicSortTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PicSortTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		B30001 /* HayateTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = HayateTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -63,50 +63,50 @@
 		A50000 /* Root */ = {
 			isa = PBXGroup;
 			children = (
-				A50001 /* PicSort */,
-				B50001 /* PicSortTests */,
+				A50001 /* Hayate */,
+				B50001 /* HayateTests */,
 				A50002 /* Products */,
 			);
 			sourceTree = "<group>";
 		};
-		A50001 /* PicSort */ = {
+		A50001 /* Hayate */ = {
 			isa = PBXGroup;
 			children = (
-				A20001 /* PicSortApp.swift */,
+				A20001 /* HayateApp.swift */,
 				A20002 /* ContentView.swift */,
 				A20003 /* MetalImageView.swift */,
 				A20004 /* ImageDecoder.swift */,
 				A20005 /* PrefetchManager.swift */,
 				A20006 /* CullingSession.swift */,
 				A20007 /* Assets.xcassets */,
-				A20008 /* PicSort.entitlements */,
+				A20008 /* Hayate.entitlements */,
 			);
-			path = PicSort;
+			path = Hayate;
 			sourceTree = "<group>";
 		};
 		A50002 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				A30001 /* PicSort.app */,
-				B30001 /* PicSortTests.xctest */,
+				A30001 /* Hayate.app */,
+				B30001 /* HayateTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
 		};
-		B50001 /* PicSortTests */ = {
+		B50001 /* HayateTests */ = {
 			isa = PBXGroup;
 			children = (
 				B20001 /* CullingSessionTests.swift */,
 			);
-			path = PicSortTests;
+			path = HayateTests;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		A60001 /* PicSort */ = {
+		A60001 /* Hayate */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = A80001 /* Build configuration list for PBXNativeTarget "PicSort" */;
+			buildConfigurationList = A80001 /* Build configuration list for PBXNativeTarget "Hayate" */;
 			buildPhases = (
 				A70001 /* Sources */,
 				A40001 /* Frameworks */,
@@ -116,14 +116,14 @@
 			);
 			dependencies = (
 			);
-			name = PicSort;
-			productName = PicSort;
-			productReference = A30001 /* PicSort.app */;
+			name = Hayate;
+			productName = Hayate;
+			productReference = A30001 /* Hayate.app */;
 			productType = "com.apple.product-type.application";
 		};
-		B60001 /* PicSortTests */ = {
+		B60001 /* HayateTests */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = B80001 /* Build configuration list for PBXNativeTarget "PicSortTests" */;
+			buildConfigurationList = B80001 /* Build configuration list for PBXNativeTarget "HayateTests" */;
 			buildPhases = (
 				B70001 /* Sources */,
 				B40002 /* Frameworks */,
@@ -133,9 +133,9 @@
 			dependencies = (
 				B40003 /* PBXTargetDependency */,
 			);
-			name = PicSortTests;
-			productName = PicSortTests;
-			productReference = B30001 /* PicSortTests.xctest */;
+			name = HayateTests;
+			productName = HayateTests;
+			productReference = B30001 /* HayateTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
 /* End PBXNativeTarget section */
@@ -157,7 +157,7 @@
 					};
 				};
 			};
-			buildConfigurationList = A80000 /* Build configuration list for PBXProject "PicSort" */;
+			buildConfigurationList = A80000 /* Build configuration list for PBXProject "Hayate" */;
 			compatibilityVersion = "Xcode 14.0";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
@@ -170,8 +170,8 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				A60001 /* PicSort */,
-				B60001 /* PicSortTests */,
+				A60001 /* Hayate */,
+				B60001 /* HayateTests */,
 			);
 		};
 /* End PBXProject section */
@@ -192,7 +192,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				A10001 /* PicSortApp.swift in Sources */,
+				A10001 /* HayateApp.swift in Sources */,
 				A10002 /* ContentView.swift in Sources */,
 				A10003 /* MetalImageView.swift in Sources */,
 				A10004 /* ImageDecoder.swift in Sources */,
@@ -214,7 +214,7 @@
 /* Begin PBXTargetDependency section */
 		B40003 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			target = A60001 /* PicSort */;
+			target = A60001 /* Hayate */;
 			targetProxy = B40001 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
@@ -278,7 +278,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				CODE_SIGN_ENTITLEMENTS = PicSort/PicSort.entitlements;
+				CODE_SIGN_ENTITLEMENTS = Hayate/Hayate.entitlements;
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "-";
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
@@ -290,7 +290,7 @@
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				MARKETING_VERSION = 0.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.hayate.app;
-				PRODUCT_MODULE_NAME = PicSort;
+				PRODUCT_MODULE_NAME = Hayate;
 				PRODUCT_NAME = Hayate;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_STRICT_CONCURRENCY = complete;
@@ -302,7 +302,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				CODE_SIGN_ENTITLEMENTS = PicSort/PicSort.entitlements;
+				CODE_SIGN_ENTITLEMENTS = Hayate/Hayate.entitlements;
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "-";
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
@@ -314,7 +314,7 @@
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				MARKETING_VERSION = 0.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.hayate.app;
-				PRODUCT_MODULE_NAME = PicSort;
+				PRODUCT_MODULE_NAME = Hayate;
 				PRODUCT_NAME = Hayate;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_STRICT_CONCURRENCY = complete;
@@ -359,7 +359,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		A80000 /* Build configuration list for PBXProject "PicSort" */ = {
+		A80000 /* Build configuration list for PBXProject "Hayate" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				A90001 /* Debug */,
@@ -368,7 +368,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		A80001 /* Build configuration list for PBXNativeTarget "PicSort" */ = {
+		A80001 /* Build configuration list for PBXNativeTarget "Hayate" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				A90003 /* Debug */,
@@ -377,7 +377,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		B80001 /* Build configuration list for PBXNativeTarget "PicSortTests" */ = {
+		B80001 /* Build configuration list for PBXNativeTarget "HayateTests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				B90001 /* Debug */,

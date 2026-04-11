@@ -3,7 +3,7 @@ import Metal
 import CoreImage
 
 @main
-struct PicSortApp: App {
+struct HayateApp: App {
     @StateObject private var session = CullingSession()
 
     private let device: MTLDevice
