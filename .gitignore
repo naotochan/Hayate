@@ -25,3 +25,10 @@ xcuserdata/
 
 # Hayate
 .hayate.json
+
+# Claude / AI
+CLAUDE.md
+.claude/
+
+# Internal task management
+tasks/
