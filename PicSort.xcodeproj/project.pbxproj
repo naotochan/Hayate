@@ -1,0 +1,393 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		A10001 /* PicSortApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20001; };
+		A10002 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20002; };
+		A10003 /* MetalImageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20003; };
+		A10004 /* ImageDecoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20004; };
+		A10005 /* PrefetchManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20005; };
+		A10006 /* CullingSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20006; };
+		A10007 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A20007; };
+		A10008 /* PicSort.entitlements in Resources */ = {isa = PBXBuildFile; fileRef = A20008; };
+		B10001 /* CullingSessionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20001; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		B40001 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A00001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A60001;
+			remoteInfo = PicSort;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		A20001 /* PicSortApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PicSortApp.swift; sourceTree = "<group>"; };
+		A20002 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		A20003 /* MetalImageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetalImageView.swift; sourceTree = "<group>"; };
+		A20004 /* ImageDecoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageDecoder.swift; sourceTree = "<group>"; };
+		A20005 /* PrefetchManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrefetchManager.swift; sourceTree = "<group>"; };
+		A20006 /* CullingSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CullingSession.swift; sourceTree = "<group>"; };
+		A20007 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		A20008 /* PicSort.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = PicSort.entitlements; sourceTree = "<group>"; };
+		A30001 /* PicSort.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PicSort.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		B20001 /* CullingSessionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CullingSessionTests.swift; sourceTree = "<group>"; };
+		B30001 /* PicSortTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PicSortTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		A40001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B40002 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		A50000 /* Root */ = {
+			isa = PBXGroup;
+			children = (
+				A50001 /* PicSort */,
+				B50001 /* PicSortTests */,
+				A50002 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		A50001 /* PicSort */ = {
+			isa = PBXGroup;
+			children = (
+				A20001 /* PicSortApp.swift */,
+				A20002 /* ContentView.swift */,
+				A20003 /* MetalImageView.swift */,
+				A20004 /* ImageDecoder.swift */,
+				A20005 /* PrefetchManager.swift */,
+				A20006 /* CullingSession.swift */,
+				A20007 /* Assets.xcassets */,
+				A20008 /* PicSort.entitlements */,
+			);
+			path = PicSort;
+			sourceTree = "<group>";
+		};
+		A50002 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				A30001 /* PicSort.app */,
+				B30001 /* PicSortTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		B50001 /* PicSortTests */ = {
+			isa = PBXGroup;
+			children = (
+				B20001 /* CullingSessionTests.swift */,
+			);
+			path = PicSortTests;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		A60001 /* PicSort */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A80001 /* Build configuration list for PBXNativeTarget "PicSort" */;
+			buildPhases = (
+				A70001 /* Sources */,
+				A40001 /* Frameworks */,
+				A70002 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = PicSort;
+			productName = PicSort;
+			productReference = A30001 /* PicSort.app */;
+			productType = "com.apple.product-type.application";
+		};
+		B60001 /* PicSortTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = B80001 /* Build configuration list for PBXNativeTarget "PicSortTests" */;
+			buildPhases = (
+				B70001 /* Sources */,
+				B40002 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				B40003 /* PBXTargetDependency */,
+			);
+			name = PicSortTests;
+			productName = PicSortTests;
+			productReference = B30001 /* PicSortTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		A00001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1600;
+				LastUpgradeCheck = 1600;
+				TargetAttributes = {
+					A60001 = {
+						CreatedOnToolsVersion = 16.0;
+					};
+					B60001 = {
+						CreatedOnToolsVersion = 16.0;
+						TestTargetID = A60001;
+					};
+				};
+			};
+			buildConfigurationList = A80000 /* Build configuration list for PBXProject "PicSort" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = A50000 /* Root */;
+			productRefGroup = A50002 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				A60001 /* PicSort */,
+				B60001 /* PicSortTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		A70002 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A10007 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		A70001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A10001 /* PicSortApp.swift in Sources */,
+				A10002 /* ContentView.swift in Sources */,
+				A10003 /* MetalImageView.swift in Sources */,
+				A10004 /* ImageDecoder.swift in Sources */,
+				A10005 /* PrefetchManager.swift in Sources */,
+				A10006 /* CullingSession.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B70001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B10001 /* CullingSessionTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		B40003 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A60001 /* PicSort */;
+			targetProxy = B40001 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		A90001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) DEBUG";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		A90002 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+			};
+			name = Release;
+		};
+		A90003 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = PicSort/PicSort.entitlements;
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "-";
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_HARDENED_RUNTIME = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.photography";
+				INFOPLIST_KEY_CFBundleDisplayName = Hayate;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.hayate.app;
+				PRODUCT_MODULE_NAME = PicSort;
+				PRODUCT_NAME = Hayate;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		A90004 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = PicSort/PicSort.entitlements;
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "-";
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_HARDENED_RUNTIME = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.photography";
+				INFOPLIST_KEY_CFBundleDisplayName = Hayate;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.hayate.app;
+				PRODUCT_MODULE_NAME = PicSort;
+				PRODUCT_NAME = Hayate;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+		B90001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "-";
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.hayate.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Hayate.app/Contents/MacOS/Hayate";
+			};
+			name = Debug;
+		};
+		B90002 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "-";
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.hayate.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Hayate.app/Contents/MacOS/Hayate";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		A80000 /* Build configuration list for PBXProject "PicSort" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A90001 /* Debug */,
+				A90002 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A80001 /* Build configuration list for PBXNativeTarget "PicSort" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A90003 /* Debug */,
+				A90004 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		B80001 /* Build configuration list for PBXNativeTarget "PicSortTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B90001 /* Debug */,
+				B90002 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+	};
+	rootObject = A00001 /* Project object */;
+}
