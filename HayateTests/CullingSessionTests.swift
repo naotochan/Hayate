@@ -1,5 +1,5 @@
 import XCTest
-@testable import PicSort
+@testable import Hayate
 
 @MainActor
 final class CullingSessionTests: XCTestCase {

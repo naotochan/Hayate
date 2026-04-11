@@ -42,7 +42,7 @@ Hayate is a native macOS app for quickly reviewing and sorting RAW photos. Built
 ## Build
 
 ```bash
-xcodebuild -scheme PicSort -configuration Release build
+xcodebuild -scheme Hayate -configuration Release build
 ```
 
 ## Supported Formats
