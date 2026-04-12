@@ -32,3 +32,6 @@ CLAUDE.md
 
 # Internal task management
 tasks/
+
+# Sparkle tools (binary, download via generate_keys)
+scripts/sparkle-tools/
