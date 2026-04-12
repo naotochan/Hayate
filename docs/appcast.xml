@@ -6,15 +6,15 @@
     <description>Hayate update feed</description>
     <language>en</language>
     <item>
-      <title>Version 0.2.1</title>
-      <sparkle:version>0.2.1</sparkle:version>
-      <sparkle:shortVersionString>0.2.1</sparkle:shortVersionString>
-      <pubDate>Sun, 12 Apr 2026 05:58:15 +0000</pubDate>
+      <title>Version 0.2.2</title>
+      <sparkle:version>0.2.2</sparkle:version>
+      <sparkle:shortVersionString>0.2.2</sparkle:shortVersionString>
+      <pubDate>Sun, 12 Apr 2026 06:01:17 +0000</pubDate>
       <enclosure
-        url="https://github.com/naotochan/Hayate/releases/download/v0.2.1/Hayate-0.2.1-mac.zip"
-        length="1314197"
+        url="https://github.com/naotochan/Hayate/releases/download/v0.2.2/Hayate-0.2.2-mac.zip"
+        length="1314205"
         type="application/octet-stream"
-        sparkle:edSignature="alOprA85yILfhzpObuwxYN90zzcos1+5b1stGvomb2zxWqyRw73oUG/EVmyvzk7Vlt+8xwtauUnOV+vHYxwrCA=="
+        sparkle:edSignature="t1fI8oPSeT0SLWN+pY/5Pxu0G92G1vdYOanmVtO4+6X3/k2EdP395qxvwMcJ3tW1aUZUjF2AHRh6e32zvFidBA=="
       />
     </item>
   </channel>
