@@ -38,6 +38,7 @@
 		A20006 /* CullingSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CullingSession.swift; sourceTree = "<group>"; };
 		A20007 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		A20008 /* Hayate.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Hayate.entitlements; sourceTree = "<group>"; };
+		A20009 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		A30001 /* Hayate.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Hayate.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		B20001 /* CullingSessionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CullingSessionTests.swift; sourceTree = "<group>"; };
 		B30001 /* HayateTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = HayateTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -82,6 +83,7 @@
 				A20006 /* CullingSession.swift */,
 				A20007 /* Assets.xcassets */,
 				A20008 /* Hayate.entitlements */,
+				A20009 /* Info.plist */,
 			);
 			path = Hayate;
 			sourceTree = "<group>";
@@ -292,12 +294,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_HARDENED_RUNTIME = NO;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.photography";
-				INFOPLIST_KEY_CFBundleDisplayName = Hayate;
-				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				INFOPLIST_KEY_SUFeedURL = "https://naotochan.github.io/Hayate/appcast.xml";
-				INFOPLIST_KEY_SUPublicEDKey = "106+ly1j7nr1q11TOBKBAk5udcowsnOTjSJWb4IpAow=";
+				INFOPLIST_FILE = Hayate/Info.plist;
 				MARKETING_VERSION = 0.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.hayate.app;
 				PRODUCT_MODULE_NAME = Hayate;
@@ -322,12 +319,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_HARDENED_RUNTIME = NO;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.photography";
-				INFOPLIST_KEY_CFBundleDisplayName = Hayate;
-				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				INFOPLIST_KEY_SUFeedURL = "https://naotochan.github.io/Hayate/appcast.xml";
-				INFOPLIST_KEY_SUPublicEDKey = "106+ly1j7nr1q11TOBKBAk5udcowsnOTjSJWb4IpAow=";
+				INFOPLIST_FILE = Hayate/Info.plist;
 				MARKETING_VERSION = 0.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.hayate.app;
 				PRODUCT_MODULE_NAME = Hayate;
