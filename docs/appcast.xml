@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <channel>
+    <title>Hayate Updates</title>
+    <link>https://github.com/naotochan/Hayate</link>
+    <description>Hayate update feed</description>
+    <language>en</language>
+    <item>
+      <title>Version 0.2.0</title>
+      <sparkle:version>0.2.0</sparkle:version>
+      <sparkle:shortVersionString>0.2.0</sparkle:shortVersionString>
+      <pubDate>Sun, 12 Apr 2026 00:14:37 +0000</pubDate>
+      <enclosure
+        url="https://github.com/naotochan/Hayate/releases/download/v0.2.0/Hayate-0.2.0-mac.zip"
+        length="1298434"
+        type="application/octet-stream"
+        sparkle:edSignature="vEdrZSaO0EI7ojmX66AYYXMEgmrnekcrMgVudvv484CHYcOwpeYGBSrU341ZjPwdpidxFUeJFyGuvSrH5dTDAw=="
+      />
+    </item>
+  </channel>
+</rss>
