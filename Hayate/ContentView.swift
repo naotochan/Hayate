@@ -44,7 +44,20 @@ struct ContentView: View {
             Color(nsColor: NSColor(red: 0.1, green: 0.1, blue: 0.1, alpha: 1.0))
                 .ignoresSafeArea()
 
-            if session.files.isEmpty {
+            if ciContext == nil {
+                // Loading screen while CIContext initializes
+                VStack(spacing: 16) {
+                    Text("Hayate")
+                        .font(.system(size: 36, weight: .bold))
+                        .foregroundColor(.white)
+                    Text("RAW Photo Culling")
+                        .font(.system(size: 14))
+                        .foregroundColor(.gray)
+                    ProgressView()
+                        .controlSize(.small)
+                        .padding(.top, 8)
+                }
+            } else if session.files.isEmpty {
                 // "Open Folder" prompt
                 VStack(spacing: 16) {
                     Text("Hayate")
