@@ -95,6 +95,12 @@ struct ContentView: View {
             initializeDecoder()
             installKeyHandler()
         }
+        .onChange(of: ciContext != nil) { _, available in
+            // Re-initialize decoder when CIContext becomes available (async load)
+            if available && decoder == nil {
+                initializeDecoder()
+            }
+        }
         .onDisappear {
             removeKeyHandler()
         }
