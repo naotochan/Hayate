@@ -3,14 +3,28 @@ import Metal
 import CoreImage
 import Sparkle
 
+/// Holds the CIContext created asynchronously to avoid blocking the main thread
+/// during GPU shader compilation on first use.
+@MainActor
+final class CIContextHolder: ObservableObject {
+    @Published var ciContext: CIContext?
+
+    func initialize(device: MTLDevice) {
+        guard ciContext == nil else { return }
+        let device = device
+        Task.detached {
+            let ctx = CIContext(mtlDevice: device)
+            await MainActor.run { self.ciContext = ctx }
+        }
+    }
+}
+
 @main
 struct HayateApp: App {
     @StateObject private var session = CullingSession()
+    @StateObject private var ciContextHolder = CIContextHolder()
 
     private let device: MTLDevice
-    /// Single shared CIContext bound to the default Metal device.
-    /// CIContext is thread-safe and expensive to create (GPU shader compilation on first use).
-    private let ciContext: CIContext
     private let updaterController: SPUStandardUpdaterController
 
     init() {
@@ -18,7 +32,6 @@ struct HayateApp: App {
             fatalError("Metal is not supported on this device")
         }
         self.device = device
-        self.ciContext = CIContext(mtlDevice: device)
         self.updaterController = SPUStandardUpdaterController(
             startingUpdater: true,
             updaterDelegate: nil,
@@ -30,8 +43,11 @@ struct HayateApp: App {
         WindowGroup {
             ContentView()
                 .environmentObject(session)
-                .environment(\.ciContext, ciContext)
+                .environment(\.ciContext, ciContextHolder.ciContext)
                 .environment(\.metalDevice, device)
+                .task {
+                    ciContextHolder.initialize(device: device)
+                }
         }
         .windowStyle(.titleBar)
         .defaultSize(width: 1200, height: 800)
