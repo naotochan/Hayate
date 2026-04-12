@@ -15,6 +15,7 @@
 		A10006 /* CullingSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20006; };
 		A10007 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A20007; };
 		A10008 /* Hayate.entitlements in Resources */ = {isa = PBXBuildFile; fileRef = A20008; };
+		A10009 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = C10001 /* Sparkle */; };
 		B10001 /* CullingSessionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20001; };
 /* End PBXBuildFile section */
 
@@ -47,6 +48,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A10009 /* Sparkle in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -117,6 +119,9 @@
 			dependencies = (
 			);
 			name = Hayate;
+			packageProductDependencies = (
+				C10001 /* Sparkle */,
+			);
 			productName = Hayate;
 			productReference = A30001 /* Hayate.app */;
 			productType = "com.apple.product-type.application";
@@ -166,6 +171,9 @@
 				Base,
 			);
 			mainGroup = A50000 /* Root */;
+			packageReferences = (
+				C00001 /* XCRemoteSwiftPackageReference "Sparkle" */,
+			);
 			productRefGroup = A50002 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -288,6 +296,8 @@
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.photography";
 				INFOPLIST_KEY_CFBundleDisplayName = Hayate;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_SUFeedURL = "https://naotochan.github.io/Hayate/appcast.xml";
+				INFOPLIST_KEY_SUPublicEDKey = "106+ly1j7nr1q11TOBKBAk5udcowsnOTjSJWb4IpAow=";
 				MARKETING_VERSION = 0.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.hayate.app;
 				PRODUCT_MODULE_NAME = Hayate;
@@ -312,6 +322,8 @@
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.photography";
 				INFOPLIST_KEY_CFBundleDisplayName = Hayate;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_SUFeedURL = "https://naotochan.github.io/Hayate/appcast.xml";
+				INFOPLIST_KEY_SUPublicEDKey = "106+ly1j7nr1q11TOBKBAk5udcowsnOTjSJWb4IpAow=";
 				MARKETING_VERSION = 0.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.hayate.app;
 				PRODUCT_MODULE_NAME = Hayate;
@@ -387,6 +399,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		C00001 /* XCRemoteSwiftPackageReference "Sparkle" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/sparkle-project/Sparkle";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.0.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		C10001 /* Sparkle */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C00001 /* XCRemoteSwiftPackageReference "Sparkle" */;
+			productName = Sparkle;
+		};
+/* End XCSwiftPackageProductDependency section */
 
 	};
 	rootObject = A00001 /* Project object */;
