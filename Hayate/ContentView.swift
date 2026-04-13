@@ -12,6 +12,9 @@ struct ContentView: View {
     @State private var prefetchManager: PrefetchManager?
     @State private var isLoading = false
     @State private var showDeleteConfirmation = false
+    /// Indices to delete when the confirmation dialog is accepted.
+    /// `nil` means "delete the current photo only" (legacy single-file path).
+    @State private var pendingDeletionIndices: Set<Int>? = nil
     @State private var decodeTimeMs: Double = 0
     @State private var keyMonitor: Any?
     @State private var currentDecodeTask: Task<Void, Never>?
@@ -104,19 +107,28 @@ struct ContentView: View {
             removeKeyHandler()
         }
         .confirmationDialog(
-            "Delete this photo?",
+            deletionDialogTitle,
             isPresented: $showDeleteConfirmation,
             titleVisibility: .visible
         ) {
             Button("Move to Trash", role: .destructive) {
-                _ = session.deleteCurrentFile()
-                loadCurrentImage()
+                if let indices = pendingDeletionIndices {
+                    let deleted = session.deleteFilesAtIndices(indices)
+                    selectedIndices.removeAll()
+                    pendingDeletionIndices = nil
+                    if deleted > 0 {
+                        loadCurrentImage()
+                    }
+                } else {
+                    _ = session.deleteCurrentFile()
+                    loadCurrentImage()
+                }
             }
-            Button("Cancel", role: .cancel) {}
+            Button("Cancel", role: .cancel) {
+                pendingDeletionIndices = nil
+            }
         } message: {
-            if let file = session.currentFile {
-                Text(file.lastPathComponent)
-            }
+            Text(deletionDialogMessage)
         }
         .onChange(of: session.currentIndex) { _, _ in
             loadCurrentImage()
@@ -866,6 +878,11 @@ struct ContentView: View {
             }
             return false
         case 51: // delete
+            if showGrid && !selectedIndices.isEmpty {
+                pendingDeletionIndices = selectedIndices
+            } else {
+                pendingDeletionIndices = nil
+            }
             showDeleteConfirmation = true
             return true
         default:
@@ -983,6 +1000,23 @@ struct ContentView: View {
     private func resetZoom() {
         zoomScale = 1.0
         panOffset = .zero
+    }
+
+    private var deletionDialogTitle: String {
+        if let count = pendingDeletionIndices?.count, count > 1 {
+            return "Delete \(count) photos?"
+        }
+        return "Delete this photo?"
+    }
+
+    private var deletionDialogMessage: String {
+        if let indices = pendingDeletionIndices {
+            if indices.count == 1, let only = indices.first, session.files.indices.contains(only) {
+                return session.files[only].lastPathComponent
+            }
+            return "Move \(indices.count) selected photos to Trash."
+        }
+        return session.currentFile?.lastPathComponent ?? ""
     }
 
     private func openFolderDialog() {

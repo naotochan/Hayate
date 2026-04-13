@@ -229,6 +229,56 @@ class CullingSession: ObservableObject {
 
     // MARK: - Deletion
 
+    /// Move the given indices to Trash. Indices are processed back-to-front so
+    /// earlier indices stay valid as later ones are removed.
+    /// - Returns: number of files successfully trashed.
+    @discardableResult
+    func deleteFilesAtIndices(_ indices: Set<Int>) -> Int {
+        let sorted = indices.filter { files.indices.contains($0) }.sorted(by: >)
+        var deleted = 0
+        // Track how the deletions affect currentIndex so the displayed photo
+        // stays on the same file when possible (or snaps to the nearest
+        // survivor if the current photo itself was in the set).
+        var currentRemoved = false
+        var droppedBeforeCurrent = 0
+        for index in sorted {
+            let file = files[index]
+            let fileName = file.lastPathComponent
+            do {
+                try FileManager.default.trashItem(at: file, resultingItemURL: nil)
+            } catch {
+                continue
+            }
+            undoStack.append(.deletion(url: file, index: index, entry: entries[fileName]))
+            entries[fileName] = nil
+            files.remove(at: index)
+            deleted += 1
+            if index == currentIndex {
+                currentRemoved = true
+            } else if index < currentIndex {
+                droppedBeforeCurrent += 1
+            }
+        }
+
+        if files.isEmpty {
+            currentIndex = 0
+        } else {
+            // Shift down by the number of removed predecessors so the same
+            // file stays selected; if the current file itself was removed,
+            // fall through to clamping below (which lands on the next file).
+            currentIndex -= droppedBeforeCurrent
+            if currentRemoved && currentIndex >= files.count {
+                currentIndex = files.count - 1
+            }
+            currentIndex = max(0, min(currentIndex, files.count - 1))
+        }
+
+        if deleted > 0 {
+            saveJSON()
+        }
+        return deleted
+    }
+
     func deleteCurrentFile() -> Bool {
         guard let file = currentFile else { return false }
         let fileName = file.lastPathComponent

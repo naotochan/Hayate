@@ -289,6 +289,55 @@ final class CullingSessionTests: XCTestCase {
         XCTAssertNil(session.entries[fileName], "Entry should be removed on delete")
     }
 
+    func testBatchDeleteRemovesAllSelected() {
+        loadTestFiles(count: 5)
+        // Mark a few as rejected and rate one of the survivors so we can
+        // verify entries are pruned together with files.
+        session.setRatingForIndices(Set([0, 2, 4]), rating: 3)
+
+        let deleted = session.deleteFilesAtIndices(Set([0, 2, 4]))
+
+        XCTAssertEqual(deleted, 3)
+        XCTAssertEqual(session.files.count, 2)
+        XCTAssertEqual(session.files.map(\.lastPathComponent), ["IMG_0002.CR3", "IMG_0004.CR3"])
+        XCTAssertNil(session.entries["IMG_0001.CR3"], "Deleted entries should be pruned")
+        XCTAssertNil(session.entries["IMG_0003.CR3"])
+        XCTAssertNil(session.entries["IMG_0005.CR3"])
+    }
+
+    func testBatchDeleteClampsCurrentIndex() {
+        loadTestFiles(count: 4)
+        session.currentIndex = 3
+
+        let deleted = session.deleteFilesAtIndices(Set([2, 3]))
+
+        XCTAssertEqual(deleted, 2)
+        XCTAssertEqual(session.files.count, 2)
+        XCTAssertEqual(session.currentIndex, 1, "currentIndex should clamp into the new range")
+    }
+
+    func testBatchDeletePredecessorsPreservesCurrent() {
+        loadTestFiles(count: 5)
+        session.currentIndex = 3 // IMG_0004.CR3
+
+        let deleted = session.deleteFilesAtIndices(Set([0, 1]))
+
+        XCTAssertEqual(deleted, 2)
+        XCTAssertEqual(session.files.count, 3)
+        XCTAssertEqual(session.currentIndex, 1, "currentIndex should shift down by deleted predecessors")
+        XCTAssertEqual(session.currentFile?.lastPathComponent, "IMG_0004.CR3", "Should still display the same file")
+    }
+
+    func testBatchDeleteEmptiesFolder() {
+        loadTestFiles(count: 2)
+
+        let deleted = session.deleteFilesAtIndices(Set([0, 1]))
+
+        XCTAssertEqual(deleted, 2)
+        XCTAssertTrue(session.files.isEmpty)
+        XCTAssertEqual(session.currentIndex, 0)
+    }
+
     // MARK: - JSON Persistence
 
     func testJSONRoundTrip() {
