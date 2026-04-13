@@ -13,6 +13,10 @@ class CullingSession: ObservableObject {
     /// The folder currently open.
     @Published var folderURL: URL?
 
+    /// Trigger value; bumped to request the UI to show the Open Folder dialog.
+    /// ContentView observes this via `.onChange` and presents `NSOpenPanel`.
+    @Published var openFolderRequest: UUID = UUID()
+
     /// Undo stack (session-only, lost on quit).
     private var undoStack: [UndoAction] = []
 
@@ -50,9 +54,18 @@ class CullingSession: ObservableObject {
 
     // MARK: - Folder Loading
 
+    /// Request the UI to present the folder picker. Menus, buttons, and keyboard
+    /// shortcuts all route through here so there's a single path into the dialog.
+    func requestOpenFolder() {
+        openFolderRequest = UUID()
+    }
+
     /// Open a folder and scan for RAW files.
-    func openFolder(_ url: URL) {
-        guard url.startAccessingSecurityScopedResource() else { return }
+    /// - Returns: `true` if the folder was opened (security scope granted). `false` means
+    ///            no session state was mutated, so callers should leave the UI alone.
+    @discardableResult
+    func openFolder(_ url: URL) -> Bool {
+        guard url.startAccessingSecurityScopedResource() else { return false }
         defer { url.stopAccessingSecurityScopedResource() }
 
         folderURL = url
@@ -66,7 +79,9 @@ class CullingSession: ObservableObject {
             options: [.skipsHiddenFiles]
         ) else {
             files = []
-            return
+            entries = [:]
+            currentIndex = 0
+            return true
         }
 
         files = contents.filter { fileURL in
@@ -81,6 +96,7 @@ class CullingSession: ObservableObject {
 
         // Load existing JSON
         loadJSON()
+        return true
     }
 
     // MARK: - Navigation
