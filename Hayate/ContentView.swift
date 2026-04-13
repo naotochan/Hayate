@@ -68,9 +68,8 @@ struct ContentView: View {
                         .foregroundColor(.gray)
 
                     Button("Open Folder...") {
-                        openFolderDialog()
+                        session.requestOpenFolder()
                     }
-                    .keyboardShortcut("o", modifiers: .command)
                     .buttonStyle(.borderedProminent)
                 }
             } else if showGrid {
@@ -121,6 +120,9 @@ struct ContentView: View {
         }
         .onChange(of: session.currentIndex) { _, _ in
             loadCurrentImage()
+        }
+        .onChange(of: session.openFolderRequest) { _, _ in
+            openFolderDialog()
         }
     }
 
@@ -800,12 +802,6 @@ struct ContentView: View {
             return true
         }
 
-        // Cmd+O open folder
-        if event.modifierFlags.contains(.command) && event.charactersIgnoringModifiers == "o" {
-            openFolderDialog()
-            return true
-        }
-
         // Ignore events with command/ctrl modifiers for remaining keys
         if event.modifierFlags.contains(.command) || event.modifierFlags.contains(.control) {
             return false
@@ -998,8 +994,47 @@ struct ContentView: View {
 
         guard panel.runModal() == .OK, let url = panel.url else { return }
 
-        session.openFolder(url)
+        // Only wipe view state if the session successfully switched folders;
+        // otherwise we'd clear the screen while still pointing at the old folder.
+        guard session.openFolder(url) else { return }
+        resetViewState()
         loadCurrentImage()
+    }
+
+    /// Clear all view-local state when switching to a new folder mid-session.
+    /// Session-level state (files, entries, undoStack) is reset by `CullingSession.openFolder`.
+    /// The `decoder` and `prefetchManager` instances are kept — they're bound to CIContext/device,
+    /// not to a specific folder.
+    private func resetViewState() {
+        // Cancel in-flight work
+        currentDecodeTask?.cancel()
+        currentDecodeTask = nil
+        thumbnailLoadTask?.cancel()
+        thumbnailLoadTask = nil
+
+        // Textures / decode results
+        currentTexture = nil
+        thumbnails.removeAll()
+        decodeTimeMs = 0
+        isLoading = false
+
+        // Drop cached decodes from the previous folder. Cache keys are absolute URLs,
+        // so a not-yet-completed clear() can't cause stale hits in the new folder.
+        if let pm = prefetchManager {
+            Task { await pm.clear() }
+        }
+
+        // Grid / Compare / selection
+        showGrid = false
+        selectedIndices.removeAll()
+        gridFilter = .all
+        compareMode = false
+        compareIndices.removeAll()
+        compareActiveSlot = 0
+        compareTextures.removeAll()
+
+        // View helpers
+        focusPeakingEnabled = false
     }
 
     private func navigateForward() {

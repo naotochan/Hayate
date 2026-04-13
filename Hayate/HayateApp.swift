@@ -52,6 +52,12 @@ struct HayateApp: App {
         .windowStyle(.titleBar)
         .defaultSize(width: 1200, height: 800)
         .commands {
+            CommandGroup(replacing: .newItem) {
+                Button("Open Folder…") {
+                    session.requestOpenFolder()
+                }
+                .keyboardShortcut("o", modifiers: .command)
+            }
             CommandGroup(after: .appInfo) {
                 CheckForUpdatesView(updater: updaterController.updater)
             }
