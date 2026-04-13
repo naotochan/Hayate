@@ -1023,6 +1023,23 @@ struct ContentView: View {
             return
         }
 
+        // Fire the neighbor prefetch in its own Task so rapid navigation can't
+        // cancel it. (Previously this lived at the tail of the decode Task and
+        // got wiped on every keystroke during fast culling — neighbors never
+        // actually warmed up.)
+        if let prefetchManager = prefetchManager {
+            let currentIdx = session.currentIndex
+            let allFiles = session.files
+            let prefetchSize = CGSize(width: 3840, height: 2160)
+            Task {
+                await prefetchManager.prefetch(
+                    currentIndex: currentIdx,
+                    files: allFiles,
+                    displaySize: prefetchSize
+                )
+            }
+        }
+
         isLoading = true
         let start = CFAbsoluteTimeGetCurrent()
 
@@ -1073,18 +1090,6 @@ struct ContentView: View {
                         await prefetchManager.store(texture: sendable.texture, for: file, isRAW: true)
                     }
                 }
-            }
-
-            guard !Task.isCancelled else { return }
-
-            // Trigger prefetch for neighbors
-            if let prefetchManager = prefetchManager {
-                let displaySize = CGSize(width: 3840, height: 2160)
-                await prefetchManager.prefetch(
-                    currentIndex: session.currentIndex,
-                    files: session.files,
-                    displaySize: displaySize
-                )
             }
         }
     }
