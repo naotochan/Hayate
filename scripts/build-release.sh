@@ -17,7 +17,11 @@ ZIP_NAME="Hayate-${VERSION}-mac.zip"
 SPARKLE_TOOLS="$SCRIPT_DIR/sparkle-tools"
 DOCS_DIR="$PROJECT_DIR/docs"
 
-echo "==> Building Hayate v${VERSION} (Release)..."
+# Build number must be monotonic across releases so Sparkle's version comparator
+# picks up updates. Use git commit count — always increases, reproducible from tree state.
+BUILD_NUMBER=$(git rev-list --count HEAD)
+
+echo "==> Building Hayate v${VERSION} (build ${BUILD_NUMBER}, Release)..."
 rm -rf "$BUILD_DIR"
 
 xcodebuild \
@@ -28,6 +32,7 @@ xcodebuild \
     archive \
     CODE_SIGN_IDENTITY="-" \
     MARKETING_VERSION="$VERSION" \
+    CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
     2>&1 | tail -5
 
 # Extract .app from archive
@@ -76,7 +81,7 @@ if [ -x "$SPARKLE_TOOLS/sign_update" ] && [ -f "$SPARKLE_KEY_FILE" ]; then
     <language>en</language>
     <item>
       <title>Version ${VERSION}</title>
-      <sparkle:version>${VERSION}</sparkle:version>
+      <sparkle:version>${BUILD_NUMBER}</sparkle:version>
       <sparkle:shortVersionString>${VERSION}</sparkle:shortVersionString>
       <pubDate>${PUB_DATE}</pubDate>
       <enclosure
