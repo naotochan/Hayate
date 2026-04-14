@@ -7,14 +7,14 @@
     <language>en</language>
     <item>
       <title>Version 0.3.0</title>
-      <sparkle:version>0.3.0</sparkle:version>
+      <sparkle:version>16</sparkle:version>
       <sparkle:shortVersionString>0.3.0</sparkle:shortVersionString>
-      <pubDate>Tue, 14 Apr 2026 22:19:16 +0000</pubDate>
+      <pubDate>Tue, 14 Apr 2026 22:22:34 +0000</pubDate>
       <enclosure
         url="https://github.com/naotochan/Hayate/releases/download/v0.3.0/Hayate-0.3.0-mac.zip"
-        length="1332538"
+        length="1332539"
         type="application/octet-stream"
-        sparkle:edSignature="F+ufNT+6HhdwtGIacx6Z9CHAnPNmY1c3vvn2Q7a2FEh41q85jWaV6N3w2YQv7pLN/7SppC5n4uvezb/UqKZsDg=="
+        sparkle:edSignature="asVBjjdz0hriJSPDLBFZpyrOUaGNqpCuS9UhCp8hYohq5xTQwNRHSNJLRExVrgXI75pD3J+isqZNOUEGCjxHAg=="
       />
     </item>
   </channel>
