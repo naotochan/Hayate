@@ -134,7 +134,11 @@ struct ContentView: View {
             loadCurrentImage()
         }
         .onChange(of: session.openFolderRequest) { _, _ in
-            openFolderDialog()
+            // Defer out of the SwiftUI update cycle — calling NSOpenPanel.runModal()
+            // synchronously from within .onChange prevents the panel from appearing.
+            DispatchQueue.main.async {
+                openFolderDialog()
+            }
         }
     }
 
