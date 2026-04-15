@@ -824,7 +824,7 @@ struct ContentView: View {
         }
 
         switch event.keyCode {
-        case 123: // left arrow
+        case 123, 38: // left arrow / j — previous photo
             if compareMode && !compareIndices.isEmpty {
                 compareActiveSlot = max(0, compareActiveSlot - 1)
                 session.currentIndex = compareIndices[compareActiveSlot]
@@ -832,7 +832,7 @@ struct ContentView: View {
             }
             navigateBack()
             return true
-        case 124: // right arrow
+        case 124, 37: // right arrow / l — next photo
             if compareMode && !compareIndices.isEmpty {
                 compareActiveSlot = min(compareIndices.count - 1, compareActiveSlot + 1)
                 session.currentIndex = compareIndices[compareActiveSlot]
