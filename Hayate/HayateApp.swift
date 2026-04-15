@@ -23,6 +23,7 @@ final class CIContextHolder: ObservableObject {
 struct HayateApp: App {
     @StateObject private var session = CullingSession()
     @StateObject private var ciContextHolder = CIContextHolder()
+    @StateObject private var keybindings = KeybindingStore()
 
     private let device: MTLDevice
     private let updaterController: SPUStandardUpdaterController
@@ -43,6 +44,7 @@ struct HayateApp: App {
         WindowGroup {
             ContentView()
                 .environmentObject(session)
+                .environmentObject(keybindings)
                 .environment(\.ciContext, ciContextHolder.ciContext)
                 .environment(\.metalDevice, device)
                 .task {
@@ -61,6 +63,11 @@ struct HayateApp: App {
             CommandGroup(after: .appInfo) {
                 CheckForUpdatesView(updater: updaterController.updater)
             }
+        }
+
+        Settings {
+            SettingsView()
+                .environmentObject(keybindings)
         }
     }
 }

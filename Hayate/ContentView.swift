@@ -4,6 +4,7 @@ import UniformTypeIdentifiers
 
 struct ContentView: View {
     @EnvironmentObject private var session: CullingSession
+    @EnvironmentObject private var keybindings: KeybindingStore
     @Environment(\.ciContext) private var ciContext
     @Environment(\.metalDevice) private var metalDevice
 
@@ -801,72 +802,10 @@ struct ContentView: View {
     }
 
     private func handleKeyEvent(_ event: NSEvent) -> Bool {
-        // Cmd+Z undo
-        if event.modifierFlags.contains(.command) && event.charactersIgnoringModifiers == "z" {
-            session.undo()
-            loadCurrentImage()
-            return true
-        }
+        // ---- Fixed bindings that cannot be rebound ----
 
-        // Cmd+A select all (grid only)
-        if event.modifierFlags.contains(.command) && event.charactersIgnoringModifiers == "a" && showGrid {
-            if selectedIndices.count == filteredFiles.count {
-                selectedIndices.removeAll()
-            } else {
-                selectedIndices = Set(filteredFiles.map(\.index))
-            }
-            return true
-        }
-
-        // Ignore events with command/ctrl modifiers for remaining keys
-        if event.modifierFlags.contains(.command) || event.modifierFlags.contains(.control) {
-            return false
-        }
-
-        switch event.keyCode {
-        case 123, 38: // left arrow / j — previous photo
-            if compareMode && !compareIndices.isEmpty {
-                compareActiveSlot = max(0, compareActiveSlot - 1)
-                session.currentIndex = compareIndices[compareActiveSlot]
-                return true
-            }
-            navigateBack()
-            return true
-        case 124, 37: // right arrow / l — next photo
-            if compareMode && !compareIndices.isEmpty {
-                compareActiveSlot = min(compareIndices.count - 1, compareActiveSlot + 1)
-                session.currentIndex = compareIndices[compareActiveSlot]
-                return true
-            }
-            navigateForward()
-            return true
-        case 49: // space — toggle fit ↔ 2x
-            if zoomScale > 1.01 {
-                zoomScale = 1.0
-                panOffset = .zero
-            } else {
-                zoomScale = 2.0
-                panOffset = .zero
-            }
-            return true
-        case 48: // tab — in compare mode: skip to next baseline (new angle)
-            if compareMode && !compareIndices.isEmpty {
-                skipToNextBaseline()
-                return true
-            }
-            return false
-        case 36: // return — pick in compare mode, or exit grid
-            if compareMode {
-                pickActivePhoto()
-                return true
-            }
-            if showGrid {
-                showGrid = false
-                loadCurrentImage()
-                return true
-            }
-            return false
-        case 53: // escape — exit compare, grid, or reset zoom
+        // Escape — universal cancel / exit mode / reset zoom.
+        if event.keyCode == 53 {
             if compareMode {
                 exitCompareMode()
                 return true
@@ -881,7 +820,118 @@ struct ContentView: View {
                 return true
             }
             return false
-        case 51: // delete
+        }
+
+        // Arrow keys — always navigate (alias for navigateBack / navigateForward).
+        if event.keyCode == 123 || event.keyCode == 124 {
+            return perform(event.keyCode == 123 ? .navigateBack : .navigateForward)
+        }
+
+        // Rating digits 0–5 (fixed — rating keys don't go through the store).
+        if !event.modifierFlags.contains(.command),
+           let chars = event.charactersIgnoringModifiers,
+           chars.count == 1,
+           let rating = Int(chars),
+           (0...5).contains(rating) {
+            let batch = showGrid && !selectedIndices.isEmpty
+            let compareActive = compareMode && !compareIndices.isEmpty
+            if compareActive {
+                session.currentIndex = compareIndices[compareActiveSlot]
+                session.setRating(rating)
+            } else if batch {
+                session.setRatingForIndices(selectedIndices, rating: rating)
+            } else {
+                session.setRating(rating)
+            }
+            return true
+        }
+
+        // ---- Dynamic bindings from KeybindingStore ----
+        if let action = keybindings.action(for: event) {
+            return perform(action)
+        }
+
+        return false
+    }
+
+    private func perform(_ action: ActionID) -> Bool {
+        // Batch-aware operations: apply to selection if grid has multi-select.
+        // In compare mode, operations apply to the active slot's photo.
+        let batch = showGrid && !selectedIndices.isEmpty
+        let compareActive = compareMode && !compareIndices.isEmpty
+
+        switch action {
+        case .navigateBack:
+            if compareActive {
+                compareActiveSlot = max(0, compareActiveSlot - 1)
+                session.currentIndex = compareIndices[compareActiveSlot]
+            } else {
+                navigateBack()
+            }
+            return true
+
+        case .navigateForward:
+            if compareActive {
+                compareActiveSlot = min(compareIndices.count - 1, compareActiveSlot + 1)
+                session.currentIndex = compareIndices[compareActiveSlot]
+            } else {
+                navigateForward()
+            }
+            return true
+
+        case .toggleFavorite:
+            if compareActive {
+                session.currentIndex = compareIndices[compareActiveSlot]
+                session.toggleFavorite()
+            } else if batch {
+                session.toggleFavoriteForIndices(selectedIndices)
+            } else {
+                session.toggleFavorite()
+            }
+            return true
+
+        case .toggleRejected:
+            if compareActive {
+                session.currentIndex = compareIndices[compareActiveSlot]
+                session.toggleRejected()
+            } else if batch {
+                session.toggleRejectedForIndices(selectedIndices)
+            } else {
+                session.toggleRejected()
+            }
+            return true
+
+        case .toggleGrid:
+            if compareMode { exitCompareMode() }
+            showGrid.toggle()
+            if !showGrid { selectedIndices.removeAll() }
+            return true
+
+        case .toggleCompare:
+            if compareMode {
+                exitCompareMode()
+            } else {
+                enterCompareMode()
+            }
+            return true
+
+        case .toggleFitZoom:
+            if zoomScale > 1.01 {
+                zoomScale = 1.0
+                panOffset = .zero
+            } else {
+                zoomScale = 2.0
+                panOffset = .zero
+            }
+            return true
+
+        case .toggleFocusPeaking:
+            if compareMode { return false }
+            focusPeakingEnabled.toggle()
+            loadCurrentImage()
+            return true
+
+        case .deletePhoto:
             if showGrid && !selectedIndices.isEmpty {
                 pendingDeletionIndices = selectedIndices
             } else {
@@ -889,56 +939,42 @@ struct ContentView: View {
             }
             showDeleteConfirmation = true
             return true
-        default:
-            break
-        }
 
-        // Batch-aware operations: apply to selection if grid has multi-select
-        // In compare mode, operations apply to the active slot's photo
-        let batch = showGrid && !selectedIndices.isEmpty
-        let compareActive = compareMode && !compareIndices.isEmpty
-
-        switch event.charactersIgnoringModifiers {
-        case "c":
-            if compareMode {
-                exitCompareMode()
-            } else {
-                enterCompareMode()
-            }
-            return true
-        case "p":
-            if compareActive {
-                session.currentIndex = compareIndices[compareActiveSlot]
-                session.toggleFavorite()
-            } else if batch { session.toggleFavoriteForIndices(selectedIndices) }
-            else { session.toggleFavorite() }
-            return true
-        case "x":
-            if compareActive {
-                session.currentIndex = compareIndices[compareActiveSlot]
-                session.toggleRejected()
-            } else if batch { session.toggleRejectedForIndices(selectedIndices) }
-            else { session.toggleRejected() }
-            return true
-        case "g":
-            if compareMode { exitCompareMode() }
-            showGrid.toggle()
-            if !showGrid { selectedIndices.removeAll() }
-            return true
-        case "1", "2", "3", "4", "5", "0":
-            let rating = Int(event.charactersIgnoringModifiers!)!
-            if compareActive {
-                session.currentIndex = compareIndices[compareActiveSlot]
-                session.setRating(rating)
-            } else if batch { session.setRatingForIndices(selectedIndices, rating: rating) }
-            else { session.setRating(rating) }
-            return true
-        case "f":
-            if compareMode { return false }
-            focusPeakingEnabled.toggle()
+        case .undo:
+            session.undo()
             loadCurrentImage()
             return true
-        default:
+
+        case .selectAllGrid:
+            guard showGrid else { return false }
+            if selectedIndices.count == filteredFiles.count {
+                selectedIndices.removeAll()
+            } else {
+                selectedIndices = Set(filteredFiles.map(\.index))
+            }
+            return true
+
+        case .openFolder:
+            session.requestOpenFolder()
+            return true
+
+        case .pickCompare:
+            if compareMode {
+                pickActivePhoto()
+                return true
+            }
+            if showGrid {
+                showGrid = false
+                loadCurrentImage()
+                return true
+            }
+            return false
+
+        case .skipNextBaseline:
+            if compareActive {
+                skipToNextBaseline()
+                return true
+            }
             return false
         }
     }

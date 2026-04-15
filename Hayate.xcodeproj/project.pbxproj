@@ -16,7 +16,10 @@
 		A10007 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A20007; };
 		A10008 /* Hayate.entitlements in Resources */ = {isa = PBXBuildFile; fileRef = A20008; };
 		A10009 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = C10001 /* Sparkle */; };
+		A10010 /* Keybindings.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20010; };
+		A10011 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20011; };
 		B10001 /* CullingSessionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20001; };
+		B10002 /* KeybindingsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20002; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -39,8 +42,11 @@
 		A20007 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		A20008 /* Hayate.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Hayate.entitlements; sourceTree = "<group>"; };
 		A20009 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		A20010 /* Keybindings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Keybindings.swift; sourceTree = "<group>"; };
+		A20011 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		A30001 /* Hayate.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Hayate.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		B20001 /* CullingSessionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CullingSessionTests.swift; sourceTree = "<group>"; };
+		B20002 /* KeybindingsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeybindingsTests.swift; sourceTree = "<group>"; };
 		B30001 /* HayateTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = HayateTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -81,6 +87,8 @@
 				A20004 /* ImageDecoder.swift */,
 				A20005 /* PrefetchManager.swift */,
 				A20006 /* CullingSession.swift */,
+				A20010 /* Keybindings.swift */,
+				A20011 /* SettingsView.swift */,
 				A20007 /* Assets.xcassets */,
 				A20008 /* Hayate.entitlements */,
 				A20009 /* Info.plist */,
@@ -101,6 +109,7 @@
 			isa = PBXGroup;
 			children = (
 				B20001 /* CullingSessionTests.swift */,
+				B20002 /* KeybindingsTests.swift */,
 			);
 			path = HayateTests;
 			sourceTree = "<group>";
@@ -208,6 +217,8 @@
 				A10004 /* ImageDecoder.swift in Sources */,
 				A10005 /* PrefetchManager.swift in Sources */,
 				A10006 /* CullingSession.swift in Sources */,
+				A10010 /* Keybindings.swift in Sources */,
+				A10011 /* SettingsView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -216,6 +227,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				B10001 /* CullingSessionTests.swift in Sources */,
+				B10002 /* KeybindingsTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
