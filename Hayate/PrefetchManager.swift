@@ -2,9 +2,14 @@
 import Foundation
 
 /// Actor that manages prefetching of adjacent images and an LRU texture cache.
-/// Prefetches N-1 and N+1 relative to the current index.
+/// Prefetches N±prefetchRadius relative to the current index.
 /// Cache holds up to `maxCacheSize` display-resolution MTLTextures.
 actor PrefetchManager {
+    /// How many neighbours to warm up on each side of the current index.
+    /// At 5, rapid J/L navigation stays warm for ~10 photos before the decode
+    /// pipeline has to catch up.
+    static let prefetchRadius = 5
+
     private let decoder: ImageDecoder
     private let maxCacheSize: Int
 
@@ -23,13 +28,14 @@ actor PrefetchManager {
 
     init(decoder: ImageDecoder, device: MTLDevice) {
         self.decoder = decoder
-        // Dynamically size cache based on GPU memory.
-        // Each display-res texture (~3840x2160 BGRA) is ~33MB.
-        // Reserve at most 25% of recommended working set for cache.
+        // Each display-res texture (~3840x2160 BGRA) is ~33MB. Cap at half of the
+        // recommended working set, bounded [10, 40]. 40 textures ≈ 1.3GB — enough
+        // for the ±5 prefetch window plus a generous recently-viewed buffer for
+        // back-and-forth culling.
         let recommended = device.recommendedMaxWorkingSetSize
-        let perTexture: UInt64 = 3840 * 2160 * 4 // ~33MB
-        let dynamicMax = Int(recommended / 4 / perTexture)
-        self.maxCacheSize = max(3, min(dynamicMax, 10))
+        let perTexture: UInt64 = 3840 * 2160 * 4
+        let dynamicMax = Int(recommended / 2 / perTexture)
+        self.maxCacheSize = max(10, min(dynamicMax, 40))
     }
 
     /// Get a cached texture for the given URL. Returns nil if not cached.
@@ -58,7 +64,7 @@ actor PrefetchManager {
         evictIfNeeded()
     }
 
-    /// Trigger prefetch for N-1 and N+1 around currentIndex.
+    /// Trigger prefetch for N±prefetchRadius around currentIndex.
     /// Cancels any prefetch tasks for URLs no longer in the prefetch window.
     func prefetch(
         currentIndex: Int,
@@ -69,16 +75,12 @@ actor PrefetchManager {
 
         var targetURLs: Set<URL> = []
 
-        // N-1
-        if currentIndex > 0 {
-            targetURLs.insert(files[currentIndex - 1])
+        let radius = Self.prefetchRadius
+        let lower = max(0, currentIndex - radius)
+        let upper = min(files.count - 1, currentIndex + radius)
+        for index in lower...upper {
+            targetURLs.insert(files[index])
         }
-        // N+1
-        if currentIndex < files.count - 1 {
-            targetURLs.insert(files[currentIndex + 1])
-        }
-        // Current (always keep)
-        targetURLs.insert(files[currentIndex])
 
         // Cancel tasks for URLs outside the window
         for (url, task) in activeTasks {
