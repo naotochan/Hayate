@@ -10,10 +10,19 @@ struct SendableTexture: @unchecked Sendable {
     let texture: MTLTexture
 }
 
-/// Actor that handles RAW and JPEG decoding.
-/// CIRAWFilter is NOT thread-safe, so each decode creates a new instance.
-/// CIContext IS thread-safe and shared across all decodes.
-actor ImageDecoder {
+/// Handles RAW and JPEG decoding.
+///
+/// Unlike an actor, this class lets multiple decodes run in parallel: each public
+/// async method dispatches to `Task.detached`, so the work executes on the global
+/// concurrent pool rather than on a single serial executor. That matters during
+/// rapid culling — without parallelism, prefetching N±5 would serialize into one
+/// long queue and stall the user.
+///
+/// Thread safety:
+/// - `CIContext` is documented thread-safe and is shared.
+/// - `CIRAWFilter` is NOT thread-safe, so each decode creates a new instance.
+/// - `MTLDevice` is thread-safe.
+final class ImageDecoder: @unchecked Sendable {
     private let ciContext: CIContext
     private let device: MTLDevice
     private let signpostLog = OSLog(subsystem: "com.hayate", category: "Decode")
@@ -23,9 +32,47 @@ actor ImageDecoder {
         self.device = device
     }
 
-    /// Extract embedded JPEG thumbnail from a RAW file.
-    /// Typically ~5-16ms. Returns nil if no embedded JPEG exists.
-    func extractJPEG(url: URL) -> CGImage? {
+    // MARK: - Public async API (dispatches to background)
+
+    /// Extract embedded JPEG thumbnail from a RAW file. Typically ~5-16ms.
+    func extractJPEG(url: URL) async -> CGImage? {
+        await Task.detached(priority: .userInitiated) { [self] in
+            extractJPEGSync(url: url)
+        }.value
+    }
+
+    /// Decode a RAW file to MTLTexture at the specified display size.
+    /// Typically ~200-500ms depending on format and resolution.
+    func decodeRAW(url: URL, displaySize: CGSize, focusPeaking: Bool = false) async -> SendableTexture? {
+        await Task.detached(priority: .userInitiated) { [self] in
+            decodeRAWSync(url: url, displaySize: displaySize, focusPeaking: focusPeaking)
+        }.value
+    }
+
+    /// Decode a RAW file at full resolution (for zoom).
+    func decodeRAWFullResolution(url: URL) async -> SendableTexture? {
+        await Task.detached(priority: .userInitiated) { [self] in
+            decodeRAWFullResolutionSync(url: url)
+        }.value
+    }
+
+    /// Convert a CGImage (e.g. extracted JPEG) to MTLTexture.
+    func cgImageToTexture(_ cgImage: CGImage) async -> SendableTexture? {
+        await Task.detached(priority: .userInitiated) { [self] in
+            cgImageToTextureSync(cgImage)
+        }.value
+    }
+
+    /// Extract a small thumbnail CGImage for the filmstrip.
+    func extractThumbnail(url: URL, maxSize: Int = 120) async -> CGImage? {
+        await Task.detached(priority: .utility) { [self] in
+            extractThumbnailSync(url: url, maxSize: maxSize)
+        }.value
+    }
+
+    // MARK: - Sync implementations
+
+    private func extractJPEGSync(url: URL) -> CGImage? {
         let signpostID = OSSignpostID(log: signpostLog)
         os_signpost(.begin, log: signpostLog, name: "extractJPEG", signpostID: signpostID, "file: %{public}s", url.lastPathComponent)
         defer { os_signpost(.end, log: signpostLog, name: "extractJPEG", signpostID: signpostID) }
@@ -44,10 +91,7 @@ actor ImageDecoder {
         return CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
     }
 
-    /// Decode a RAW file to MTLTexture at the specified display size.
-    /// Uses CIRAWFilter for GPU-accelerated decoding.
-    /// Typically ~200-500ms depending on format and resolution.
-    func decodeRAW(url: URL, displaySize: CGSize, focusPeaking: Bool = false) -> SendableTexture? {
+    private func decodeRAWSync(url: URL, displaySize: CGSize, focusPeaking: Bool) -> SendableTexture? {
         let signpostID = OSSignpostID(log: signpostLog)
         os_signpost(.begin, log: signpostLog, name: "decodeRAW", signpostID: signpostID, "file: %{public}s", url.lastPathComponent)
         defer { os_signpost(.end, log: signpostLog, name: "decodeRAW", signpostID: signpostID) }
@@ -60,7 +104,6 @@ actor ImageDecoder {
             return nil
         }
 
-        // Scale to display size to save GPU memory
         let scale = min(
             displaySize.width / outputImage.extent.width,
             displaySize.height / outputImage.extent.height
@@ -75,8 +118,7 @@ actor ImageDecoder {
         return SendableTexture(texture: tex)
     }
 
-    /// Decode a RAW file at full resolution (for zoom).
-    func decodeRAWFullResolution(url: URL) -> SendableTexture? {
+    private func decodeRAWFullResolutionSync(url: URL) -> SendableTexture? {
         let signpostID = OSSignpostID(log: signpostLog)
         os_signpost(.begin, log: signpostLog, name: "decodeRAWFull", signpostID: signpostID, "file: %{public}s", url.lastPathComponent)
         defer { os_signpost(.end, log: signpostLog, name: "decodeRAWFull", signpostID: signpostID) }
@@ -93,15 +135,13 @@ actor ImageDecoder {
         return SendableTexture(texture: tex)
     }
 
-    /// Convert a CGImage (e.g. extracted JPEG) to MTLTexture.
-    func cgImageToTexture(_ cgImage: CGImage) -> SendableTexture? {
+    private func cgImageToTextureSync(_ cgImage: CGImage) -> SendableTexture? {
         let ciImage = CIImage(cgImage: cgImage)
         guard let tex = renderToTexture(image: ciImage) else { return nil }
         return SendableTexture(texture: tex)
     }
 
-    /// Extract a small thumbnail CGImage for the filmstrip.
-    func extractThumbnail(url: URL, maxSize: Int = 120) -> CGImage? {
+    private func extractThumbnailSync(url: URL, maxSize: Int) -> CGImage? {
         guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else {
             return nil
         }
@@ -115,8 +155,7 @@ actor ImageDecoder {
     }
 
     /// Apply Leica-style focus peaking: thin green lines on in-focus edges.
-    func applyFocusPeaking(to image: CIImage) -> CIImage {
-        // 1. Convert to grayscale for edge detection
+    private func applyFocusPeaking(to image: CIImage) -> CIImage {
         let grayscaleKernel = CIColorKernel(source: """
             kernel vec4 grayscale(sampler src) {
                 vec4 c = sample(src, samplerCoord(src));
@@ -126,8 +165,6 @@ actor ImageDecoder {
         """)
         let gray = grayscaleKernel?.apply(extent: image.extent, arguments: [image]) ?? image
 
-        // 2. Laplacian edge detection (3x3 convolution)
-        // Highlights sharp transitions = in-focus areas
         let laplacianWeights: [CGFloat] = [
              0, -1,  0,
             -1,  4, -1,
@@ -141,7 +178,6 @@ actor ImageDecoder {
             return image
         }
 
-        // 3. Threshold + colorize: strong edges become green lines, rest transparent
         let peakingKernel = CIColorKernel(source: """
             kernel vec4 peaking(sampler edges) {
                 vec4 e = sample(edges, samplerCoord(edges));
@@ -160,7 +196,6 @@ actor ImageDecoder {
             return image
         }
 
-        // 4. Composite green lines over original image
         guard let composite = CIFilter(name: "CISourceOverCompositing", parameters: [
             kCIInputImageKey: greenEdges,
             kCIInputBackgroundImageKey: image
