@@ -18,6 +18,7 @@
 		A10009 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = C10001 /* Sparkle */; };
 		A10010 /* Keybindings.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20010; };
 		A10011 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20011; };
+		A10012 /* DiskCacheManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20012; };
 		B10001 /* CullingSessionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20001; };
 		B10002 /* KeybindingsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20002; };
 /* End PBXBuildFile section */
@@ -44,6 +45,7 @@
 		A20009 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		A20010 /* Keybindings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Keybindings.swift; sourceTree = "<group>"; };
 		A20011 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		A20012 /* DiskCacheManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiskCacheManager.swift; sourceTree = "<group>"; };
 		A30001 /* Hayate.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Hayate.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		B20001 /* CullingSessionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CullingSessionTests.swift; sourceTree = "<group>"; };
 		B20002 /* KeybindingsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeybindingsTests.swift; sourceTree = "<group>"; };
@@ -89,6 +91,7 @@
 				A20006 /* CullingSession.swift */,
 				A20010 /* Keybindings.swift */,
 				A20011 /* SettingsView.swift */,
+				A20012 /* DiskCacheManager.swift */,
 				A20007 /* Assets.xcassets */,
 				A20008 /* Hayate.entitlements */,
 				A20009 /* Info.plist */,
@@ -219,6 +222,7 @@
 				A10006 /* CullingSession.swift in Sources */,
 				A10010 /* Keybindings.swift in Sources */,
 				A10011 /* SettingsView.swift in Sources */,
+				A10012 /* DiskCacheManager.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

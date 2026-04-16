@@ -1,17 +1,21 @@
 @preconcurrency import Metal
 import Foundation
+import CoreGraphics
 
 /// Actor that manages prefetching of adjacent images and an LRU texture cache.
 /// Prefetches N±prefetchRadius relative to the current index.
-/// Cache holds up to `maxCacheSize` display-resolution MTLTextures.
+///
+/// Three-layer cache hierarchy:
+/// 1. Memory (MTLTexture) — instant, limited by GPU working set
+/// 2. Disk (HEIF via DiskCacheManager) — ~20-50ms load, persists across sessions
+/// 3. RAW decode (CIRAWFilter) — 200-500ms, always available
 actor PrefetchManager {
     /// How many neighbours to warm up on each side of the current index.
-    /// At 5, rapid J/L navigation stays warm for ~10 photos before the decode
-    /// pipeline has to catch up.
     static let prefetchRadius = 5
 
     private let decoder: ImageDecoder
     private let maxCacheSize: Int
+    private let diskCache: DiskCacheManager?
 
     /// Cached textures keyed by file URL.
     private var cache: [URL: CacheEntry] = [:]
@@ -23,22 +27,21 @@ actor PrefetchManager {
 
     struct CacheEntry {
         let texture: MTLTexture
-        let isRAW: Bool // true = full RAW decode, false = JPEG thumbnail
+        let isRAW: Bool
     }
 
-    init(decoder: ImageDecoder, device: MTLDevice) {
+    init(decoder: ImageDecoder, device: MTLDevice, diskCache: DiskCacheManager? = nil) {
         self.decoder = decoder
-        // Each display-res texture (~3840x2160 BGRA) is ~33MB. Cap at half of the
-        // recommended working set, bounded [10, 40]. 40 textures ≈ 1.3GB — enough
-        // for the ±5 prefetch window plus a generous recently-viewed buffer for
-        // back-and-forth culling.
+        self.diskCache = diskCache
         let recommended = device.recommendedMaxWorkingSetSize
         let perTexture: UInt64 = 3840 * 2160 * 4
         let dynamicMax = Int(recommended / 2 / perTexture)
         self.maxCacheSize = max(10, min(dynamicMax, 40))
     }
 
-    /// Get a cached texture for the given URL. Returns nil if not cached.
+    // MARK: - Memory cache
+
+    /// Get a cached texture for the given URL (memory only). Returns nil if not cached.
     func cachedTexture(for url: URL) -> SendableTexture? {
         if let entry = cache[url] {
             touchAccess(url)
@@ -52,9 +55,8 @@ actor PrefetchManager {
         cache[url]?.isRAW == true
     }
 
-    /// Store a texture in the cache, evicting LRU entries if necessary.
+    /// Store a texture in the memory cache, evicting LRU entries if necessary.
     func store(texture: MTLTexture, for url: URL, isRAW: Bool) {
-        // Don't downgrade RAW to JPEG
         if let existing = cache[url], existing.isRAW && !isRAW {
             return
         }
@@ -63,6 +65,32 @@ actor PrefetchManager {
         touchAccess(url)
         evictIfNeeded()
     }
+
+    // MARK: - Disk cache integration
+
+    /// Try loading a preview from disk cache, converting to texture and storing in memory.
+    /// Returns the texture on hit, nil on miss.
+    func textureFromDiskCache(for url: URL) async -> SendableTexture? {
+        guard let diskCache = diskCache else { return nil }
+        guard let cgImage = await diskCache.loadPreview(for: url) else { return nil }
+        guard let sendable = await decoder.cgImageToTexture(cgImage) else { return nil }
+        store(texture: sendable.texture, for: url, isRAW: true)
+        return sendable
+    }
+
+    /// Store a texture in memory and persist to disk cache as HEIF.
+    /// Used by ContentView after a RAW decode so the result survives across sessions.
+    func storeAndPersist(texture: MTLTexture, cgImage: CGImage, for url: URL) {
+        store(texture: texture, for: url, isRAW: true)
+        if let diskCache = diskCache {
+            let urlCopy = url
+            Task.detached(priority: .utility) {
+                await diskCache.store(cgImage: cgImage, for: urlCopy)
+            }
+        }
+    }
+
+    // MARK: - Prefetch
 
     /// Trigger prefetch for N±prefetchRadius around currentIndex.
     /// Cancels any prefetch tasks for URLs no longer in the prefetch window.
@@ -97,19 +125,36 @@ actor PrefetchManager {
             }
 
             let decoder = self.decoder
+            let diskCache = self.diskCache
             let size = displaySize
 
             activeTasks[url] = Task {
-                // First, try JPEG for instant availability
+                // 1. Try disk cache first (~20-50ms)
+                if let diskCache = diskCache,
+                   let cgImage = await diskCache.loadPreview(for: url),
+                   let sendable = await decoder.cgImageToTexture(cgImage) {
+                    await self.store(texture: sendable.texture, for: url, isRAW: true)
+                    await self.removeActiveTask(for: url)
+                    return
+                }
+
+                // 2. JPEG for instant availability
                 if let jpeg = await decoder.extractJPEG(url: url),
                    let sendable = await decoder.cgImageToTexture(jpeg) {
                     await self.store(texture: sendable.texture, for: url, isRAW: false)
                 }
 
-                // Then decode full RAW
+                // 3. Full RAW decode → CGImage → texture + disk
                 if !Task.isCancelled {
-                    if let sendable = await decoder.decodeRAW(url: url, displaySize: size) {
-                        await self.store(texture: sendable.texture, for: url, isRAW: true)
+                    if let cgImage = await decoder.decodeRAWToCGImage(url: url, displaySize: size) {
+                        if let sendable = await decoder.cgImageToTexture(cgImage) {
+                            await self.store(texture: sendable.texture, for: url, isRAW: true)
+                        }
+                        if let diskCache = diskCache {
+                            Task.detached(priority: .utility) {
+                                await diskCache.store(cgImage: cgImage, for: url)
+                            }
+                        }
                     }
                 }
 
@@ -118,7 +163,7 @@ actor PrefetchManager {
         }
     }
 
-    /// Clear the entire cache and cancel all tasks.
+    /// Clear the memory cache and cancel all tasks.
     func clear() {
         for (_, task) in activeTasks {
             task.cancel()
