@@ -9,9 +9,158 @@ struct SettingsView: View {
         TabView {
             shortcutsTab
                 .tabItem { Label("Shortcuts", systemImage: "keyboard") }
+            cacheTab
+                .tabItem { Label("Cache", systemImage: "internaldrive") }
         }
         .frame(width: 520, height: 560)
     }
+
+    // MARK: - Cache tab
+
+    @AppStorage("previewCacheSizeLimitGB") private var cacheSizeLimitGB: Int = 10
+    @AppStorage("previewCacheLocation") private var cacheLocationPath: String = ""
+    @State private var cacheUsageBytes: Int64 = 0
+    @State private var cacheFileCount: Int = 0
+    @State private var showClearConfirmation = false
+
+    private var effectiveCacheRoot: URL {
+        if cacheLocationPath.isEmpty {
+            return DiskCacheManager.defaultCacheRoot
+        }
+        return URL(fileURLWithPath: cacheLocationPath, isDirectory: true)
+    }
+
+    private var cacheTab: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Preview Cache")
+                .font(.title2)
+                .fontWeight(.semibold)
+                .padding(.horizontal)
+                .padding(.top)
+
+            Form {
+                Section {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Cache Location")
+                                .fontWeight(.medium)
+                            Text(effectiveCacheRoot.path)
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                        }
+                        Spacer()
+                        Button("Change…") {
+                            chooseCacheLocation()
+                        }
+                        if !cacheLocationPath.isEmpty {
+                            Button("Reset") {
+                                cacheLocationPath = ""
+                            }
+                            .controlSize(.small)
+                        }
+                    }
+
+                    Picker("Maximum Cache Size", selection: $cacheSizeLimitGB) {
+                        Text("1 GB").tag(1)
+                        Text("5 GB").tag(5)
+                        Text("10 GB").tag(10)
+                        Text("20 GB").tag(20)
+                        Text("50 GB").tag(50)
+                        Text("Unlimited").tag(0)
+                    }
+                    .pickerStyle(.menu)
+                }
+
+                Section {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Current Usage")
+                                .fontWeight(.medium)
+                            Text("\(formattedSize(cacheUsageBytes)) — \(cacheFileCount) files")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        Spacer()
+                        Button("Clear Cache") {
+                            showClearConfirmation = true
+                        }
+                        .disabled(cacheFileCount == 0)
+                    }
+                }
+            }
+            .formStyle(.grouped)
+
+            Text("Cache location changes take effect on next app launch.")
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .padding(.horizontal)
+
+            Spacer()
+        }
+        .onAppear { refreshCacheUsage() }
+        .onChange(of: cacheSizeLimitGB) { _ in triggerEviction() }
+        .alert("Clear Preview Cache?", isPresented: $showClearConfirmation) {
+            Button("Clear", role: .destructive) { clearCache() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This will delete all \(cacheFileCount) cached preview files (\(formattedSize(cacheUsageBytes))). Previews will be regenerated as you browse.")
+        }
+    }
+
+    private func chooseCacheLocation() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.canCreateDirectories = true
+        panel.prompt = "Select"
+        panel.message = "Choose a folder to store preview cache files"
+        if panel.runModal() == .OK, let url = panel.url {
+            cacheLocationPath = url.path
+        }
+    }
+
+    private func refreshCacheUsage() {
+        Task {
+            let cache = DiskCacheManager(cacheRoot: effectiveCacheRoot)
+            let size = await cache.totalSize()
+            let count = await cache.entryCount()
+            await MainActor.run {
+                cacheUsageBytes = size
+                cacheFileCount = count
+            }
+        }
+    }
+
+    private func clearCache() {
+        Task {
+            let cache = DiskCacheManager(cacheRoot: effectiveCacheRoot)
+            await cache.clear()
+            await MainActor.run {
+                cacheUsageBytes = 0
+                cacheFileCount = 0
+            }
+        }
+    }
+
+    private func triggerEviction() {
+        guard cacheSizeLimitGB > 0 else { return }
+        let limit = Int64(cacheSizeLimitGB) * 1_073_741_824
+        Task {
+            let cache = DiskCacheManager(cacheRoot: effectiveCacheRoot)
+            await cache.evict(maxBytes: limit)
+            refreshCacheUsage()
+        }
+    }
+
+    private func formattedSize(_ bytes: Int64) -> String {
+        let formatter = ByteCountFormatter()
+        formatter.countStyle = .file
+        return formatter.string(fromByteCount: bytes)
+    }
+
+    // MARK: - Shortcuts tab
 
     private var shortcutsTab: some View {
         VStack(alignment: .leading, spacing: 12) {

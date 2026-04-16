@@ -773,7 +773,7 @@ struct ContentView: View {
         guard let ciContext = ciContext, let device = metalDevice else { return }
         let dec = ImageDecoder(ciContext: ciContext, device: device)
         decoder = dec
-        let dc = DiskCacheManager()
+        let dc = DiskCacheManager(cacheRoot: DiskCacheManager.userConfiguredCacheRoot)
         diskCache = dc
         prefetchManager = PrefetchManager(decoder: dec, device: device, diskCache: dc)
     }
