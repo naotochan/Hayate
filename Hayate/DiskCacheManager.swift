@@ -19,9 +19,17 @@ import os.signpost
 /// Cache key = SHA256(absolutePath + "|" + mtime + "|" + size), first 16 hex chars.
 /// Sharded into subdirectories by the first 2 characters of the key.
 actor DiskCacheManager {
+    /// Wraps an SQLite handle so it gets closed automatically when the actor is deallocated.
+    private final class SQLiteHandle {
+        var pointer: OpaquePointer?
+        init(_ pointer: OpaquePointer?) { self.pointer = pointer }
+        deinit { if let p = pointer { sqlite3_close(p) } }
+    }
+
     private let cacheRoot: URL
     private let displayDir: URL
-    private var db: OpaquePointer?
+    private let dbHandle: SQLiteHandle
+    private var db: OpaquePointer? { dbHandle.pointer }
     private let signpostLog = OSLog(subsystem: "com.hayate", category: "DiskCache")
 
     /// Default cache location: ~/Library/Caches/com.hayate/previews
@@ -54,7 +62,7 @@ actor DiskCacheManager {
             sqlite3_exec(dbHandle, createSQL, nil, nil, nil)
             sqlite3_exec(dbHandle, "PRAGMA journal_mode=WAL", nil, nil, nil)
         }
-        self.db = dbHandle
+        self.dbHandle = SQLiteHandle(dbHandle)
     }
 
     // MARK: - Public API
@@ -177,12 +185,14 @@ actor DiskCacheManager {
 
     // MARK: - SQLite
 
+    private static let sqliteTransient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+
     private func entryExists(key: String) -> Bool {
         guard let db = db else { return false }
         var stmt: OpaquePointer?
         defer { sqlite3_finalize(stmt) }
         guard sqlite3_prepare_v2(db, "SELECT 1 FROM previews WHERE key = ?1", -1, &stmt, nil) == SQLITE_OK else { return false }
-        sqlite3_bind_text(stmt, 1, key, -1, unsafeBitCast(-1, to: sqlite3_destructor_type.self))
+        sqlite3_bind_text(stmt, 1, key, -1, Self.sqliteTransient)
         return sqlite3_step(stmt) == SQLITE_ROW
     }
 
@@ -215,7 +225,7 @@ actor DiskCacheManager {
         let sql = "UPDATE previews SET last_access_at = ?1 WHERE key = ?2"
         guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return }
         sqlite3_bind_double(stmt, 1, Date().timeIntervalSince1970)
-        sqlite3_bind_text(stmt, 2, key, -1, unsafeBitCast(-1, to: sqlite3_destructor_type.self))
+        sqlite3_bind_text(stmt, 2, key, -1, Self.sqliteTransient)
         sqlite3_step(stmt)
     }
 
@@ -224,7 +234,7 @@ actor DiskCacheManager {
         var stmt: OpaquePointer?
         defer { sqlite3_finalize(stmt) }
         guard sqlite3_prepare_v2(db, "DELETE FROM previews WHERE key = ?1", -1, &stmt, nil) == SQLITE_OK else { return }
-        sqlite3_bind_text(stmt, 1, key, -1, unsafeBitCast(-1, to: sqlite3_destructor_type.self))
+        sqlite3_bind_text(stmt, 1, key, -1, Self.sqliteTransient)
         sqlite3_step(stmt)
     }
 
