@@ -11,6 +11,7 @@ struct ContentView: View {
     @State private var currentTexture: MTLTexture?
     @State private var decoder: ImageDecoder?
     @State private var prefetchManager: PrefetchManager?
+    @State private var diskCache: DiskCacheManager?
     @State private var isLoading = false
     @State private var showDeleteConfirmation = false
     /// Indices to delete when the confirmation dialog is accepted.
@@ -772,7 +773,9 @@ struct ContentView: View {
         guard let ciContext = ciContext, let device = metalDevice else { return }
         let dec = ImageDecoder(ciContext: ciContext, device: device)
         decoder = dec
-        prefetchManager = PrefetchManager(decoder: dec, device: device)
+        let dc = DiskCacheManager()
+        diskCache = dc
+        prefetchManager = PrefetchManager(decoder: dec, device: device, diskCache: dc)
     }
 
     private func installKeyHandler() {
@@ -1155,48 +1158,73 @@ struct ContentView: View {
         currentDecodeTask = Task {
             let usePeaking = focusPeakingEnabled
 
-            // Use cache only when focus peaking is off (cache stores non-peaking textures)
+            // L1: Memory cache (instant)
             if !usePeaking,
                let prefetchManager = prefetchManager,
                let cached = await prefetchManager.cachedTexture(for: file) {
                 guard !Task.isCancelled else { return }
                 let elapsed = (CFAbsoluteTimeGetCurrent() - start) * 1000
-                let tex = cached.texture
-                currentTexture = tex
+                currentTexture = cached.texture
                 decodeTimeMs = elapsed
                 isLoading = false
-            } else {
-                // No cache hit, or focus peaking is on. Show JPEG first.
-                if !usePeaking {
-                    if let jpeg = await decoder.extractJPEG(url: file) {
+                return
+            }
+
+            // L2: Disk cache (~20-50ms)
+            if !usePeaking,
+               let prefetchManager = prefetchManager,
+               let diskHit = await prefetchManager.textureFromDiskCache(for: file) {
+                guard !Task.isCancelled else { return }
+                let elapsed = (CFAbsoluteTimeGetCurrent() - start) * 1000
+                currentTexture = diskHit.texture
+                decodeTimeMs = elapsed
+                isLoading = false
+                return
+            }
+
+            // L3: Full decode path — JPEG first, then RAW
+            if !usePeaking {
+                if let jpeg = await decoder.extractJPEG(url: file) {
+                    guard !Task.isCancelled else { return }
+                    if let sendable = await decoder.cgImageToTexture(jpeg) {
                         guard !Task.isCancelled else { return }
-                        if let sendable = await decoder.cgImageToTexture(jpeg) {
-                            guard !Task.isCancelled else { return }
-                            let elapsed = (CFAbsoluteTimeGetCurrent() - start) * 1000
-                            let tex = sendable.texture
-                            currentTexture = tex
-                            decodeTimeMs = elapsed
-                        }
+                        let elapsed = (CFAbsoluteTimeGetCurrent() - start) * 1000
+                        currentTexture = sendable.texture
+                        decodeTimeMs = elapsed
                     }
                 }
+            }
 
-                guard !Task.isCancelled else { return }
+            guard !Task.isCancelled else { return }
 
-                // Decode full RAW (with or without focus peaking)
-                let displaySize = CGSize(
-                    width: Double(device.recommendedMaxWorkingSetSize > 0 ? 3840 : 1920),
-                    height: Double(device.recommendedMaxWorkingSetSize > 0 ? 2160 : 1080)
-                )
-                if let sendable = await decoder.decodeRAW(url: file, displaySize: displaySize, focusPeaking: usePeaking) {
+            let displaySize = CGSize(
+                width: Double(device.recommendedMaxWorkingSetSize > 0 ? 3840 : 1920),
+                height: Double(device.recommendedMaxWorkingSetSize > 0 ? 2160 : 1080)
+            )
+
+            if usePeaking {
+                // Focus peaking: decode directly to texture (not cached)
+                if let sendable = await decoder.decodeRAW(url: file, displaySize: displaySize, focusPeaking: true) {
                     guard !Task.isCancelled else { return }
                     let elapsed = (CFAbsoluteTimeGetCurrent() - start) * 1000
                     currentTexture = sendable.texture
                     decodeTimeMs = elapsed
                     isLoading = false
+                }
+            } else {
+                // Normal: decode to CGImage for both texture and disk cache
+                if let cgImage = await decoder.decodeRAWToCGImage(url: file, displaySize: displaySize) {
+                    guard !Task.isCancelled else { return }
+                    if let sendable = await decoder.cgImageToTexture(cgImage) {
+                        guard !Task.isCancelled else { return }
+                        let elapsed = (CFAbsoluteTimeGetCurrent() - start) * 1000
+                        currentTexture = sendable.texture
+                        decodeTimeMs = elapsed
+                        isLoading = false
 
-                    // Only cache non-peaking textures
-                    if !usePeaking, let prefetchManager = prefetchManager {
-                        await prefetchManager.store(texture: sendable.texture, for: file, isRAW: true)
+                        if let prefetchManager = prefetchManager {
+                            await prefetchManager.storeAndPersist(texture: sendable.texture, cgImage: cgImage, for: file)
+                        }
                     }
                 }
             }

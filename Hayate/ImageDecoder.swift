@@ -49,6 +49,16 @@ final class ImageDecoder: @unchecked Sendable {
         }.value
     }
 
+    /// Decode a RAW file to CGImage at the specified display size.
+    /// Used by the disk cache path: produces a CGImage that can be both
+    /// converted to MTLTexture (for memory cache) and written as HEIF (for disk cache)
+    /// with only a single RAW decode pass.
+    func decodeRAWToCGImage(url: URL, displaySize: CGSize) async -> CGImage? {
+        await Task.detached(priority: .userInitiated) { [self] in
+            decodeRAWToCGImageSync(url: url, displaySize: displaySize)
+        }.value
+    }
+
     /// Decode a RAW file at full resolution (for zoom).
     func decodeRAWFullResolution(url: URL) async -> SendableTexture? {
         await Task.detached(priority: .userInitiated) { [self] in
@@ -89,6 +99,22 @@ final class ImageDecoder: @unchecked Sendable {
         ]
 
         return CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
+    }
+
+    private func decodeRAWToCGImageSync(url: URL, displaySize: CGSize) -> CGImage? {
+        let signpostID = OSSignpostID(log: signpostLog)
+        os_signpost(.begin, log: signpostLog, name: "decodeRAWCGImage", signpostID: signpostID, "file: %{public}s", url.lastPathComponent)
+        defer { os_signpost(.end, log: signpostLog, name: "decodeRAWCGImage", signpostID: signpostID) }
+
+        guard let rawFilter = CIRAWFilter(imageURL: url) else { return nil }
+        guard let outputImage = rawFilter.outputImage else { return nil }
+
+        let scale = min(
+            displaySize.width / outputImage.extent.width,
+            displaySize.height / outputImage.extent.height
+        )
+        let scaledImage = outputImage.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
+        return ciContext.createCGImage(scaledImage, from: scaledImage.extent)
     }
 
     private func decodeRAWSync(url: URL, displaySize: CGSize, focusPeaking: Bool) -> SendableTexture? {
