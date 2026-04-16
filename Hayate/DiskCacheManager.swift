@@ -38,6 +38,21 @@ actor DiskCacheManager {
         return caches.appendingPathComponent("com.hayate/previews", isDirectory: true)
     }
 
+    /// Read the user-configured cache root from UserDefaults, falling back to the default.
+    static var userConfiguredCacheRoot: URL {
+        if let path = UserDefaults.standard.string(forKey: "previewCacheLocation") {
+            return URL(fileURLWithPath: path, isDirectory: true)
+        }
+        return defaultCacheRoot
+    }
+
+    /// Cache size limit in bytes from UserDefaults. 0 = unlimited.
+    static var userConfiguredSizeLimit: Int64 {
+        let gb = UserDefaults.standard.integer(forKey: "previewCacheSizeLimitGB")
+        if gb == 0 { return 0 }
+        return Int64(gb) * 1_073_741_824
+    }
+
     init(cacheRoot: URL? = nil) {
         let root = cacheRoot ?? Self.defaultCacheRoot
         self.cacheRoot = root
@@ -108,6 +123,24 @@ actor DiskCacheManager {
 
         let fileSize = (try? FileManager.default.attributesOfItem(atPath: filePath.path)[.size] as? Int64) ?? 0
         insertEntry(key: key, url: url, fileSize: fileSize)
+
+        let limit = Self.userConfiguredSizeLimit
+        if limit > 0 {
+            evict(maxBytes: limit)
+        }
+    }
+
+    /// The root directory of this cache (for display in Settings).
+    var cacheRootURL: URL { cacheRoot }
+
+    /// Number of cached preview entries.
+    func entryCount() -> Int {
+        guard let db = db else { return 0 }
+        var stmt: OpaquePointer?
+        defer { sqlite3_finalize(stmt) }
+        guard sqlite3_prepare_v2(db, "SELECT COUNT(*) FROM previews", -1, &stmt, nil) == SQLITE_OK,
+              sqlite3_step(stmt) == SQLITE_ROW else { return 0 }
+        return Int(sqlite3_column_int64(stmt, 0))
     }
 
     /// Check whether a preview exists for the given URL.
