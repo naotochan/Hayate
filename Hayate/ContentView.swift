@@ -12,6 +12,7 @@ struct ContentView: View {
     @State private var decoder: ImageDecoder?
     @State private var prefetchManager: PrefetchManager?
     @State private var diskCache: DiskCacheManager?
+    @StateObject private var buildProgress = PreviewBuildProgress()
     @State private var isLoading = false
     @State private var showDeleteConfirmation = false
     /// Indices to delete when the confirmation dialog is accepted.
@@ -758,6 +759,13 @@ struct ContentView: View {
                         .foregroundColor(.gray)
                         .font(.system(size: 11, design: .monospaced))
                 }
+
+                // Background build progress
+                if buildProgress.isBuilding {
+                    Text("Building previews: \(buildProgress.completed)/\(buildProgress.total)")
+                        .foregroundColor(.gray)
+                        .font(.system(size: 11, design: .monospaced))
+                }
             }
         }
         .padding(.horizontal, 16)
@@ -775,7 +783,7 @@ struct ContentView: View {
         decoder = dec
         let dc = DiskCacheManager(cacheRoot: DiskCacheManager.userConfiguredCacheRoot)
         diskCache = dc
-        prefetchManager = PrefetchManager(decoder: dec, device: device, diskCache: dc)
+        prefetchManager = PrefetchManager(decoder: dec, device: device, diskCache: dc, buildProgress: buildProgress)
     }
 
     private func installKeyHandler() {
@@ -1076,6 +1084,20 @@ struct ContentView: View {
         guard session.openFolder(url) else { return }
         resetViewState()
         loadCurrentImage()
+        startBackgroundBuild()
+    }
+
+    private func startBackgroundBuild() {
+        guard let prefetchManager = prefetchManager,
+              let device = metalDevice else { return }
+        let files = session.files
+        let displaySize = CGSize(
+            width: Double(device.recommendedMaxWorkingSetSize > 0 ? 3840 : 1920),
+            height: Double(device.recommendedMaxWorkingSetSize > 0 ? 2160 : 1080)
+        )
+        Task {
+            await prefetchManager.startBackgroundBuild(files: files, displaySize: displaySize)
+        }
     }
 
     /// Clear all view-local state when switching to a new folder mid-session.
