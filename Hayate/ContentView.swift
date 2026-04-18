@@ -1255,12 +1255,20 @@ struct ContentView: View {
 
     private func loadThumbnail(for url: URL) {
         guard let decoder = decoder else { return }
+        let cache = diskCache
         Task.detached(priority: .utility) {
-            if let cgImage = await decoder.extractThumbnail(url: url) {
+            if let cache = cache, let cgImage = await cache.loadThumbnail(for: url) {
                 let nsImage = NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
-                await MainActor.run {
-                    thumbnails[url] = nsImage
-                }
+                await MainActor.run { thumbnails[url] = nsImage }
+                return
+            }
+
+            guard let cgImage = await decoder.extractThumbnail(url: url) else { return }
+            let nsImage = NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
+            await MainActor.run { thumbnails[url] = nsImage }
+
+            if let cache = cache {
+                await cache.storeThumbnail(cgImage: cgImage, for: url)
             }
         }
     }
