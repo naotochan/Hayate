@@ -190,21 +190,35 @@ actor PrefetchManager {
         let progress = self.buildProgress
 
         backgroundBuildTask = Task.detached(priority: .background) {
-            let missing = await diskCache.uncachedURLs(from: files)
+            let missingPreviews = await diskCache.uncachedURLs(from: files)
+            let missingThumbs = await diskCache.uncachedThumbnailURLs(from: files)
 
-            guard !missing.isEmpty else { return }
+            let totalWork = missingPreviews.count + missingThumbs.count
+            guard totalWork > 0 else { return }
 
             await MainActor.run {
-                progress.total = missing.count
+                progress.total = totalWork
                 progress.completed = 0
                 progress.isBuilding = true
             }
 
-            for url in missing {
+            for url in missingPreviews {
                 guard !Task.isCancelled else { break }
 
                 if let cgImage = await decoder.decodeRAWToCGImage(url: url, displaySize: displaySize, priority: .background) {
                     await diskCache.store(cgImage: cgImage, for: url)
+                }
+
+                await MainActor.run {
+                    progress.completed += 1
+                }
+            }
+
+            for url in missingThumbs {
+                guard !Task.isCancelled else { break }
+
+                if let cgImage = await decoder.extractThumbnail(url: url) {
+                    await diskCache.storeThumbnail(cgImage: cgImage, for: url)
                 }
 
                 await MainActor.run {

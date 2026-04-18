@@ -74,7 +74,7 @@ final class ImageDecoder: @unchecked Sendable {
     }
 
     /// Extract a small thumbnail CGImage for the filmstrip.
-    func extractThumbnail(url: URL, maxSize: Int = 120) async -> CGImage? {
+    func extractThumbnail(url: URL, maxSize: Int = 400) async -> CGImage? {
         await Task.detached(priority: .utility) { [self] in
             extractThumbnailSync(url: url, maxSize: maxSize)
         }.value
