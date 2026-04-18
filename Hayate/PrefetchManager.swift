@@ -2,6 +2,21 @@
 import Foundation
 import CoreGraphics
 
+/// Observable progress for background preview generation.
+/// Updated by PrefetchManager, observed by ContentView.
+@MainActor
+class PreviewBuildProgress: ObservableObject {
+    @Published var completed: Int = 0
+    @Published var total: Int = 0
+    @Published var isBuilding: Bool = false
+
+    func reset() {
+        completed = 0
+        total = 0
+        isBuilding = false
+    }
+}
+
 /// Actor that manages prefetching of adjacent images and an LRU texture cache.
 /// Prefetches N±prefetchRadius relative to the current index.
 ///
@@ -25,14 +40,21 @@ actor PrefetchManager {
     /// Currently running prefetch tasks, keyed by URL.
     private var activeTasks: [URL: Task<Void, Never>] = [:]
 
+    /// Background preview build task — cancelled on folder change.
+    private var backgroundBuildTask: Task<Void, Never>?
+
+    /// Progress object updated during background builds.
+    let buildProgress: PreviewBuildProgress
+
     struct CacheEntry {
         let texture: MTLTexture
         let isRAW: Bool
     }
 
-    init(decoder: ImageDecoder, device: MTLDevice, diskCache: DiskCacheManager? = nil) {
+    init(decoder: ImageDecoder, device: MTLDevice, diskCache: DiskCacheManager? = nil, buildProgress: PreviewBuildProgress) {
         self.decoder = decoder
         self.diskCache = diskCache
+        self.buildProgress = buildProgress
         let recommended = device.recommendedMaxWorkingSetSize
         let perTexture: UInt64 = 3840 * 2160 * 4
         let dynamicMax = Int(recommended / 2 / perTexture)
@@ -69,7 +91,6 @@ actor PrefetchManager {
     // MARK: - Disk cache integration
 
     /// Try loading a preview from disk cache, converting to texture and storing in memory.
-    /// Returns the texture on hit, nil on miss.
     func textureFromDiskCache(for url: URL) async -> SendableTexture? {
         guard let diskCache = diskCache else { return nil }
         guard let cgImage = await diskCache.loadPreview(for: url) else { return nil }
@@ -79,7 +100,6 @@ actor PrefetchManager {
     }
 
     /// Store a texture in memory and persist to disk cache as HEIF.
-    /// Used by ContentView after a RAW decode so the result survives across sessions.
     func storeAndPersist(texture: MTLTexture, cgImage: CGImage, for url: URL) {
         store(texture: texture, for: url, isRAW: true)
         if let diskCache = diskCache {
@@ -93,7 +113,6 @@ actor PrefetchManager {
     // MARK: - Prefetch
 
     /// Trigger prefetch for N±prefetchRadius around currentIndex.
-    /// Cancels any prefetch tasks for URLs no longer in the prefetch window.
     func prefetch(
         currentIndex: Int,
         files: [URL],
@@ -110,7 +129,6 @@ actor PrefetchManager {
             targetURLs.insert(files[index])
         }
 
-        // Cancel tasks for URLs outside the window
         for (url, task) in activeTasks {
             if !targetURLs.contains(url) {
                 task.cancel()
@@ -118,7 +136,6 @@ actor PrefetchManager {
             }
         }
 
-        // Start prefetch for uncached targets
         for url in targetURLs {
             if cache[url] != nil || activeTasks[url] != nil {
                 continue
@@ -129,7 +146,6 @@ actor PrefetchManager {
             let size = displaySize
 
             activeTasks[url] = Task {
-                // 1. Try disk cache first (~20-50ms)
                 if let diskCache = diskCache,
                    let cgImage = await diskCache.loadPreview(for: url),
                    let sendable = await decoder.cgImageToTexture(cgImage) {
@@ -138,13 +154,11 @@ actor PrefetchManager {
                     return
                 }
 
-                // 2. JPEG for instant availability
                 if let jpeg = await decoder.extractJPEG(url: url),
                    let sendable = await decoder.cgImageToTexture(jpeg) {
                     await self.store(texture: sendable.texture, for: url, isRAW: false)
                 }
 
-                // 3. Full RAW decode → CGImage → texture + disk
                 if !Task.isCancelled {
                     if let cgImage = await decoder.decodeRAWToCGImage(url: url, displaySize: size) {
                         if let sendable = await decoder.cgImageToTexture(cgImage) {
@@ -163,6 +177,56 @@ actor PrefetchManager {
         }
     }
 
+    // MARK: - Background build
+
+    /// Start building disk cache previews for all files in the background.
+    /// Cancels any previous background build. Skips files already cached on disk.
+    func startBackgroundBuild(files: [URL], displaySize: CGSize) {
+        backgroundBuildTask?.cancel()
+
+        guard let diskCache = diskCache else { return }
+
+        let decoder = self.decoder
+        let progress = self.buildProgress
+
+        backgroundBuildTask = Task.detached(priority: .background) {
+            let missing = await diskCache.uncachedURLs(from: files)
+
+            guard !missing.isEmpty else { return }
+
+            await MainActor.run {
+                progress.total = missing.count
+                progress.completed = 0
+                progress.isBuilding = true
+            }
+
+            for url in missing {
+                guard !Task.isCancelled else { break }
+
+                if let cgImage = await decoder.decodeRAWToCGImage(url: url, displaySize: displaySize, priority: .background) {
+                    await diskCache.store(cgImage: cgImage, for: url)
+                }
+
+                await MainActor.run {
+                    progress.completed += 1
+                }
+            }
+
+            await MainActor.run {
+                progress.isBuilding = false
+            }
+        }
+    }
+
+    /// Cancel any in-progress background build.
+    func stopBackgroundBuild() {
+        backgroundBuildTask?.cancel()
+        backgroundBuildTask = nil
+        Task { @MainActor in
+            buildProgress.reset()
+        }
+    }
+
     /// Clear the memory cache and cancel all tasks.
     func clear() {
         for (_, task) in activeTasks {
@@ -171,6 +235,7 @@ actor PrefetchManager {
         activeTasks.removeAll()
         cache.removeAll()
         accessOrder.removeAll()
+        stopBackgroundBuild()
     }
 
     // MARK: - Private

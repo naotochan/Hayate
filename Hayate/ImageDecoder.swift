@@ -53,8 +53,8 @@ final class ImageDecoder: @unchecked Sendable {
     /// Used by the disk cache path: produces a CGImage that can be both
     /// converted to MTLTexture (for memory cache) and written as HEIF (for disk cache)
     /// with only a single RAW decode pass.
-    func decodeRAWToCGImage(url: URL, displaySize: CGSize) async -> CGImage? {
-        await Task.detached(priority: .userInitiated) { [self] in
+    func decodeRAWToCGImage(url: URL, displaySize: CGSize, priority: TaskPriority = .userInitiated) async -> CGImage? {
+        await Task.detached(priority: priority) { [self] in
             decodeRAWToCGImageSync(url: url, displaySize: displaySize)
         }.value
     }

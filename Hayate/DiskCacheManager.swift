@@ -149,6 +149,14 @@ actor DiskCacheManager {
         return entryExists(key: key)
     }
 
+    /// Filter a list of URLs to only those missing from the disk cache.
+    func uncachedURLs(from urls: [URL]) -> [URL] {
+        urls.filter { url in
+            guard let key = cacheKey(for: url) else { return true }
+            return !entryExists(key: key)
+        }
+    }
+
     /// Total size of cached preview files in bytes.
     func totalSize() -> Int64 {
         guard let db = db else { return 0 }
