@@ -19,6 +19,10 @@
 		A10010 /* Keybindings.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20010; };
 		A10011 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20011; };
 		A10012 /* DiskCacheManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20012; };
+		A10013 /* ContentView+Grid.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20013; };
+		A10014 /* ContentView+Compare.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20014; };
+		A10015 /* ContentView+Filmstrip.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20015; };
+		A10016 /* ContentView+Input.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20016; };
 		B10001 /* CullingSessionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20001; };
 		B10002 /* KeybindingsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20002; };
 /* End PBXBuildFile section */
@@ -46,6 +50,10 @@
 		A20010 /* Keybindings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Keybindings.swift; sourceTree = "<group>"; };
 		A20011 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		A20012 /* DiskCacheManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiskCacheManager.swift; sourceTree = "<group>"; };
+		A20013 /* ContentView+Grid.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ContentView+Grid.swift"; sourceTree = "<group>"; };
+		A20014 /* ContentView+Compare.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ContentView+Compare.swift"; sourceTree = "<group>"; };
+		A20015 /* ContentView+Filmstrip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ContentView+Filmstrip.swift"; sourceTree = "<group>"; };
+		A20016 /* ContentView+Input.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ContentView+Input.swift"; sourceTree = "<group>"; };
 		A30001 /* Hayate.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Hayate.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		B20001 /* CullingSessionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CullingSessionTests.swift; sourceTree = "<group>"; };
 		B20002 /* KeybindingsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeybindingsTests.swift; sourceTree = "<group>"; };
@@ -85,6 +93,10 @@
 			children = (
 				A20001 /* HayateApp.swift */,
 				A20002 /* ContentView.swift */,
+				A20013 /* ContentView+Grid.swift */,
+				A20014 /* ContentView+Compare.swift */,
+				A20015 /* ContentView+Filmstrip.swift */,
+				A20016 /* ContentView+Input.swift */,
 				A20003 /* MetalImageView.swift */,
 				A20004 /* ImageDecoder.swift */,
 				A20005 /* PrefetchManager.swift */,
@@ -216,6 +228,10 @@
 			files = (
 				A10001 /* HayateApp.swift in Sources */,
 				A10002 /* ContentView.swift in Sources */,
+				A10013 /* ContentView+Grid.swift in Sources */,
+				A10014 /* ContentView+Compare.swift in Sources */,
+				A10015 /* ContentView+Filmstrip.swift in Sources */,
+				A10016 /* ContentView+Input.swift in Sources */,
 				A10003 /* MetalImageView.swift in Sources */,
 				A10004 /* ImageDecoder.swift in Sources */,
 				A10005 /* PrefetchManager.swift in Sources */,
