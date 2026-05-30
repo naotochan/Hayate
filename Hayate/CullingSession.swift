@@ -121,110 +121,89 @@ class CullingSession: ObservableObject {
         currentIndex -= 1
     }
 
-    // MARK: - Batch Operations
-
-    func setRatingForIndices(_ indices: Set<Int>, rating: Int) {
-        for index in indices where files.indices.contains(index) {
-            let fileName = files[index].lastPathComponent
-            let oldRating = entries[fileName]?.rating ?? 0
-            undoStack.append(.ratingChange(fileName: fileName, oldRating: oldRating))
-            var entry = entries[fileName] ?? PhotoEntry(fileName: fileName)
-            entry.rating = max(0, min(5, rating))
-            entries[fileName] = entry
-        }
-        saveJSON()
-    }
-
-    func toggleFavoriteForIndices(_ indices: Set<Int>) {
-        for index in indices where files.indices.contains(index) {
-            let fileName = files[index].lastPathComponent
-            let oldFav = entries[fileName]?.isFavorite ?? false
-            let oldRej = entries[fileName]?.isRejected ?? false
-            undoStack.append(.favoriteChange(fileName: fileName, oldValue: oldFav))
-            var entry = entries[fileName] ?? PhotoEntry(fileName: fileName)
-            entry.isFavorite = !entry.isFavorite
-            // Exclusive: turning on favorite clears rejected
-            if entry.isFavorite && entry.isRejected {
-                undoStack.append(.rejectedChange(fileName: fileName, oldValue: oldRej))
-                entry.isRejected = false
-            }
-            entries[fileName] = entry
-        }
-        saveJSON()
-    }
-
-    func toggleRejectedForIndices(_ indices: Set<Int>) {
-        for index in indices where files.indices.contains(index) {
-            let fileName = files[index].lastPathComponent
-            let oldRej = entries[fileName]?.isRejected ?? false
-            let oldFav = entries[fileName]?.isFavorite ?? false
-            undoStack.append(.rejectedChange(fileName: fileName, oldValue: oldRej))
-            var entry = entries[fileName] ?? PhotoEntry(fileName: fileName)
-            entry.isRejected = !entry.isRejected
-            // Exclusive: turning on rejected clears favorite
-            if entry.isRejected && entry.isFavorite {
-                undoStack.append(.favoriteChange(fileName: fileName, oldValue: oldFav))
-                entry.isFavorite = false
-            }
-            entries[fileName] = entry
-        }
-        saveJSON()
-    }
-
-    // MARK: - Rating & Favorite
+    // MARK: - Rating & Favorite (single)
 
     func setRating(_ rating: Int) {
         guard let file = currentFile else { return }
-        let fileName = file.lastPathComponent
-        let oldRating = entries[fileName]?.rating ?? 0
-
-        undoStack.append(.ratingChange(fileName: fileName, oldRating: oldRating))
-
-        var entry = entries[fileName] ?? PhotoEntry(fileName: fileName)
-        entry.rating = max(0, min(5, rating))
-        entries[fileName] = entry
-
+        applyRating(rating, toFileNamed: file.lastPathComponent)
         saveJSON()
     }
 
     func toggleFavorite() {
         guard let file = currentFile else { return }
-        let fileName = file.lastPathComponent
-        let oldFav = entries[fileName]?.isFavorite ?? false
-        let oldRej = entries[fileName]?.isRejected ?? false
-
-        undoStack.append(.favoriteChange(fileName: fileName, oldValue: oldFav))
-
-        var entry = entries[fileName] ?? PhotoEntry(fileName: fileName)
-        entry.isFavorite = !entry.isFavorite
-        // Exclusive: turning on favorite clears rejected
-        if entry.isFavorite && entry.isRejected {
-            undoStack.append(.rejectedChange(fileName: fileName, oldValue: oldRej))
-            entry.isRejected = false
-        }
-        entries[fileName] = entry
-
+        applyToggleFavorite(toFileNamed: file.lastPathComponent)
         saveJSON()
     }
 
     func toggleRejected() {
         guard let file = currentFile else { return }
-        let fileName = file.lastPathComponent
+        applyToggleRejected(toFileNamed: file.lastPathComponent)
+        saveJSON()
+    }
+
+    // MARK: - Batch Operations
+
+    func setRatingForIndices(_ indices: Set<Int>, rating: Int) {
+        forEachFileName(in: indices) { applyRating(rating, toFileNamed: $0) }
+        saveJSON()
+    }
+
+    func toggleFavoriteForIndices(_ indices: Set<Int>) {
+        forEachFileName(in: indices) { applyToggleFavorite(toFileNamed: $0) }
+        saveJSON()
+    }
+
+    func toggleRejectedForIndices(_ indices: Set<Int>) {
+        forEachFileName(in: indices) { applyToggleRejected(toFileNamed: $0) }
+        saveJSON()
+    }
+
+    // MARK: - Mutation primitives
+
+    /// Run `body` for each valid index's file name. Callers persist afterwards.
+    private func forEachFileName(in indices: Set<Int>, _ body: (String) -> Void) {
+        for index in indices where files.indices.contains(index) {
+            body(files[index].lastPathComponent)
+        }
+    }
+
+    /// Set a rating, recording the prior value for undo. Does not persist.
+    private func applyRating(_ rating: Int, toFileNamed fileName: String) {
+        let oldRating = entries[fileName]?.rating ?? 0
+        undoStack.append(.ratingChange(fileName: fileName, oldRating: oldRating))
+        var entry = entries[fileName] ?? PhotoEntry(fileName: fileName)
+        entry.rating = max(0, min(5, rating))
+        entries[fileName] = entry
+    }
+
+    /// Toggle favorite; turning it on clears rejected (mutually exclusive).
+    /// Pushes favoriteChange first, then rejectedChange if clearing. Does not persist.
+    private func applyToggleFavorite(toFileNamed fileName: String) {
+        let oldFav = entries[fileName]?.isFavorite ?? false
+        let oldRej = entries[fileName]?.isRejected ?? false
+        undoStack.append(.favoriteChange(fileName: fileName, oldValue: oldFav))
+        var entry = entries[fileName] ?? PhotoEntry(fileName: fileName)
+        entry.isFavorite = !entry.isFavorite
+        if entry.isFavorite && entry.isRejected {
+            undoStack.append(.rejectedChange(fileName: fileName, oldValue: oldRej))
+            entry.isRejected = false
+        }
+        entries[fileName] = entry
+    }
+
+    /// Toggle rejected; turning it on clears favorite (mutually exclusive).
+    /// Pushes rejectedChange first, then favoriteChange if clearing. Does not persist.
+    private func applyToggleRejected(toFileNamed fileName: String) {
         let oldRej = entries[fileName]?.isRejected ?? false
         let oldFav = entries[fileName]?.isFavorite ?? false
-
         undoStack.append(.rejectedChange(fileName: fileName, oldValue: oldRej))
-
         var entry = entries[fileName] ?? PhotoEntry(fileName: fileName)
         entry.isRejected = !entry.isRejected
-        // Exclusive: turning on rejected clears favorite
         if entry.isRejected && entry.isFavorite {
             undoStack.append(.favoriteChange(fileName: fileName, oldValue: oldFav))
             entry.isFavorite = false
         }
         entries[fileName] = entry
-
-        saveJSON()
     }
 
     // MARK: - Deletion
