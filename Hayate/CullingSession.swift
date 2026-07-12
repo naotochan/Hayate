@@ -22,6 +22,12 @@ class CullingSession: ObservableObject {
     /// ContentView observes this and runs the shared open-folder flow.
     @Published var directOpenRequest: URL?
 
+    /// Trigger for the export sheet (File > Export Picks…).
+    @Published var exportRequest: UUID?
+
+    /// Progress of a running (or just-finished) export. nil when idle.
+    @Published var exportProgress: ExportProgress?
+
     /// Recently opened folders, most recent first (persisted to UserDefaults).
     @Published private(set) var recentFolders: [URL] = []
 
@@ -107,6 +113,66 @@ class CullingSession: ObservableObject {
     /// Ask the UI to open this specific folder (recent-folders menu, drag & drop).
     func requestOpen(folder url: URL) {
         directOpenRequest = url
+    }
+
+    /// Ask the UI to present the export sheet.
+    func requestExport() {
+        exportRequest = UUID()
+    }
+
+    // MARK: - Export
+
+    struct ExportProgress: Equatable {
+        var completed: Int
+        var total: Int
+        var failed: Int
+        var finished: Bool
+    }
+
+    /// Copy or move every file matching `predicate` into `destination`,
+    /// publishing progress along the way. File I/O runs off the main actor.
+    /// A move rescans the folder on completion (moved files leave the
+    /// session; their entries survive as orphans in .hayate.json).
+    func exportPicks(where predicate: (PhotoEntry?) -> Bool, to destination: URL, move: Bool) {
+        // One export at a time.
+        if let progress = exportProgress, !progress.finished { return }
+
+        let targets = files.filter { predicate(entries[$0.lastPathComponent]) }
+        guard !targets.isEmpty else { return }
+        exportProgress = ExportProgress(completed: 0, total: targets.count, failed: 0, finished: false)
+
+        Task.detached(priority: .userInitiated) { [weak self] in
+            let fm = FileManager.default
+            var completed = 0
+            var failed = 0
+            for src in targets {
+                let dst = destination.appendingPathComponent(src.lastPathComponent)
+                do {
+                    // Never overwrite an existing file at the destination.
+                    if fm.fileExists(atPath: dst.path) { throw CocoaError(.fileWriteFileExists) }
+                    if move {
+                        try fm.moveItem(at: src, to: dst)
+                    } else {
+                        try fm.copyItem(at: src, to: dst)
+                    }
+                } catch {
+                    failed += 1
+                }
+                completed += 1
+                let progress = ExportProgress(completed: completed, total: targets.count, failed: failed, finished: false)
+                await MainActor.run { [weak self] in self?.exportProgress = progress }
+            }
+
+            let final = ExportProgress(completed: completed, total: targets.count, failed: failed, finished: true)
+            await MainActor.run { [weak self] in
+                guard let self = self else { return }
+                self.exportProgress = final
+                if move, let folder = self.folderURL {
+                    // Rescan so moved files disappear from the session.
+                    self.openFolder(folder)
+                }
+            }
+        }
     }
 
     /// Open a folder and scan for RAW files.

@@ -29,6 +29,11 @@ struct ContentView: View {
     /// EXIF info overlay (I key).
     @State var showInfo = false
     @State var currentEXIF: EXIFInfo?
+    /// Histogram overlay (H key).
+    @State var showHistogram = false
+    @State var histogramData: HistogramData?
+    /// Export sheet (File > Export Picks…).
+    @State var showExportSheet = false
     @State var thumbnails: [URL: NSImage] = [:]
     /// Insertion order of `thumbnails` keys, oldest first, for capped eviction.
     @State var thumbnailOrder: [URL] = []
@@ -133,6 +138,18 @@ struct ContentView: View {
                     }
                 }
 
+                // Top-right overlay: histogram (H key)
+                if showHistogram, let histogramData = histogramData {
+                    VStack {
+                        HStack {
+                            Spacer()
+                            HistogramView(data: histogramData)
+                                .padding(12)
+                        }
+                        Spacer()
+                    }
+                }
+
                 // Bottom overlay: filmstrip + status bar
                 VStack(spacing: 0) {
                     Spacer()
@@ -192,6 +209,20 @@ struct ContentView: View {
             guard let url = url else { return }
             session.directOpenRequest = nil
             openFolderAndReload(url)
+        }
+        .onChange(of: session.exportRequest) { _, request in
+            guard request != nil, !session.files.isEmpty else { return }
+            showExportSheet = true
+        }
+        .onChange(of: decodeTimeMs) { _, _ in
+            // decodeTimeMs bumps on every texture swap in loadCurrentImage —
+            // cheap signal to keep the histogram in sync with the display.
+            if showHistogram {
+                updateHistogram()
+            }
+        }
+        .sheet(isPresented: $showExportSheet) {
+            ExportSheet()
         }
         .onDrop(of: [.fileURL], isTargeted: nil) { providers in
             guard let provider = providers.first else { return false }
@@ -311,6 +342,8 @@ struct ContentView: View {
         focusPeakingEnabled = false
         showInfo = false
         currentEXIF = nil
+        showHistogram = false
+        histogramData = nil
     }
 
     // MARK: - Navigation
@@ -445,6 +478,24 @@ struct ContentView: View {
             // Ignore late results after further navigation.
             if session.currentFile == file {
                 currentEXIF = info
+            }
+        }
+    }
+
+    // MARK: - Histogram
+
+    /// Recompute the histogram from the currently displayed texture.
+    func updateHistogram() {
+        guard showHistogram, let texture = currentTexture, let decoder = decoder else {
+            histogramData = nil
+            return
+        }
+        let sendable = SendableTexture(texture: texture)
+        Task {
+            let data = await decoder.computeHistogram(texture: sendable)
+            // Only apply if the histogram is still showing.
+            if showHistogram {
+                histogramData = data
             }
         }
     }

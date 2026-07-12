@@ -24,6 +24,8 @@
 		A10015 /* ContentView+Filmstrip.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20015; };
 		A10016 /* ContentView+Input.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20016; };
 		A10017 /* PhotoBadgeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20017; };
+		A10018 /* ExportSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20018; };
+		A10019 /* HistogramView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20019; };
 		B10001 /* CullingSessionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20001; };
 		B10002 /* KeybindingsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20002; };
 /* End PBXBuildFile section */
@@ -56,6 +58,8 @@
 		A20015 /* ContentView+Filmstrip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ContentView+Filmstrip.swift"; sourceTree = "<group>"; };
 		A20016 /* ContentView+Input.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ContentView+Input.swift"; sourceTree = "<group>"; };
 		A20017 /* PhotoBadgeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoBadgeView.swift; sourceTree = "<group>"; };
+		A20018 /* ExportSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExportSheet.swift; sourceTree = "<group>"; };
+		A20019 /* HistogramView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistogramView.swift; sourceTree = "<group>"; };
 		A30001 /* Hayate.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Hayate.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		B20001 /* CullingSessionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CullingSessionTests.swift; sourceTree = "<group>"; };
 		B20002 /* KeybindingsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeybindingsTests.swift; sourceTree = "<group>"; };
@@ -100,6 +104,8 @@
 				A20015 /* ContentView+Filmstrip.swift */,
 				A20016 /* ContentView+Input.swift */,
 				A20017 /* PhotoBadgeView.swift */,
+				A20018 /* ExportSheet.swift */,
+				A20019 /* HistogramView.swift */,
 				A20003 /* MetalImageView.swift */,
 				A20004 /* ImageDecoder.swift */,
 				A20005 /* PrefetchManager.swift */,
@@ -236,6 +242,8 @@
 				A10015 /* ContentView+Filmstrip.swift in Sources */,
 				A10016 /* ContentView+Input.swift in Sources */,
 				A10017 /* PhotoBadgeView.swift in Sources */,
+				A10018 /* ExportSheet.swift in Sources */,
+				A10019 /* HistogramView.swift in Sources */,
 				A10003 /* MetalImageView.swift in Sources */,
 				A10004 /* ImageDecoder.swift in Sources */,
 				A10005 /* PrefetchManager.swift in Sources */,
