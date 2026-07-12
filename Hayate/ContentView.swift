@@ -297,75 +297,32 @@ struct ContentView: View {
         let start = CFAbsoluteTimeGetCurrent()
 
         currentDecodeTask = Task {
-            let usePeaking = focusPeakingEnabled
-
-            // L1: Memory cache (instant)
-            if !usePeaking,
-               let prefetchManager = prefetchManager,
-               let cached = await prefetchManager.cachedTexture(for: file) {
-                guard !Task.isCancelled else { return }
-                let elapsed = (CFAbsoluteTimeGetCurrent() - start) * 1000
-                currentTexture = cached.texture
-                decodeTimeMs = elapsed
-                isLoading = false
-                return
-            }
-
-            // L2: Disk cache (~20-50ms)
-            if !usePeaking,
-               let prefetchManager = prefetchManager,
-               let diskHit = await prefetchManager.textureFromDiskCache(for: file) {
-                guard !Task.isCancelled else { return }
-                let elapsed = (CFAbsoluteTimeGetCurrent() - start) * 1000
-                currentTexture = diskHit.texture
-                decodeTimeMs = elapsed
-                isLoading = false
-                return
-            }
-
-            // L3: Full decode path — JPEG first, then RAW
-            if !usePeaking {
-                if let jpeg = await decoder.extractJPEG(url: file) {
-                    guard !Task.isCancelled else { return }
-                    if let sendable = await decoder.cgImageToTexture(jpeg) {
-                        guard !Task.isCancelled else { return }
-                        let elapsed = (CFAbsoluteTimeGetCurrent() - start) * 1000
-                        currentTexture = sendable.texture
-                        decodeTimeMs = elapsed
-                    }
-                }
-            }
-
-            guard !Task.isCancelled else { return }
-
             let displaySize = previewDisplaySize
 
-            if usePeaking {
+            if focusPeakingEnabled {
                 // Focus peaking: decode directly to texture (not cached)
                 if let sendable = await decoder.decodeRAW(url: file, displaySize: displaySize, focusPeaking: true) {
                     guard !Task.isCancelled else { return }
-                    let elapsed = (CFAbsoluteTimeGetCurrent() - start) * 1000
                     currentTexture = sendable.texture
-                    decodeTimeMs = elapsed
+                    decodeTimeMs = (CFAbsoluteTimeGetCurrent() - start) * 1000
                     isLoading = false
                 }
-            } else {
-                // Normal: decode to CGImage for both texture and disk cache
-                if let cgImage = await decoder.decodeRAWToCGImage(url: file, displaySize: displaySize) {
-                    guard !Task.isCancelled else { return }
-                    if let sendable = await decoder.cgImageToTexture(cgImage) {
-                        guard !Task.isCancelled else { return }
-                        let elapsed = (CFAbsoluteTimeGetCurrent() - start) * 1000
-                        currentTexture = sendable.texture
-                        decodeTimeMs = elapsed
-                        isLoading = false
-
-                        if let prefetchManager = prefetchManager {
-                            await prefetchManager.storeAndPersist(texture: sendable.texture, cgImage: cgImage, for: file)
-                        }
-                    }
-                }
+                return
             }
+
+            // Unified pipeline: memory → disk → embedded JPEG (partial) → RAW
+            guard let prefetchManager = prefetchManager else { return }
+            let result = await prefetchManager.loadTexture(for: file, displaySize: displaySize) { partial in
+                // Defensive: don't overwrite a newer photo if this task was
+                // cancelled while hopping to the main actor.
+                guard !Task.isCancelled else { return }
+                currentTexture = partial.texture
+                decodeTimeMs = (CFAbsoluteTimeGetCurrent() - start) * 1000
+            }
+            guard !Task.isCancelled, let result = result else { return }
+            currentTexture = result.texture
+            decodeTimeMs = (CFAbsoluteTimeGetCurrent() - start) * 1000
+            isLoading = false
         }
     }
 
