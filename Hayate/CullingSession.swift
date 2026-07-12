@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import UniformTypeIdentifiers
 
@@ -17,8 +18,35 @@ class CullingSession: ObservableObject {
     /// ContentView observes this via `.onChange` and presents `NSOpenPanel`.
     @Published var openFolderRequest: UUID = UUID()
 
+    /// A specific folder the UI should open (recent-folders menu, drag & drop).
+    /// ContentView observes this and runs the shared open-folder flow.
+    @Published var directOpenRequest: URL?
+
+    /// Recently opened folders, most recent first (persisted to UserDefaults).
+    @Published private(set) var recentFolders: [URL] = []
+
+    static let recentFoldersKey = "recentFolders"
+    static let maxRecentFolders = 10
+
     /// Undo stack (session-only, lost on quit).
     private var undoStack: [UndoAction] = []
+
+    init() {
+        if let paths = UserDefaults.standard.stringArray(forKey: Self.recentFoldersKey) {
+            recentFolders = paths.map { URL(fileURLWithPath: $0, isDirectory: true) }
+        }
+        // Persist the browsing position (lastIndex) on quit — ratings are
+        // saved on every change, but plain navigation isn't.
+        NotificationCenter.default.addObserver(
+            forName: NSApplication.willTerminateNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.saveJSON()
+            }
+        }
+    }
 
     /// Supported RAW UTTypes that CIRAWFilter can handle.
     static let rawUTTypes: Set<UTType> = [
@@ -60,16 +88,31 @@ class CullingSession: ObservableObject {
         openFolderRequest = UUID()
     }
 
+    /// Ask the UI to open this specific folder (recent-folders menu, drag & drop).
+    func requestOpen(folder url: URL) {
+        directOpenRequest = url
+    }
+
     /// Open a folder and scan for RAW files.
-    /// - Returns: `true` if the folder was opened (security scope granted). `false` means
+    /// - Returns: `true` if the folder was opened (readable). `false` means
     ///            no session state was mutated, so callers should leave the UI alone.
     @discardableResult
     func openFolder(_ url: URL) -> Bool {
-        guard url.startAccessingSecurityScopedResource() else { return false }
-        defer { url.stopAccessingSecurityScopedResource() }
+        // NSOpenPanel URLs carry a security scope; URLs built from stored paths
+        // or drag & drop don't, and startAccessing returns false for those.
+        // The app isn't sandboxed, so readability is the real gate.
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        guard FileManager.default.isReadableFile(atPath: url.path) else { return false }
+
+        // Persist the previous folder's position before switching away.
+        if folderURL != nil {
+            saveJSON()
+        }
 
         folderURL = url
         undoStack.removeAll()
+        addToRecents(url)
 
         // Scan for RAW files
         let fm = FileManager.default
@@ -94,9 +137,19 @@ class CullingSession: ObservableObject {
 
         currentIndex = 0
 
-        // Load existing JSON
+        // Load existing JSON (may restore lastIndex)
         loadJSON()
         return true
+    }
+
+    /// Move `url` to the front of the recent-folders list and persist it.
+    private func addToRecents(_ url: URL) {
+        var paths = [url.path] + recentFolders.map(\.path).filter { $0 != url.path }
+        if paths.count > Self.maxRecentFolders {
+            paths = Array(paths.prefix(Self.maxRecentFolders))
+        }
+        recentFolders = paths.map { URL(fileURLWithPath: $0, isDirectory: true) }
+        UserDefaults.standard.set(paths, forKey: Self.recentFoldersKey)
     }
 
     // MARK: - Navigation
@@ -322,6 +375,13 @@ class CullingSession: ObservableObject {
         folderURL?.appendingPathComponent(".hayate.json")
     }
 
+    /// Current on-disk format: entries plus the last browsing position.
+    /// The legacy format was a bare `[String: PhotoEntry]` dictionary.
+    private struct SessionData: Codable {
+        var entries: [String: PhotoEntry]
+        var lastIndex: Int?
+    }
+
     private func loadJSON() {
         guard let url = jsonURL,
               let data = try? Data(contentsOf: url) else {
@@ -329,11 +389,24 @@ class CullingSession: ObservableObject {
             return
         }
 
-        let decoded = (try? JSONDecoder().decode([String: PhotoEntry].self, from: data)) ?? [:]
+        let decoded: [String: PhotoEntry]
+        var lastIndex: Int?
+        if let session = try? JSONDecoder().decode(SessionData.self, from: data) {
+            decoded = session.entries
+            lastIndex = session.lastIndex
+        } else {
+            // Legacy format: bare entries dictionary
+            decoded = (try? JSONDecoder().decode([String: PhotoEntry].self, from: data)) ?? [:]
+        }
 
         // Remove orphan entries (files that no longer exist)
         let fileNames = Set(files.map(\.lastPathComponent))
         entries = decoded.filter { fileNames.contains($0.key) }
+
+        // Resume where the user left off
+        if let last = lastIndex, files.indices.contains(last) {
+            currentIndex = last
+        }
     }
 
     private func saveJSON() {
@@ -342,7 +415,14 @@ class CullingSession: ObservableObject {
         // Only save entries that have non-default values
         let toSave = entries.filter { $0.value.rating > 0 || $0.value.isFavorite || $0.value.isRejected }
 
-        guard let data = try? JSONEncoder().encode(toSave) else { return }
+        // Don't create a dotfile in folders the user merely opened at the
+        // first photo without rating anything.
+        if toSave.isEmpty && currentIndex == 0 && !FileManager.default.fileExists(atPath: url.path) {
+            return
+        }
+
+        let session = SessionData(entries: toSave, lastIndex: currentIndex)
+        guard let data = try? JSONEncoder().encode(session) else { return }
         try? data.write(to: url, options: .atomic)
     }
 }

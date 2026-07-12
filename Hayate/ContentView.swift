@@ -50,6 +50,10 @@ struct ContentView: View {
     @State var showGrid = false
     @State var selectedIndices: Set<Int> = []
     @State var gridFilter: GridFilter = .all
+    /// Approximate column count of the adaptive grid, for ↑↓ row navigation.
+    @State var gridColumnCount = 5
+    /// Advance to the next photo automatically after rating/favorite/reject.
+    @AppStorage("autoAdvance") var autoAdvance = false
     @State var compareMode = false
     @State var compareIndices: [Int] = []
     @State var compareActiveSlot: Int = 0  // which photo is "active" for rating
@@ -170,6 +174,23 @@ struct ContentView: View {
                 openFolderDialog()
             }
         }
+        .onChange(of: session.directOpenRequest) { _, url in
+            guard let url = url else { return }
+            session.directOpenRequest = nil
+            openFolderAndReload(url)
+        }
+        .onDrop(of: [.fileURL], isTargeted: nil) { providers in
+            guard let provider = providers.first else { return false }
+            _ = provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
+                guard let data = item as? Data,
+                      let url = URL(dataRepresentation: data, relativeTo: nil),
+                      (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true else { return }
+                DispatchQueue.main.async {
+                    openFolderAndReload(url)
+                }
+            }
+            return true
+        }
     }
 
     // MARK: - Setup
@@ -212,9 +233,13 @@ struct ContentView: View {
         panel.message = "Select a folder containing RAW photos"
 
         guard panel.runModal() == .OK, let url = panel.url else { return }
+        openFolderAndReload(url)
+    }
 
-        // Only wipe view state if the session successfully switched folders;
-        // otherwise we'd clear the screen while still pointing at the old folder.
+    /// Shared open-folder flow used by the dialog, the recent-folders menu,
+    /// and drag & drop. Only wipes view state if the session successfully
+    /// switched folders; otherwise the screen keeps showing the old folder.
+    func openFolderAndReload(_ url: URL) {
         guard session.openFolder(url) else { return }
         resetViewState()
         loadCurrentImage()

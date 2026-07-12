@@ -7,12 +7,40 @@ struct SettingsView: View {
 
     var body: some View {
         TabView {
+            generalTab
+                .tabItem { Label("General", systemImage: "gearshape") }
             shortcutsTab
                 .tabItem { Label("Shortcuts", systemImage: "keyboard") }
             cacheTab
                 .tabItem { Label("Cache", systemImage: "internaldrive") }
         }
         .frame(width: 520, height: 560)
+    }
+
+    // MARK: - General tab
+
+    @AppStorage("autoAdvance") private var autoAdvance = false
+
+    private var generalTab: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("General")
+                .font(.title2)
+                .fontWeight(.semibold)
+                .padding(.horizontal)
+                .padding(.top)
+
+            Form {
+                Section {
+                    Toggle("Auto-advance after rating", isOn: $autoAdvance)
+                    Text("Jump to the next photo after rating (1–5, 0), favoriting (P), or rejecting (X) in the single-photo view.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+            .formStyle(.grouped)
+
+            Spacer()
+        }
     }
 
     // MARK: - Cache tab
