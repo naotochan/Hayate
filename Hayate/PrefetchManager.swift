@@ -63,22 +63,8 @@ actor PrefetchManager {
 
     // MARK: - Memory cache
 
-    /// Get a cached texture for the given URL (memory only). Returns nil if not cached.
-    func cachedTexture(for url: URL) -> SendableTexture? {
-        if let entry = cache[url] {
-            touchAccess(url)
-            return SendableTexture(texture: entry.texture)
-        }
-        return nil
-    }
-
-    /// Whether the cache contains a RAW-decoded texture (not just JPEG) for this URL.
-    func hasRAWTexture(for url: URL) -> Bool {
-        cache[url]?.isRAW == true
-    }
-
     /// Store a texture in the memory cache, evicting LRU entries if necessary.
-    func store(texture: MTLTexture, for url: URL, isRAW: Bool) {
+    private func store(texture: MTLTexture, for url: URL, isRAW: Bool) {
         if let existing = cache[url], existing.isRAW && !isRAW {
             return
         }
@@ -88,19 +74,8 @@ actor PrefetchManager {
         evictIfNeeded()
     }
 
-    // MARK: - Disk cache integration
-
-    /// Try loading a preview from disk cache, converting to texture and storing in memory.
-    func textureFromDiskCache(for url: URL) async -> SendableTexture? {
-        guard let diskCache = diskCache else { return nil }
-        guard let cgImage = await diskCache.loadPreview(for: url) else { return nil }
-        guard let sendable = await decoder.cgImageToTexture(cgImage) else { return nil }
-        store(texture: sendable.texture, for: url, isRAW: true)
-        return sendable
-    }
-
     /// Store a texture in memory and persist to disk cache as HEIF.
-    func storeAndPersist(texture: MTLTexture, cgImage: CGImage, for url: URL) {
+    private func storeAndPersist(texture: MTLTexture, cgImage: CGImage, for url: URL) {
         store(texture: texture, for: url, isRAW: true)
         if let diskCache = diskCache {
             let urlCopy = url
@@ -108,6 +83,55 @@ actor PrefetchManager {
                 await diskCache.store(cgImage: cgImage, for: urlCopy)
             }
         }
+    }
+
+    // MARK: - Unified load pipeline
+
+    /// Load a texture for `url` through the full fallback chain:
+    /// memory cache → disk cache → embedded JPEG → full RAW decode.
+    /// Each stage's result is stored in the memory cache; RAW decodes are also
+    /// persisted to the disk cache. `onPartial` fires with the embedded-JPEG
+    /// texture so callers can display it while the RAW decode finishes.
+    /// Returns nil if every stage fails or the surrounding task is cancelled.
+    func loadTexture(
+        for url: URL,
+        displaySize: CGSize,
+        onPartial: (@MainActor @Sendable (SendableTexture) -> Void)? = nil
+    ) async -> SendableTexture? {
+        // L1: memory cache (instant). A JPEG-only entry is shown immediately
+        // but still falls through to the RAW decode for the full-quality upgrade.
+        if let entry = cache[url] {
+            touchAccess(url)
+            let sendable = SendableTexture(texture: entry.texture)
+            if entry.isRAW { return sendable }
+            if let onPartial { await onPartial(sendable) }
+        } else {
+            // L2: disk cache (~20-50ms)
+            if let diskCache = diskCache,
+               let cgImage = await diskCache.loadPreview(for: url),
+               let sendable = await decoder.cgImageToTexture(cgImage) {
+                store(texture: sendable.texture, for: url, isRAW: true)
+                return sendable
+            }
+            guard !Task.isCancelled else { return nil }
+
+            // L3a: embedded JPEG for instant feedback
+            if let jpeg = await decoder.extractJPEG(url: url),
+               let sendable = await decoder.cgImageToTexture(jpeg) {
+                guard !Task.isCancelled else { return nil }
+                store(texture: sendable.texture, for: url, isRAW: false)
+                if let onPartial { await onPartial(sendable) }
+            }
+        }
+
+        guard !Task.isCancelled else { return nil }
+
+        // L3b: full RAW decode, persisted to the disk cache
+        guard let cgImage = await decoder.decodeRAWToCGImage(url: url, displaySize: displaySize),
+              let sendable = await decoder.cgImageToTexture(cgImage) else { return nil }
+        guard !Task.isCancelled else { return nil }
+        storeAndPersist(texture: sendable.texture, cgImage: cgImage, for: url)
+        return sendable
     }
 
     // MARK: - Prefetch
@@ -137,41 +161,14 @@ actor PrefetchManager {
         }
 
         for url in targetURLs {
-            if cache[url] != nil || activeTasks[url] != nil {
+            if cache[url]?.isRAW == true || activeTasks[url] != nil {
                 continue
             }
 
-            let decoder = self.decoder
-            let diskCache = self.diskCache
             let size = displaySize
 
             activeTasks[url] = Task {
-                if let diskCache = diskCache,
-                   let cgImage = await diskCache.loadPreview(for: url),
-                   let sendable = await decoder.cgImageToTexture(cgImage) {
-                    await self.store(texture: sendable.texture, for: url, isRAW: true)
-                    await self.removeActiveTask(for: url)
-                    return
-                }
-
-                if let jpeg = await decoder.extractJPEG(url: url),
-                   let sendable = await decoder.cgImageToTexture(jpeg) {
-                    await self.store(texture: sendable.texture, for: url, isRAW: false)
-                }
-
-                if !Task.isCancelled {
-                    if let cgImage = await decoder.decodeRAWToCGImage(url: url, displaySize: size) {
-                        if let sendable = await decoder.cgImageToTexture(cgImage) {
-                            await self.store(texture: sendable.texture, for: url, isRAW: true)
-                        }
-                        if let diskCache = diskCache {
-                            Task.detached(priority: .utility) {
-                                await diskCache.store(cgImage: cgImage, for: url)
-                            }
-                        }
-                    }
-                }
-
+                _ = await self.loadTexture(for: url, displaySize: size)
                 await self.removeActiveTask(for: url)
             }
         }

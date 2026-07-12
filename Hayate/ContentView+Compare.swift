@@ -242,33 +242,27 @@ extension ContentView {
         }
     }
 
-    /// Shared load path: memory cache → JPEG (instant) → full RAW. Focus peaking
-    /// skips the cache/JPEG fast paths and decodes the RAW directly.
+    /// Shared load path: the unified PrefetchManager pipeline (memory → disk →
+    /// JPEG → RAW). Focus peaking skips the cache fast paths and decodes the
+    /// RAW directly.
     private func loadCompareTextureContent(for fileIndex: Int) async {
         guard let decoder = decoder else { return }
         let url = session.files[fileIndex]
-        let usePeaking = focusPeakingEnabled
         let displaySize = previewDisplaySize
 
-        // Try cache first (only when peaking is off)
-        if !usePeaking,
-           let prefetchManager = prefetchManager,
-           let cached = await prefetchManager.cachedTexture(for: url) {
-            compareTextures[fileIndex] = cached.texture
+        if focusPeakingEnabled {
+            if let sendable = await decoder.decodeRAW(url: url, displaySize: displaySize, focusPeaking: true) {
+                compareTextures[fileIndex] = sendable.texture
+            }
             return
         }
 
-        // JPEG first for instant feedback (skip if peaking)
-        if !usePeaking {
-            if let jpeg = await decoder.extractJPEG(url: url),
-               let sendable = await decoder.cgImageToTexture(jpeg) {
-                compareTextures[fileIndex] = sendable.texture
-            }
+        guard let prefetchManager = prefetchManager else { return }
+        let result = await prefetchManager.loadTexture(for: url, displaySize: displaySize) { partial in
+            compareTextures[fileIndex] = partial.texture
         }
-
-        // Full RAW (with or without focus peaking)
-        if let sendable = await decoder.decodeRAW(url: url, displaySize: displaySize, focusPeaking: usePeaking) {
-            compareTextures[fileIndex] = sendable.texture
+        if let result = result {
+            compareTextures[fileIndex] = result.texture
         }
     }
 }
