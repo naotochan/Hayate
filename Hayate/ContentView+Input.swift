@@ -155,6 +155,7 @@ extension ContentView {
             } else {
                 zoomScale = 2.0
                 panOffset = .zero
+                loadFullResolutionIfNeeded()
             }
             return true
 
@@ -220,12 +221,14 @@ extension ContentView {
             let delta = event.magnification
             zoomScale = max(1.0, min(zoomScale * (1.0 + delta), 10.0))
             if zoomScale <= 1.01 { panOffset = .zero }
+            loadFullResolutionIfNeeded()
         } else if event.type == .scrollWheel {
             if event.modifierFlags.contains(.option) || zoomScale <= 1.01 {
                 // Option+scroll or not zoomed: zoom in/out
                 let delta = event.scrollingDeltaY * 0.01
                 zoomScale = max(1.0, min(zoomScale * (1.0 + delta), 10.0))
                 if zoomScale <= 1.01 { panOffset = .zero }
+                loadFullResolutionIfNeeded()
             } else {
                 // Zoomed in: pan
                 let sensitivity: CGFloat = 0.005 / zoomScale

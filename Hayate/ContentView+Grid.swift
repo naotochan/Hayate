@@ -110,33 +110,8 @@ extension ContentView {
                         }
                         Spacer()
                         // Badges (top right)
-                        if let entry = entry, entry.isFavorite || entry.isRejected || entry.rating > 0 {
-                            HStack(spacing: 3) {
-                                if entry.isFavorite {
-                                    Image(systemName: "heart.fill")
-                                        .font(.system(size: 10))
-                                        .foregroundColor(.red)
-                                }
-                                if entry.isRejected {
-                                    Image(systemName: "xmark.circle.fill")
-                                        .font(.system(size: 10))
-                                        .foregroundColor(.orange)
-                                }
-                                if entry.rating > 0 {
-                                    HStack(spacing: 0) {
-                                        ForEach(1...entry.rating, id: \.self) { _ in
-                                            Image(systemName: "star.fill")
-                                                .font(.system(size: 7))
-                                                .foregroundColor(.yellow)
-                                        }
-                                    }
-                                }
-                            }
+                        PhotoBadgeView(entry: entry)
                             .padding(4)
-                            .background(Color.black.opacity(0.6))
-                            .cornerRadius(4)
-                            .padding(4)
-                        }
                     }
                     Spacer()
                 }

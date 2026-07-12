@@ -27,9 +27,23 @@ struct ContentView: View {
     @State var currentDecodeTask: Task<Void, Never>?
     @State var focusPeakingEnabled = false
     @State var thumbnails: [URL: NSImage] = [:]
+    /// Insertion order of `thumbnails` keys, oldest first, for capped eviction.
+    @State var thumbnailOrder: [URL] = []
     @State var thumbnailLoadTask: Task<Void, Never>?
+
+    /// Cap on the in-memory thumbnail dictionary. ~0.5 MB per 400px thumbnail,
+    /// so 600 entries ≈ 300 MB worst case. Evicted thumbnails reload on demand
+    /// via the placeholder's onAppear.
+    static let thumbnailCacheLimit = 600
     @State var zoomScale: CGFloat = 1.0
     @State var panOffset: CGPoint = .zero
+    /// In-flight full-resolution decode for zoom. `fullResURL` marks the file
+    /// being decoded (retrigger guard); `fullResDisplayedURL` marks the file
+    /// whose full-res texture actually sits in `currentTexture` — only then
+    /// must the preview pipeline avoid downgrading it.
+    @State var fullResTask: Task<Void, Never>?
+    @State var fullResURL: URL?
+    @State var fullResDisplayedURL: URL?
     @State var scrollMonitor: Any?
     @State var dragMonitor: Any?
     @State var lastDragPoint: NSPoint?
@@ -224,12 +238,14 @@ struct ContentView: View {
         // Cancel in-flight work
         currentDecodeTask?.cancel()
         currentDecodeTask = nil
+        cancelFullResolutionLoad()
         thumbnailLoadTask?.cancel()
         thumbnailLoadTask = nil
 
         // Textures / decode results
         currentTexture = nil
         thumbnails.removeAll()
+        thumbnailOrder.removeAll()
         decodeTimeMs = 0
         isLoading = false
 
@@ -267,6 +283,7 @@ struct ContentView: View {
     func loadCurrentImage() {
         // Cancel any in-flight decode. Only the latest navigation matters.
         currentDecodeTask?.cancel()
+        cancelFullResolutionLoad()
         // Reset zoom for new photo
         resetZoom()
 
@@ -283,7 +300,7 @@ struct ContentView: View {
         if let prefetchManager = prefetchManager {
             let currentIdx = session.currentIndex
             let allFiles = session.files
-            let prefetchSize = CGSize(width: 3840, height: 2160)
+            let prefetchSize = previewDisplaySize
             Task {
                 await prefetchManager.prefetch(
                     currentIndex: currentIdx,
@@ -306,6 +323,9 @@ struct ContentView: View {
                     currentTexture = sendable.texture
                     decodeTimeMs = (CFAbsoluteTimeGetCurrent() - start) * 1000
                     isLoading = false
+                } else if !Task.isCancelled {
+                    // Decode failed — don't leave the spinner on.
+                    isLoading = false
                 }
                 return
             }
@@ -314,16 +334,60 @@ struct ContentView: View {
             guard let prefetchManager = prefetchManager else { return }
             let result = await prefetchManager.loadTexture(for: file, displaySize: displaySize) { partial in
                 // Defensive: don't overwrite a newer photo if this task was
-                // cancelled while hopping to the main actor.
-                guard !Task.isCancelled else { return }
+                // cancelled while hopping to the main actor, and don't
+                // downgrade a full-resolution texture the user zoomed into.
+                guard !Task.isCancelled, fullResDisplayedURL != file else { return }
                 currentTexture = partial.texture
                 decodeTimeMs = (CFAbsoluteTimeGetCurrent() - start) * 1000
             }
-            guard !Task.isCancelled, let result = result else { return }
-            currentTexture = result.texture
+            guard !Task.isCancelled else { return }
+            guard let result = result else {
+                // Every stage failed (corrupt file etc.) — don't leave the
+                // spinner on forever. Cancelled tasks return above; a newer
+                // load owns the UI state in that case.
+                isLoading = false
+                return
+            }
+            if fullResDisplayedURL != file {
+                currentTexture = result.texture
+            }
             decodeTimeMs = (CFAbsoluteTimeGetCurrent() - start) * 1000
             isLoading = false
         }
+    }
+
+    // MARK: - Full-resolution zoom
+
+    /// Decode the current photo at full resolution when zoomed in, swapping it
+    /// into `currentTexture` when ready. No-op if already loaded or loading for
+    /// this file. The texture is intentionally not cached — full-res textures
+    /// are large (~200 MB for 45 MP) and only one is alive at a time.
+    func loadFullResolutionIfNeeded() {
+        guard zoomScale > 1.01, !focusPeakingEnabled, !showGrid, !compareMode,
+              let file = session.currentFile,
+              let decoder = decoder,
+              fullResURL != file else { return }
+        fullResTask?.cancel()
+        fullResURL = file
+        fullResTask = Task {
+            guard let sendable = await decoder.decodeRAWFullResolution(url: file) else {
+                if !Task.isCancelled { fullResURL = nil }  // allow retry on next zoom event
+                return
+            }
+            guard !Task.isCancelled, session.currentFile == file, zoomScale > 1.01 else {
+                fullResURL = nil
+                return
+            }
+            fullResDisplayedURL = file
+            currentTexture = sendable.texture
+        }
+    }
+
+    private func cancelFullResolutionLoad() {
+        fullResTask?.cancel()
+        fullResTask = nil
+        fullResURL = nil
+        fullResDisplayedURL = nil
     }
 
     func loadThumbnail(for url: URL) {
@@ -332,17 +396,27 @@ struct ContentView: View {
         Task.detached(priority: .utility) {
             if let cache = cache, let cgImage = await cache.loadThumbnail(for: url) {
                 let nsImage = NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
-                await MainActor.run { thumbnails[url] = nsImage }
+                await MainActor.run { storeThumbnail(nsImage, for: url) }
                 return
             }
 
             guard let cgImage = await decoder.extractThumbnail(url: url) else { return }
             let nsImage = NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
-            await MainActor.run { thumbnails[url] = nsImage }
+            await MainActor.run { storeThumbnail(nsImage, for: url) }
 
             if let cache = cache {
                 await cache.storeThumbnail(cgImage: cgImage, for: url)
             }
+        }
+    }
+
+    /// Insert into the thumbnail dictionary, evicting the oldest entries once
+    /// the cap is exceeded so large folders can't grow it unbounded.
+    private func storeThumbnail(_ image: NSImage, for url: URL) {
+        if thumbnails[url] == nil { thumbnailOrder.append(url) }
+        thumbnails[url] = image
+        while thumbnailOrder.count > Self.thumbnailCacheLimit {
+            thumbnails[thumbnailOrder.removeFirst()] = nil
         }
     }
 }

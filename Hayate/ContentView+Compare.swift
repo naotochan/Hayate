@@ -39,31 +39,8 @@ extension ContentView {
                                     Spacer()
 
                                     // Status badges (top right)
-                                    HStack(spacing: 4) {
-                                        if entry?.isFavorite == true {
-                                            Image(systemName: "heart.fill")
-                                                .foregroundColor(.red)
-                                                .font(.system(size: 14))
-                                        }
-                                        if entry?.isRejected == true {
-                                            Image(systemName: "xmark.circle.fill")
-                                                .foregroundColor(.orange)
-                                                .font(.system(size: 14))
-                                        }
-                                        if (entry?.rating ?? 0) > 0 {
-                                            HStack(spacing: 1) {
-                                                ForEach(1...(entry?.rating ?? 1), id: \.self) { _ in
-                                                    Image(systemName: "star.fill")
-                                                        .font(.system(size: 9))
-                                                        .foregroundColor(.yellow)
-                                                }
-                                            }
-                                        }
-                                    }
-                                    .padding(6)
-                                    .background(Color.black.opacity(0.6))
-                                    .cornerRadius(4)
-                                    .padding(8)
+                                    PhotoBadgeView(entry: entry, iconSize: 14, starSize: 9, spacing: 4, padding: 6)
+                                        .padding(8)
                                 }
                                 Spacer()
 
