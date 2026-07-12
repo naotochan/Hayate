@@ -3,6 +3,13 @@ import SwiftUI
 /// Grid view: thumbnail overview with filtering and multi-selection.
 extension ContentView {
 
+    /// Layout constants shared by the LazyVGrid definition and the column
+    /// count estimate — change together or ↑↓ row navigation drifts.
+    static let gridItemMinWidth: CGFloat = 160
+    static let gridItemMaxWidth: CGFloat = 220
+    static let gridSpacing: CGFloat = 6
+    static let gridPadding: CGFloat = 8
+
     var filteredFiles: [(index: Int, url: URL)] {
         session.files.enumerated().compactMap { index, url in
             let entry = session.entries[url.lastPathComponent]
@@ -59,13 +66,16 @@ extension ContentView {
             GeometryReader { geo in
                 ScrollViewReader { proxy in
                     ScrollView {
-                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 160, maximum: 220), spacing: 6)], spacing: 6) {
+                        LazyVGrid(
+                            columns: [GridItem(.adaptive(minimum: Self.gridItemMinWidth, maximum: Self.gridItemMaxWidth), spacing: Self.gridSpacing)],
+                            spacing: Self.gridSpacing
+                        ) {
                             ForEach(filteredFiles, id: \.index) { item in
                                 gridCell(for: item.url, index: item.index)
                                     .id(item.index)
                             }
                         }
-                        .padding(8)
+                        .padding(Self.gridPadding)
                     }
                     .onAppear {
                         updateGridColumnCount(width: geo.size.width)
@@ -85,16 +95,26 @@ extension ContentView {
     /// Estimate the adaptive grid's column count from the available width:
     /// floor((width − h-padding + spacing) / (min item width + spacing)).
     private func updateGridColumnCount(width: CGFloat) {
-        gridColumnCount = max(1, Int((width - 16 + 6) / (160 + 6)))
+        let usable = width - Self.gridPadding * 2 + Self.gridSpacing
+        gridColumnCount = max(1, Int(usable / (Self.gridItemMinWidth + Self.gridSpacing)))
     }
 
     /// Move the current photo by `delta` positions within the *filtered* grid
     /// order (so navigation doesn't jump to photos hidden by the filter).
-    func moveGridSelection(by delta: Int) {
+    /// With `clamping` off, an out-of-range move is a no-op instead of jumping
+    /// to the first/last photo — used by ↑↓ row navigation at the edges.
+    func moveGridSelection(by delta: Int, clamping: Bool = true) {
         let items = filteredFiles
         guard !items.isEmpty else { return }
         if let pos = items.firstIndex(where: { $0.index == session.currentIndex }) {
-            let newPos = max(0, min(items.count - 1, pos + delta))
+            let target = pos + delta
+            let newPos: Int
+            if clamping {
+                newPos = max(0, min(items.count - 1, target))
+            } else {
+                guard items.indices.contains(target) else { return }
+                newPos = target
+            }
             session.currentIndex = items[newPos].index
         } else {
             // Current photo is filtered out — snap to the first visible one.

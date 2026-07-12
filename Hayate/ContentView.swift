@@ -240,7 +240,11 @@ struct ContentView: View {
     /// and drag & drop. Only wipes view state if the session successfully
     /// switched folders; otherwise the screen keeps showing the old folder.
     func openFolderAndReload(_ url: URL) {
-        guard session.openFolder(url) else { return }
+        guard session.openFolder(url) else {
+            // Deleted or unmounted folder from the recents menu — drop it.
+            session.removeFromRecents(url)
+            return
+        }
         resetViewState()
         loadCurrentImage()
         startBackgroundBuild()

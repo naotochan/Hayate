@@ -31,13 +31,23 @@ class CullingSession: ObservableObject {
     /// Undo stack (session-only, lost on quit).
     private var undoStack: [UndoAction] = []
 
-    init() {
-        if let paths = UserDefaults.standard.stringArray(forKey: Self.recentFoldersKey) {
+    /// Entries loaded from JSON whose files aren't in the current scan
+    /// (moved away, partial mount). Preserved verbatim on save.
+    private var orphanedEntries: [String: PhotoEntry] = [:]
+
+    private let defaults: UserDefaults
+    /// nonisolated(unsafe): written once in init, read once in deinit —
+    /// never accessed concurrently.
+    private nonisolated(unsafe) var terminateObserver: (any NSObjectProtocol)?
+
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+        if let paths = defaults.stringArray(forKey: Self.recentFoldersKey) {
             recentFolders = paths.map { URL(fileURLWithPath: $0, isDirectory: true) }
         }
         // Persist the browsing position (lastIndex) on quit — ratings are
         // saved on every change, but plain navigation isn't.
-        NotificationCenter.default.addObserver(
+        terminateObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.willTerminateNotification,
             object: nil,
             queue: .main
@@ -45,6 +55,12 @@ class CullingSession: ObservableObject {
             MainActor.assumeIsolated {
                 self?.saveJSON()
             }
+        }
+    }
+
+    deinit {
+        if let terminateObserver {
+            NotificationCenter.default.removeObserver(terminateObserver)
         }
     }
 
@@ -105,6 +121,14 @@ class CullingSession: ObservableObject {
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
         guard FileManager.default.isReadableFile(atPath: url.path) else { return false }
 
+        // Scan before mutating any state so a failed open leaves the current
+        // session (and its JSON) untouched.
+        guard let contents = try? FileManager.default.contentsOfDirectory(
+            at: url,
+            includingPropertiesForKeys: [.contentTypeKey],
+            options: [.skipsHiddenFiles]
+        ) else { return false }
+
         // Persist the previous folder's position before switching away.
         if folderURL != nil {
             saveJSON()
@@ -113,19 +137,6 @@ class CullingSession: ObservableObject {
         folderURL = url
         undoStack.removeAll()
         addToRecents(url)
-
-        // Scan for RAW files
-        let fm = FileManager.default
-        guard let contents = try? fm.contentsOfDirectory(
-            at: url,
-            includingPropertiesForKeys: [.contentTypeKey],
-            options: [.skipsHiddenFiles]
-        ) else {
-            files = []
-            entries = [:]
-            currentIndex = 0
-            return true
-        }
 
         files = contents.filter { fileURL in
             guard let resourceValues = try? fileURL.resourceValues(forKeys: [.contentTypeKey]),
@@ -149,7 +160,14 @@ class CullingSession: ObservableObject {
             paths = Array(paths.prefix(Self.maxRecentFolders))
         }
         recentFolders = paths.map { URL(fileURLWithPath: $0, isDirectory: true) }
-        UserDefaults.standard.set(paths, forKey: Self.recentFoldersKey)
+        defaults.set(paths, forKey: Self.recentFoldersKey)
+    }
+
+    /// Drop a folder from the recents list (e.g. it no longer exists).
+    func removeFromRecents(_ url: URL) {
+        let paths = recentFolders.map(\.path).filter { $0 != url.path }
+        recentFolders = paths.map { URL(fileURLWithPath: $0, isDirectory: true) }
+        defaults.set(paths, forKey: Self.recentFoldersKey)
     }
 
     // MARK: - Navigation
@@ -386,6 +404,7 @@ class CullingSession: ObservableObject {
         guard let url = jsonURL,
               let data = try? Data(contentsOf: url) else {
             entries = [:]
+            orphanedEntries = [:]
             return
         }
 
@@ -399,9 +418,13 @@ class CullingSession: ObservableObject {
             decoded = (try? JSONDecoder().decode([String: PhotoEntry].self, from: data)) ?? [:]
         }
 
-        // Remove orphan entries (files that no longer exist)
+        // Split off entries whose files aren't visible right now (moved away,
+        // partially mounted card, …). They are kept out of the UI but merged
+        // back on save — otherwise merely opening and closing the folder in
+        // that state would permanently erase their ratings.
         let fileNames = Set(files.map(\.lastPathComponent))
         entries = decoded.filter { fileNames.contains($0.key) }
+        orphanedEntries = decoded.filter { !fileNames.contains($0.key) }
 
         // Resume where the user left off
         if let last = lastIndex, files.indices.contains(last) {
@@ -415,13 +438,16 @@ class CullingSession: ObservableObject {
         // Only save entries that have non-default values
         let toSave = entries.filter { $0.value.rating > 0 || $0.value.isFavorite || $0.value.isRejected }
 
-        // Don't create a dotfile in folders the user merely opened at the
-        // first photo without rating anything.
-        if toSave.isEmpty && currentIndex == 0 && !FileManager.default.fileExists(atPath: url.path) {
+        // Merge back entries for files that weren't visible during this session.
+        let all = toSave.merging(orphanedEntries) { current, _ in current }
+
+        // Don't create a dotfile (position-only) in folders where the user
+        // never rated anything — browsing alone shouldn't litter NAS/SD media.
+        if all.isEmpty && !FileManager.default.fileExists(atPath: url.path) {
             return
         }
 
-        let session = SessionData(entries: toSave, lastIndex: currentIndex)
+        let session = SessionData(entries: all, lastIndex: currentIndex)
         guard let data = try? JSONEncoder().encode(session) else { return }
         try? data.write(to: url, options: .atomic)
     }

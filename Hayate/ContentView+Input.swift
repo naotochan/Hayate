@@ -55,14 +55,16 @@ extension ContentView {
             return false
         }
 
-        // Arrow keys in the grid — move within the filtered order; ↑↓ jump by
-        // one (approximate) row.
-        if showGrid, [123, 124, 125, 126].contains(event.keyCode) {
+        // Unmodified arrow keys in the grid — move within the filtered order;
+        // ↑↓ jump by one (approximate) row, no-op at the edges. Modified
+        // arrows fall through to the keybinding store.
+        if showGrid, [123, 124, 125, 126].contains(event.keyCode),
+           event.modifierFlags.intersection(Shortcut.relevantModifiers).isEmpty {
             switch event.keyCode {
             case 123: moveGridSelection(by: -1)
             case 124: moveGridSelection(by: 1)
-            case 125: moveGridSelection(by: gridColumnCount)
-            default:  moveGridSelection(by: -gridColumnCount)
+            case 125: moveGridSelection(by: gridColumnCount, clamping: false)
+            default:  moveGridSelection(by: -gridColumnCount, clamping: false)
             }
             return true
         }

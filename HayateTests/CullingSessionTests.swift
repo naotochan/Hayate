@@ -6,9 +6,16 @@ final class CullingSessionTests: XCTestCase {
 
     private var session: CullingSession!
     private var tempDir: URL!
+    private var testDefaults: UserDefaults!
+
+    /// Isolated defaults so tests don't pollute the real recent-folders list.
+    private func makeSession() -> CullingSession {
+        CullingSession(defaults: testDefaults)
+    }
 
     override func setUp() async throws {
-        session = CullingSession()
+        testDefaults = UserDefaults(suiteName: "HayateTests-\(UUID().uuidString)")
+        session = makeSession()
         // Create a temp directory with fake files to simulate a folder
         tempDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("PicSortTests-\(UUID().uuidString)")
@@ -398,7 +405,7 @@ final class CullingSessionTests: XCTestCase {
 
         // Open in a fresh session: re-opening via `session` would first persist
         // its current (empty) state over the legacy file we just wrote.
-        let fresh = CullingSession()
+        let fresh = makeSession()
         fresh.openFolder(tempDir)
         XCTAssertEqual(fresh.entries["IMG_0002.CR3"]?.rating, 5)
         XCTAssertEqual(fresh.currentIndex, 0, "Legacy format has no lastIndex")
@@ -411,7 +418,7 @@ final class CullingSessionTests: XCTestCase {
         session.setRating(2)  // triggers save with lastIndex = 3
 
         // Re-open the same folder in a fresh session
-        let fresh = CullingSession()
+        let fresh = makeSession()
         fresh.openFolder(tempDir)
         XCTAssertEqual(fresh.currentIndex, 3, "Should resume at the saved position")
     }
