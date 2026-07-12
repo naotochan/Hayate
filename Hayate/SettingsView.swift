@@ -40,7 +40,7 @@ struct SettingsView: View {
 
                 Section {
                     Toggle("Write XMP sidecar files", isOn: $writeXMPSidecars)
-                    Text("Save ratings next to each RAW as a .xmp file that Lightroom and Capture One can read. Rejected photos get rating −1, favorites a red label. Applies to new rating changes.")
+                    Text("Save ratings next to each RAW as a .xmp file that Lightroom and Capture One can read. Rejected photos get rating −1 (Bridge convention), favorites a red label. Sidecars created by other apps are never modified.")
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }

@@ -404,9 +404,23 @@ class CullingSession: ObservableObject {
 
     // MARK: - XMP Sidecar
 
+    /// Serial queue for sidecar file I/O: keeps it off the main actor (batch
+    /// operations touch one file per photo) while preserving write order for
+    /// rapid changes to the same photo.
+    private nonisolated static let xmpQueue = DispatchQueue(label: "com.hayate.xmp", qos: .utility)
+
+    /// Marker identifying sidecars Hayate wrote. Files without it (Lightroom /
+    /// Capture One sidecars carrying develop settings) are never modified.
+    private nonisolated static let xmpToolkitTag = "x:xmptk=\"Hayate\""
+
+    /// Test hook: block until all queued sidecar writes/trashes have finished.
+    nonisolated static func flushXMPQueue() {
+        xmpQueue.sync { }
+    }
+
     /// Write (or refresh) a `<basename>.xmp` sidecar next to the RAW so
     /// Lightroom / Capture One can pick up ratings. Opt-in via Settings.
-    /// Convention: rejected → xmp:Rating="-1", favorite → xmp:Label="Red".
+    /// Convention: rejected → xmp:Rating="-1" (Bridge), favorite → xmp:Label="Red".
     private func writeXMPSidecar(forFileNamed fileName: String) {
         guard defaults.bool(forKey: "writeXMPSidecars"), let folderURL = folderURL else { return }
 
@@ -417,12 +431,7 @@ class CullingSession: ObservableObject {
         let rating = entry?.rating ?? 0
         let isFavorite = entry?.isFavorite ?? false
         let isRejected = entry?.isRejected ?? false
-
-        // Nothing to record and no stale sidecar to reset — skip.
         let hasState = rating > 0 || isFavorite || isRejected
-        if !hasState && !FileManager.default.fileExists(atPath: xmpURL.path) {
-            return
-        }
 
         var attributes = "xmp:Rating=\"\(isRejected ? -1 : rating)\""
         if isFavorite {
@@ -431,7 +440,7 @@ class CullingSession: ObservableObject {
 
         let xmp = """
         <?xpacket begin="\u{FEFF}" id="W5M0MpCehiHzreSzNTczkc9d"?>
-        <x:xmpmeta xmlns:x="adobe:ns:meta/" x:xmptk="Hayate">
+        <x:xmpmeta xmlns:x="adobe:ns:meta/" \(Self.xmpToolkitTag)>
          <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
           <rdf:Description rdf:about=""
            xmlns:xmp="http://ns.adobe.com/xap/1.0/"
@@ -440,13 +449,29 @@ class CullingSession: ObservableObject {
         </x:xmpmeta>
         <?xpacket end="w"?>
         """
-        try? Data(xmp.utf8).write(to: xmpURL, options: .atomic)
+
+        Self.xmpQueue.async {
+            let fm = FileManager.default
+            if fm.fileExists(atPath: xmpURL.path) {
+                // Never overwrite a sidecar another app created — Lightroom
+                // and Capture One keep develop settings in theirs.
+                guard let existing = try? String(contentsOf: xmpURL, encoding: .utf8),
+                      existing.contains(Self.xmpToolkitTag) else { return }
+            } else if !hasState {
+                // Nothing to record and no stale sidecar to reset.
+                return
+            }
+            try? Data(xmp.utf8).write(to: xmpURL, options: .atomic)
+        }
     }
 
-    /// Move a photo's sidecar to the Trash along with the photo itself.
+    /// Move a photo's Hayate-written sidecar to the Trash along with the
+    /// photo itself. Foreign sidecars are left in place.
     private func trashXMPSidecar(for url: URL) {
         let xmpURL = url.deletingPathExtension().appendingPathExtension("xmp")
-        if FileManager.default.fileExists(atPath: xmpURL.path) {
+        Self.xmpQueue.async {
+            guard let existing = try? String(contentsOf: xmpURL, encoding: .utf8),
+                  existing.contains(Self.xmpToolkitTag) else { return }
             try? FileManager.default.trashItem(at: xmpURL, resultingItemURL: nil)
         }
     }

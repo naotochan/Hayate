@@ -225,10 +225,14 @@ final class KeybindingStore: ObservableObject {
         let defaults = UserDefaults.standard
         if let data = defaults.data(forKey: Self.storageKey),
            let decoded = try? JSONDecoder().decode([ActionID: Shortcut].self, from: data) {
-            // Merge with defaults so newly introduced actions pick up a
-            // shortcut without wiping the user's custom bindings.
-            var merged = Self.defaults
-            for (action, shortcut) in decoded {
+            // Saved bindings win. Defaults only fill actions introduced after
+            // the user's last save — and never with a shortcut the user has
+            // assigned elsewhere, otherwise two actions would share one key
+            // and fire nondeterministically.
+            var merged = decoded
+            let taken = Set(decoded.values)
+            for (action, shortcut) in Self.defaults
+            where merged[action] == nil && !taken.contains(shortcut) {
                 merged[action] = shortcut
             }
             bindings = merged

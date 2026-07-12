@@ -430,6 +430,7 @@ final class CullingSessionTests: XCTestCase {
         loadTestFiles(count: 2)
 
         session.setRating(4)
+        CullingSession.flushXMPQueue()
 
         let xmpURL = tempDir.appendingPathComponent("IMG_0001.xmp")
         XCTAssertTrue(FileManager.default.fileExists(atPath: xmpURL.path))
@@ -439,19 +440,43 @@ final class CullingSessionTests: XCTestCase {
         // Rejected → -1, favorite → Red label
         session.navigateForward()
         session.toggleRejected()
+        CullingSession.flushXMPQueue()
         let xmp2URL = tempDir.appendingPathComponent("IMG_0002.xmp")
         var content2 = (try? String(contentsOf: xmp2URL, encoding: .utf8)) ?? ""
         XCTAssertTrue(content2.contains("xmp:Rating=\"-1\""))
 
         session.toggleFavorite()  // clears rejected, sets favorite
+        CullingSession.flushXMPQueue()
         content2 = (try? String(contentsOf: xmp2URL, encoding: .utf8)) ?? ""
         XCTAssertTrue(content2.contains("xmp:Label=\"Red\""))
         XCTAssertTrue(content2.contains("xmp:Rating=\"0\""))
     }
 
+    func testXMPSidecarLeavesForeignFilesAlone() {
+        testDefaults.set(true, forKey: "writeXMPSidecars")
+        loadTestFiles(count: 1)
+
+        // Simulate a Lightroom sidecar (no Hayate toolkit tag).
+        let xmpURL = tempDir.appendingPathComponent("IMG_0001.xmp")
+        let foreign = "<x:xmpmeta xmlns:x=\"adobe:ns:meta/\" x:xmptk=\"Adobe XMP Core\">develop settings</x:xmpmeta>"
+        try? Data(foreign.utf8).write(to: xmpURL)
+
+        session.setRating(4)
+        CullingSession.flushXMPQueue()
+
+        let content = (try? String(contentsOf: xmpURL, encoding: .utf8)) ?? ""
+        XCTAssertEqual(content, foreign, "Foreign sidecars must never be modified")
+
+        // And deletion must not trash it either.
+        _ = session.deleteCurrentFile()
+        CullingSession.flushXMPQueue()
+        XCTAssertTrue(FileManager.default.fileExists(atPath: xmpURL.path))
+    }
+
     func testXMPSidecarNotWrittenWhenDisabled() {
         loadTestFiles(count: 1)
         session.setRating(5)
+        CullingSession.flushXMPQueue()
         let xmpURL = tempDir.appendingPathComponent("IMG_0001.xmp")
         XCTAssertFalse(FileManager.default.fileExists(atPath: xmpURL.path))
     }
@@ -460,11 +485,13 @@ final class CullingSessionTests: XCTestCase {
         testDefaults.set(true, forKey: "writeXMPSidecars")
         loadTestFiles(count: 1)
         session.setRating(3)
+        CullingSession.flushXMPQueue()
 
         let xmpURL = tempDir.appendingPathComponent("IMG_0001.xmp")
         XCTAssertTrue(FileManager.default.fileExists(atPath: xmpURL.path))
 
         XCTAssertTrue(session.deleteCurrentFile())
+        CullingSession.flushXMPQueue()
         XCTAssertFalse(FileManager.default.fileExists(atPath: xmpURL.path), "Sidecar should be trashed with the photo")
     }
 

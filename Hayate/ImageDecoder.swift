@@ -217,7 +217,9 @@ final class ImageDecoder: @unchecked Sendable {
         info.camera = tiff[kCGImagePropertyTIFFModel] as? String
         info.lens = exif[kCGImagePropertyExifLensModel] as? String
         if let t = exif[kCGImagePropertyExifExposureTime] as? Double, t > 0 {
-            info.shutter = t >= 1
+            // Near-1s speeds (0.5, 0.6, 0.8 …) read better as decimals; the
+            // reciprocal form would misreport 0.6s as 1/2s.
+            info.shutter = t >= 0.4
                 ? String(format: "%gs", t)
                 : "1/\(Int((1 / t).rounded()))s"
         }
@@ -231,8 +233,29 @@ final class ImageDecoder: @unchecked Sendable {
         if let fl = exif[kCGImagePropertyExifFocalLength] as? Double {
             info.focalLength = "\(Int(fl.rounded()))mm"
         }
-        info.dateTaken = exif[kCGImagePropertyExifDateTimeOriginal] as? String
+        if let raw = exif[kCGImagePropertyExifDateTimeOriginal] as? String {
+            info.dateTaken = Self.formatEXIFDate(raw)
+        }
         return info
+    }
+
+    /// EXIF dates arrive as "2026:07:12 14:23:45" — reformat for display.
+    /// (DateFormatter is thread-safe for formatting on modern macOS.)
+    private static let exifDateParser: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy:MM:dd HH:mm:ss"
+        f.locale = Locale(identifier: "en_US_POSIX")
+        return f
+    }()
+    private static let exifDateDisplay: DateFormatter = {
+        let f = DateFormatter()
+        f.dateStyle = .medium
+        f.timeStyle = .short
+        return f
+    }()
+    private static func formatEXIFDate(_ raw: String) -> String {
+        guard let date = exifDateParser.date(from: raw) else { return raw }
+        return exifDateDisplay.string(from: date)
     }
 
     /// Apply Leica-style focus peaking: thin green lines on in-focus edges.
