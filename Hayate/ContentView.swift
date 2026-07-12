@@ -37,11 +37,13 @@ struct ContentView: View {
     static let thumbnailCacheLimit = 600
     @State var zoomScale: CGFloat = 1.0
     @State var panOffset: CGPoint = .zero
-    /// In-flight full-resolution decode for zoom, and the file it belongs to.
-    /// `fullResURL != nil` also tells the preview pipeline not to downgrade
-    /// `currentTexture` after the full-res swap.
+    /// In-flight full-resolution decode for zoom. `fullResURL` marks the file
+    /// being decoded (retrigger guard); `fullResDisplayedURL` marks the file
+    /// whose full-res texture actually sits in `currentTexture` — only then
+    /// must the preview pipeline avoid downgrading it.
     @State var fullResTask: Task<Void, Never>?
     @State var fullResURL: URL?
+    @State var fullResDisplayedURL: URL?
     @State var scrollMonitor: Any?
     @State var dragMonitor: Any?
     @State var lastDragPoint: NSPoint?
@@ -321,6 +323,9 @@ struct ContentView: View {
                     currentTexture = sendable.texture
                     decodeTimeMs = (CFAbsoluteTimeGetCurrent() - start) * 1000
                     isLoading = false
+                } else if !Task.isCancelled {
+                    // Decode failed — don't leave the spinner on.
+                    isLoading = false
                 }
                 return
             }
@@ -331,7 +336,7 @@ struct ContentView: View {
                 // Defensive: don't overwrite a newer photo if this task was
                 // cancelled while hopping to the main actor, and don't
                 // downgrade a full-resolution texture the user zoomed into.
-                guard !Task.isCancelled, fullResURL != file else { return }
+                guard !Task.isCancelled, fullResDisplayedURL != file else { return }
                 currentTexture = partial.texture
                 decodeTimeMs = (CFAbsoluteTimeGetCurrent() - start) * 1000
             }
@@ -343,7 +348,7 @@ struct ContentView: View {
                 isLoading = false
                 return
             }
-            if fullResURL != file {
+            if fullResDisplayedURL != file {
                 currentTexture = result.texture
             }
             decodeTimeMs = (CFAbsoluteTimeGetCurrent() - start) * 1000
@@ -373,6 +378,7 @@ struct ContentView: View {
                 fullResURL = nil
                 return
             }
+            fullResDisplayedURL = file
             currentTexture = sendable.texture
         }
     }
@@ -381,6 +387,7 @@ struct ContentView: View {
         fullResTask?.cancel()
         fullResTask = nil
         fullResURL = nil
+        fullResDisplayedURL = nil
     }
 
     func loadThumbnail(for url: URL) {

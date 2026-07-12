@@ -186,8 +186,11 @@ actor PrefetchManager {
             targetURLs.insert(files[index])
         }
 
+        // Keep the current photo's in-flight task alive even though it's not a
+        // prefetch target — the UI's loadTexture may be joining it right now.
+        let currentURL = files.indices.contains(currentIndex) ? files[currentIndex] : nil
         for (url, task) in activeTasks {
-            if !targetURLs.contains(url) {
+            if !targetURLs.contains(url) && url != currentURL {
                 task.cancel()
                 activeTasks[url] = nil
             }
