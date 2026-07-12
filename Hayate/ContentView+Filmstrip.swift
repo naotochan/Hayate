@@ -46,29 +46,8 @@ extension ContentView {
             }
 
             // Rating/favorite/rejected indicator
-            if let entry = entry, entry.rating > 0 || entry.isFavorite || entry.isRejected {
-                HStack(spacing: 1) {
-                    if entry.isFavorite {
-                        Image(systemName: "heart.fill")
-                            .font(.system(size: 7))
-                            .foregroundColor(.red)
-                    }
-                    if entry.isRejected {
-                        Image(systemName: "xmark")
-                            .font(.system(size: 7, weight: .bold))
-                            .foregroundColor(.orange)
-                    }
-                    if entry.rating > 0 {
-                        Text("\(entry.rating)")
-                            .font(.system(size: 8, weight: .bold, design: .monospaced))
-                            .foregroundColor(.yellow)
-                    }
-                }
+            PhotoBadgeView(entry: entry, iconSize: 7, starSize: 8, spacing: 1, padding: 2, cornerRadius: 2, compact: true)
                 .padding(2)
-                .background(Color.black.opacity(0.6))
-                .cornerRadius(2)
-                .padding(2)
-            }
         }
         .border(isCurrent ? Color.white : Color.clear, width: 2)
         .opacity(isCurrent ? 1.0 : 0.6)

@@ -66,16 +66,14 @@ struct MetalImageView: NSViewRepresentable {
         func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {}
 
         func draw(in view: MTKView) {
-            guard let texture = texture,
-                  let pipelineState = pipelineState,
-                  let commandQueue = commandQueue,
+            guard let commandQueue = commandQueue,
                   let drawable = view.currentDrawable,
-                  let descriptor = view.currentRenderPassDescriptor else {
-                guard let commandQueue = commandQueue,
-                      let drawable = view.currentDrawable,
-                      let descriptor = view.currentRenderPassDescriptor else { return }
-                let commandBuffer = commandQueue.makeCommandBuffer()!
-                let encoder = commandBuffer.makeRenderCommandEncoder(descriptor: descriptor)!
+                  let descriptor = view.currentRenderPassDescriptor,
+                  let commandBuffer = commandQueue.makeCommandBuffer(),
+                  let encoder = commandBuffer.makeRenderCommandEncoder(descriptor: descriptor) else { return }
+
+            guard let texture = texture, let pipelineState = pipelineState else {
+                // No texture yet: just clear to the background color.
                 encoder.endEncoding()
                 commandBuffer.present(drawable)
                 commandBuffer.commit()
@@ -112,8 +110,6 @@ struct MetalImageView: NSViewRepresentable {
                  sx + px,  sy + py, 1.0, 1.0,
             ]
 
-            let commandBuffer = commandQueue.makeCommandBuffer()!
-            let encoder = commandBuffer.makeRenderCommandEncoder(descriptor: descriptor)!
             encoder.setRenderPipelineState(pipelineState)
             encoder.setVertexBytes(vertices, length: vertices.count * MemoryLayout<Float>.size, index: 0)
             encoder.setFragmentTexture(texture, index: 0)
