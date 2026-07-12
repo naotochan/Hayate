@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import UniformTypeIdentifiers
 
@@ -17,8 +18,51 @@ class CullingSession: ObservableObject {
     /// ContentView observes this via `.onChange` and presents `NSOpenPanel`.
     @Published var openFolderRequest: UUID = UUID()
 
+    /// A specific folder the UI should open (recent-folders menu, drag & drop).
+    /// ContentView observes this and runs the shared open-folder flow.
+    @Published var directOpenRequest: URL?
+
+    /// Recently opened folders, most recent first (persisted to UserDefaults).
+    @Published private(set) var recentFolders: [URL] = []
+
+    static let recentFoldersKey = "recentFolders"
+    static let maxRecentFolders = 10
+
     /// Undo stack (session-only, lost on quit).
     private var undoStack: [UndoAction] = []
+
+    /// Entries loaded from JSON whose files aren't in the current scan
+    /// (moved away, partial mount). Preserved verbatim on save.
+    private var orphanedEntries: [String: PhotoEntry] = [:]
+
+    private let defaults: UserDefaults
+    /// nonisolated(unsafe): written once in init, read once in deinit —
+    /// never accessed concurrently.
+    private nonisolated(unsafe) var terminateObserver: (any NSObjectProtocol)?
+
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+        if let paths = defaults.stringArray(forKey: Self.recentFoldersKey) {
+            recentFolders = paths.map { URL(fileURLWithPath: $0, isDirectory: true) }
+        }
+        // Persist the browsing position (lastIndex) on quit — ratings are
+        // saved on every change, but plain navigation isn't.
+        terminateObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.willTerminateNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.saveJSON()
+            }
+        }
+    }
+
+    deinit {
+        if let terminateObserver {
+            NotificationCenter.default.removeObserver(terminateObserver)
+        }
+    }
 
     /// Supported RAW UTTypes that CIRAWFilter can handle.
     static let rawUTTypes: Set<UTType> = [
@@ -60,29 +104,39 @@ class CullingSession: ObservableObject {
         openFolderRequest = UUID()
     }
 
+    /// Ask the UI to open this specific folder (recent-folders menu, drag & drop).
+    func requestOpen(folder url: URL) {
+        directOpenRequest = url
+    }
+
     /// Open a folder and scan for RAW files.
-    /// - Returns: `true` if the folder was opened (security scope granted). `false` means
+    /// - Returns: `true` if the folder was opened (readable). `false` means
     ///            no session state was mutated, so callers should leave the UI alone.
     @discardableResult
     func openFolder(_ url: URL) -> Bool {
-        guard url.startAccessingSecurityScopedResource() else { return false }
-        defer { url.stopAccessingSecurityScopedResource() }
+        // NSOpenPanel URLs carry a security scope; URLs built from stored paths
+        // or drag & drop don't, and startAccessing returns false for those.
+        // The app isn't sandboxed, so readability is the real gate.
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        guard FileManager.default.isReadableFile(atPath: url.path) else { return false }
 
-        folderURL = url
-        undoStack.removeAll()
-
-        // Scan for RAW files
-        let fm = FileManager.default
-        guard let contents = try? fm.contentsOfDirectory(
+        // Scan before mutating any state so a failed open leaves the current
+        // session (and its JSON) untouched.
+        guard let contents = try? FileManager.default.contentsOfDirectory(
             at: url,
             includingPropertiesForKeys: [.contentTypeKey],
             options: [.skipsHiddenFiles]
-        ) else {
-            files = []
-            entries = [:]
-            currentIndex = 0
-            return true
+        ) else { return false }
+
+        // Persist the previous folder's position before switching away.
+        if folderURL != nil {
+            saveJSON()
         }
+
+        folderURL = url
+        undoStack.removeAll()
+        addToRecents(url)
 
         files = contents.filter { fileURL in
             guard let resourceValues = try? fileURL.resourceValues(forKeys: [.contentTypeKey]),
@@ -94,9 +148,26 @@ class CullingSession: ObservableObject {
 
         currentIndex = 0
 
-        // Load existing JSON
+        // Load existing JSON (may restore lastIndex)
         loadJSON()
         return true
+    }
+
+    /// Move `url` to the front of the recent-folders list and persist it.
+    private func addToRecents(_ url: URL) {
+        var paths = [url.path] + recentFolders.map(\.path).filter { $0 != url.path }
+        if paths.count > Self.maxRecentFolders {
+            paths = Array(paths.prefix(Self.maxRecentFolders))
+        }
+        recentFolders = paths.map { URL(fileURLWithPath: $0, isDirectory: true) }
+        defaults.set(paths, forKey: Self.recentFoldersKey)
+    }
+
+    /// Drop a folder from the recents list (e.g. it no longer exists).
+    func removeFromRecents(_ url: URL) {
+        let paths = recentFolders.map(\.path).filter { $0 != url.path }
+        recentFolders = paths.map { URL(fileURLWithPath: $0, isDirectory: true) }
+        defaults.set(paths, forKey: Self.recentFoldersKey)
     }
 
     // MARK: - Navigation
@@ -322,18 +393,43 @@ class CullingSession: ObservableObject {
         folderURL?.appendingPathComponent(".hayate.json")
     }
 
+    /// Current on-disk format: entries plus the last browsing position.
+    /// The legacy format was a bare `[String: PhotoEntry]` dictionary.
+    private struct SessionData: Codable {
+        var entries: [String: PhotoEntry]
+        var lastIndex: Int?
+    }
+
     private func loadJSON() {
         guard let url = jsonURL,
               let data = try? Data(contentsOf: url) else {
             entries = [:]
+            orphanedEntries = [:]
             return
         }
 
-        let decoded = (try? JSONDecoder().decode([String: PhotoEntry].self, from: data)) ?? [:]
+        let decoded: [String: PhotoEntry]
+        var lastIndex: Int?
+        if let session = try? JSONDecoder().decode(SessionData.self, from: data) {
+            decoded = session.entries
+            lastIndex = session.lastIndex
+        } else {
+            // Legacy format: bare entries dictionary
+            decoded = (try? JSONDecoder().decode([String: PhotoEntry].self, from: data)) ?? [:]
+        }
 
-        // Remove orphan entries (files that no longer exist)
+        // Split off entries whose files aren't visible right now (moved away,
+        // partially mounted card, …). They are kept out of the UI but merged
+        // back on save — otherwise merely opening and closing the folder in
+        // that state would permanently erase their ratings.
         let fileNames = Set(files.map(\.lastPathComponent))
         entries = decoded.filter { fileNames.contains($0.key) }
+        orphanedEntries = decoded.filter { !fileNames.contains($0.key) }
+
+        // Resume where the user left off
+        if let last = lastIndex, files.indices.contains(last) {
+            currentIndex = last
+        }
     }
 
     private func saveJSON() {
@@ -342,7 +438,17 @@ class CullingSession: ObservableObject {
         // Only save entries that have non-default values
         let toSave = entries.filter { $0.value.rating > 0 || $0.value.isFavorite || $0.value.isRejected }
 
-        guard let data = try? JSONEncoder().encode(toSave) else { return }
+        // Merge back entries for files that weren't visible during this session.
+        let all = toSave.merging(orphanedEntries) { current, _ in current }
+
+        // Don't create a dotfile (position-only) in folders where the user
+        // never rated anything — browsing alone shouldn't litter NAS/SD media.
+        if all.isEmpty && !FileManager.default.fileExists(atPath: url.path) {
+            return
+        }
+
+        let session = SessionData(entries: all, lastIndex: currentIndex)
+        guard let data = try? JSONEncoder().encode(session) else { return }
         try? data.write(to: url, options: .atomic)
     }
 }
