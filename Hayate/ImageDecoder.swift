@@ -138,17 +138,34 @@ final class ImageDecoder: @unchecked Sendable {
         return CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
     }
 
+    /// Full-quality CIImage for a file: CIRAWFilter for RAWs, plain CIImage
+    /// for JPEG-only shots (which go through the same display pipeline).
+    /// Explicit type branch — a RAW that CIRAWFilter can't open must fail,
+    /// not silently degrade to an ImageIO preview decode.
+    private func fullQualityImage(url: URL) -> CIImage? {
+        let type = (try? url.resourceValues(forKeys: [.contentTypeKey]))?.contentType
+        if let type = type,
+           CullingSession.rawUTTypes.contains(where: { type.conforms(to: $0) }) {
+            guard let rawFilter = CIRAWFilter(imageURL: url) else { return nil }
+            return rawFilter.outputImage
+        }
+        // applyOrientationProperty: CIRAWFilter output is rotation-applied;
+        // plain CIImage is not by default, and a sideways decode would stick
+        // in the HEIF disk cache.
+        return CIImage(contentsOf: url, options: [.applyOrientationProperty: true])
+    }
+
     private func decodeRAWToCGImageSync(url: URL, displaySize: CGSize) -> CGImage? {
         let signpostID = OSSignpostID(log: signpostLog)
         os_signpost(.begin, log: signpostLog, name: "decodeRAWCGImage", signpostID: signpostID, "file: %{public}s", url.lastPathComponent)
         defer { os_signpost(.end, log: signpostLog, name: "decodeRAWCGImage", signpostID: signpostID) }
 
-        guard let rawFilter = CIRAWFilter(imageURL: url) else { return nil }
-        guard let outputImage = rawFilter.outputImage else { return nil }
+        guard let outputImage = fullQualityImage(url: url) else { return nil }
 
-        let scale = min(
-            displaySize.width / outputImage.extent.width,
-            displaySize.height / outputImage.extent.height
+        // Never upscale (a small JPEG would otherwise be blown up and cached).
+        let scale = min(1,
+            min(displaySize.width / outputImage.extent.width,
+                displaySize.height / outputImage.extent.height)
         )
         let scaledImage = outputImage.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
         return ciContext.createCGImage(scaledImage, from: scaledImage.extent)
@@ -159,17 +176,13 @@ final class ImageDecoder: @unchecked Sendable {
         os_signpost(.begin, log: signpostLog, name: "decodeRAW", signpostID: signpostID, "file: %{public}s", url.lastPathComponent)
         defer { os_signpost(.end, log: signpostLog, name: "decodeRAW", signpostID: signpostID) }
 
-        guard let rawFilter = CIRAWFilter(imageURL: url) else {
+        guard let outputImage = fullQualityImage(url: url) else {
             return nil
         }
 
-        guard let outputImage = rawFilter.outputImage else {
-            return nil
-        }
-
-        let scale = min(
-            displaySize.width / outputImage.extent.width,
-            displaySize.height / outputImage.extent.height
+        let scale = min(1,
+            min(displaySize.width / outputImage.extent.width,
+                displaySize.height / outputImage.extent.height)
         )
         var scaledImage = outputImage.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
 
@@ -186,11 +199,7 @@ final class ImageDecoder: @unchecked Sendable {
         os_signpost(.begin, log: signpostLog, name: "decodeRAWFull", signpostID: signpostID, "file: %{public}s", url.lastPathComponent)
         defer { os_signpost(.end, log: signpostLog, name: "decodeRAWFull", signpostID: signpostID) }
 
-        guard let rawFilter = CIRAWFilter(imageURL: url) else {
-            return nil
-        }
-
-        guard let outputImage = rawFilter.outputImage else {
+        guard let outputImage = fullQualityImage(url: url) else {
             return nil
         }
 

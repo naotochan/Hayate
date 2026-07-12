@@ -71,7 +71,7 @@ class CullingSession: ObservableObject {
     }
 
     /// Supported RAW UTTypes that CIRAWFilter can handle.
-    static let rawUTTypes: Set<UTType> = [
+    nonisolated static let rawUTTypes: Set<UTType> = [
         .rawImage,
         UTType("com.canon.cr3-raw-image"),
         UTType("com.canon.cr2-raw-image"),
@@ -80,6 +80,43 @@ class CullingSession: ObservableObject {
         UTType("com.adobe.raw-image"),
         UTType("public.camera-raw-image"),
     ].compactMap { $0 }.reduce(into: Set<UTType>()) { $0.insert($1) }
+
+    /// Select which files a folder scan should show: every RAW, plus JPEGs
+    /// that have no RAW twin with the same basename. RAW+JPEG shooting thus
+    /// lists only the RAW, while JPEG-only shots still appear.
+    nonisolated static func selectPhotoFiles(from contents: [URL]) -> [URL] {
+        var raws: [URL] = []
+        var jpegs: [URL] = []
+        for url in contents {
+            guard let type = (try? url.resourceValues(forKeys: [.contentTypeKey]))?.contentType else { continue }
+            if rawUTTypes.contains(where: { type.conforms(to: $0) }) {
+                raws.append(url)
+            } else if type.conforms(to: .jpeg) {
+                jpegs.append(url)
+            }
+        }
+        let rawBasenames = Set(raws.map { $0.deletingPathExtension().lastPathComponent })
+        let soloJPEGs = jpegs.filter { !rawBasenames.contains($0.deletingPathExtension().lastPathComponent) }
+        return (raws + soloJPEGs).sorted {
+            $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending
+        }
+    }
+
+    /// A RAW's hidden JPEG twin (same basename; not shown in the list), if
+    /// one exists on disk. Pairs are treated as one photo, so deletion and
+    /// move-export take the twin along.
+    nonisolated static func jpegTwinURL(for url: URL) -> URL? {
+        guard let type = (try? url.resourceValues(forKeys: [.contentTypeKey]))?.contentType,
+              rawUTTypes.contains(where: { type.conforms(to: $0) }) else { return nil }
+        let base = url.deletingPathExtension()
+        for ext in ["jpg", "JPG", "jpeg", "JPEG"] {
+            let candidate = base.appendingPathExtension(ext)
+            if FileManager.default.fileExists(atPath: candidate.path) {
+                return candidate
+            }
+        }
+        return nil
+    }
 
     struct PhotoEntry: Codable {
         let fileName: String
@@ -177,6 +214,17 @@ class CullingSession: ObservableObject {
                             try? fm.copyItem(at: srcXMP, to: dstXMP)
                         }
                     }
+                    // A RAW's hidden JPEG twin travels too.
+                    if let twin = Self.jpegTwinURL(for: src) {
+                        let twinDst = destination.appendingPathComponent(twin.lastPathComponent)
+                        if !fm.fileExists(atPath: twinDst.path) {
+                            if move {
+                                try? fm.moveItem(at: twin, to: twinDst)
+                            } else {
+                                try? fm.copyItem(at: twin, to: twinDst)
+                            }
+                        }
+                    }
                 } catch {
                     failed += 1
                 }
@@ -228,13 +276,7 @@ class CullingSession: ObservableObject {
         undoStack.removeAll()
         addToRecents(url)
 
-        files = contents.filter { fileURL in
-            guard let resourceValues = try? fileURL.resourceValues(forKeys: [.contentTypeKey]),
-                  let contentType = resourceValues.contentType else {
-                return false
-            }
-            return Self.rawUTTypes.contains(where: { contentType.conforms(to: $0) })
-        }.sorted { $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending }
+        files = Self.selectPhotoFiles(from: contents)
 
         currentIndex = 0
 
@@ -393,6 +435,9 @@ class CullingSession: ObservableObject {
                 continue
             }
             trashXMPSidecar(for: file)
+            if let twin = Self.jpegTwinURL(for: file) {
+                try? FileManager.default.trashItem(at: twin, resultingItemURL: nil)
+            }
             undoStack.append(.deletion(url: file, index: index, entry: entries[fileName]))
             entries[fileName] = nil
             files.remove(at: index)
@@ -435,6 +480,9 @@ class CullingSession: ObservableObject {
             return false
         }
         trashXMPSidecar(for: file)
+        if let twin = Self.jpegTwinURL(for: file) {
+            try? FileManager.default.trashItem(at: twin, resultingItemURL: nil)
+        }
 
         undoStack.append(.deletion(url: file, index: index, entry: entry))
 
