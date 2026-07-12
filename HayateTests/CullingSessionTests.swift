@@ -423,6 +423,33 @@ final class CullingSessionTests: XCTestCase {
         XCTAssertEqual(fresh.currentIndex, 3, "Should resume at the saved position")
     }
 
+    // MARK: - RAW+JPEG pairing
+
+    func testSelectPhotoFilesPrefersRAWOverJPEGTwin() {
+        let names = ["IMG_0001.CR3", "IMG_0001.JPG", "IMG_0002.JPG", "IMG_0003.NEF", "notes.txt"]
+        for name in names {
+            FileManager.default.createFile(
+                atPath: tempDir.appendingPathComponent(name).path, contents: Data())
+        }
+        let contents = names.map { tempDir.appendingPathComponent($0) }
+
+        let selected = CullingSession.selectPhotoFiles(from: contents).map(\.lastPathComponent)
+
+        // RAW wins over its JPEG twin; solo JPEGs stay; non-images drop.
+        XCTAssertEqual(selected, ["IMG_0001.CR3", "IMG_0002.JPG", "IMG_0003.NEF"])
+    }
+
+    func testDeleteTrashesJPEGTwin() {
+        loadTestFiles(count: 1)  // IMG_0001.CR3
+        let twin = tempDir.appendingPathComponent("IMG_0001.JPG")
+        FileManager.default.createFile(atPath: twin.path, contents: Data())
+
+        XCTAssertTrue(session.deleteCurrentFile())
+        XCTAssertFalse(
+            FileManager.default.fileExists(atPath: twin.path),
+            "The hidden JPEG twin should be trashed with its RAW")
+    }
+
     // MARK: - XMP Sidecar
 
     func testXMPSidecarWrittenWhenEnabled() {
