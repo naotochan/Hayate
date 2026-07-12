@@ -22,6 +22,12 @@ class CullingSession: ObservableObject {
     /// ContentView observes this and runs the shared open-folder flow.
     @Published var directOpenRequest: URL?
 
+    /// Trigger for the export sheet (File > Export Picks…).
+    @Published var exportRequest: UUID?
+
+    /// Progress of a running (or just-finished) export. nil when idle.
+    @Published var exportProgress: ExportProgress?
+
     /// Recently opened folders, most recent first (persisted to UserDefaults).
     @Published private(set) var recentFolders: [URL] = []
 
@@ -107,6 +113,90 @@ class CullingSession: ObservableObject {
     /// Ask the UI to open this specific folder (recent-folders menu, drag & drop).
     func requestOpen(folder url: URL) {
         directOpenRequest = url
+    }
+
+    /// Ask the UI to present the export sheet.
+    func requestExport() {
+        exportRequest = UUID()
+    }
+
+    // MARK: - Export
+
+    struct ExportProgress: Equatable {
+        var completed: Int
+        var total: Int
+        var failed: Int
+        var finished: Bool
+    }
+
+    private var exportTask: Task<Void, Never>?
+
+    /// Stop a running export after the file currently being copied/moved.
+    func cancelExport() {
+        exportTask?.cancel()
+    }
+
+    /// Copy or move every file matching `predicate` into `destination`,
+    /// publishing progress along the way. File I/O runs off the main actor.
+    /// Hayate-written XMP sidecars travel with their photo. A move reloads
+    /// the folder through the UI on completion (moved files leave the
+    /// session; their entries survive as orphans in .hayate.json).
+    func exportPicks(where predicate: (PhotoEntry?) -> Bool, to destination: URL, move: Bool) {
+        // One export at a time.
+        if let progress = exportProgress, !progress.finished { return }
+
+        let targets = files.filter { predicate(entries[$0.lastPathComponent]) }
+        guard !targets.isEmpty else { return }
+        exportProgress = ExportProgress(completed: 0, total: targets.count, failed: 0, finished: false)
+        let sourceFolder = folderURL
+
+        exportTask = Task.detached(priority: .userInitiated) { [weak self] in
+            let fm = FileManager.default
+            var completed = 0
+            var failed = 0
+            for src in targets {
+                guard !Task.isCancelled else { break }
+                let dst = destination.appendingPathComponent(src.lastPathComponent)
+                do {
+                    // Never overwrite an existing file at the destination.
+                    if fm.fileExists(atPath: dst.path) { throw CocoaError(.fileWriteFileExists) }
+                    if move {
+                        try fm.moveItem(at: src, to: dst)
+                    } else {
+                        try fm.copyItem(at: src, to: dst)
+                    }
+                    // Bring Hayate's sidecar along so ratings follow the file.
+                    let srcXMP = src.deletingPathExtension().appendingPathExtension("xmp")
+                    let dstXMP = dst.deletingPathExtension().appendingPathExtension("xmp")
+                    if let content = try? String(contentsOf: srcXMP, encoding: .utf8),
+                       content.contains(Self.xmpToolkitTag),
+                       !fm.fileExists(atPath: dstXMP.path) {
+                        if move {
+                            try? fm.moveItem(at: srcXMP, to: dstXMP)
+                        } else {
+                            try? fm.copyItem(at: srcXMP, to: dstXMP)
+                        }
+                    }
+                } catch {
+                    failed += 1
+                }
+                completed += 1
+                let progress = ExportProgress(completed: completed, total: targets.count, failed: failed, finished: false)
+                await MainActor.run { [weak self] in self?.exportProgress = progress }
+            }
+
+            let final = ExportProgress(completed: completed, total: targets.count, failed: failed, finished: true)
+            await MainActor.run { [weak self] in
+                guard let self = self else { return }
+                self.exportProgress = final
+                // Reload through the UI (directOpenRequest) so ContentView
+                // resets textures/caches too — but only if the user is still
+                // looking at the folder we exported from.
+                if move, let folder = sourceFolder, self.folderURL == folder {
+                    self.requestOpen(folder: folder)
+                }
+            }
+        }
     }
 
     /// Open a folder and scan for RAW files.

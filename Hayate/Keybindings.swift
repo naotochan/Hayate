@@ -103,6 +103,7 @@ enum ActionID: String, Codable, CaseIterable, Identifiable {
     case toggleFitZoom
     case toggleFocusPeaking
     case toggleInfo
+    case toggleHistogram
     case deletePhoto
     case undo
     case selectAllGrid
@@ -123,6 +124,7 @@ enum ActionID: String, Codable, CaseIterable, Identifiable {
         case .toggleFitZoom: return "Toggle fit / 2× zoom"
         case .toggleFocusPeaking: return "Toggle focus peaking"
         case .toggleInfo: return "Toggle info overlay (EXIF)"
+        case .toggleHistogram: return "Toggle histogram"
         case .deletePhoto: return "Move photo to Trash"
         case .undo: return "Undo"
         case .selectAllGrid: return "Select all (grid)"
@@ -147,7 +149,7 @@ enum ActionID: String, Codable, CaseIterable, Identifiable {
         switch self {
         case .navigateBack, .navigateForward: return .navigation
         case .toggleFavorite, .toggleRejected: return .rating
-        case .toggleGrid, .toggleCompare, .toggleFitZoom, .toggleFocusPeaking, .toggleInfo: return .view
+        case .toggleGrid, .toggleCompare, .toggleFitZoom, .toggleFocusPeaking, .toggleInfo, .toggleHistogram: return .view
         case .deletePhoto, .undo, .selectAllGrid: return .editing
         case .openFolder: return .file
         case .pickCompare, .skipNextBaseline: return .compareMode
@@ -176,6 +178,7 @@ final class KeybindingStore: ObservableObject {
         .toggleFitZoom: Shortcut(keyCode: 49),                          // Space
         .toggleFocusPeaking: Shortcut(keyCode: 3),                      // F
         .toggleInfo: Shortcut(keyCode: 34),                             // I
+        .toggleHistogram: Shortcut(keyCode: 4),                         // H
         .deletePhoto: Shortcut(keyCode: 51),                            // ⌫
         .undo: Shortcut(keyCode: 6, modifiers: .command),               // ⌘Z
         .selectAllGrid: Shortcut(keyCode: 0, modifiers: .command),      // ⌘A

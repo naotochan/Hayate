@@ -68,6 +68,14 @@ struct HayateApp: App {
                     }
                 }
                 .disabled(session.recentFolders.isEmpty)
+
+                Divider()
+
+                Button("Export Picks…") {
+                    session.requestExport()
+                }
+                .keyboardShortcut("e", modifiers: .command)
+                .disabled(session.files.isEmpty)
             }
             CommandGroup(after: .appInfo) {
                 CheckForUpdatesView(updater: updaterController.updater)

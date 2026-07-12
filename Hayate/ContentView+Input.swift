@@ -192,6 +192,16 @@ extension ContentView {
             }
             return true
 
+        case .toggleHistogram:
+            if compareMode || showGrid { return false }
+            showHistogram.toggle()
+            if showHistogram {
+                updateHistogram()
+            } else {
+                histogramData = nil
+            }
+            return true
+
         case .deletePhoto:
             if showGrid && !selectedIndices.isEmpty {
                 pendingDeletionIndices = selectedIndices
