@@ -313,6 +313,9 @@ struct ContentView: View {
             // Unified pipeline: memory → disk → embedded JPEG (partial) → RAW
             guard let prefetchManager = prefetchManager else { return }
             let result = await prefetchManager.loadTexture(for: file, displaySize: displaySize) { partial in
+                // Defensive: don't overwrite a newer photo if this task was
+                // cancelled while hopping to the main actor.
+                guard !Task.isCancelled else { return }
                 currentTexture = partial.texture
                 decodeTimeMs = (CFAbsoluteTimeGetCurrent() - start) * 1000
             }

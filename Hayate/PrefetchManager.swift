@@ -99,29 +99,34 @@ actor PrefetchManager {
         onPartial: (@MainActor @Sendable (SendableTexture) -> Void)? = nil
     ) async -> SendableTexture? {
         // L1: memory cache (instant). A JPEG-only entry is shown immediately
-        // but still falls through to the RAW decode for the full-quality upgrade.
+        // but still falls through to L2/L3b for the full-quality upgrade.
+        var partialShown = false
         if let entry = cache[url] {
             touchAccess(url)
             let sendable = SendableTexture(texture: entry.texture)
             if entry.isRAW { return sendable }
-            if let onPartial { await onPartial(sendable) }
-        } else {
-            // L2: disk cache (~20-50ms)
-            if let diskCache = diskCache,
-               let cgImage = await diskCache.loadPreview(for: url),
-               let sendable = await decoder.cgImageToTexture(cgImage) {
-                store(texture: sendable.texture, for: url, isRAW: true)
-                return sendable
-            }
             guard !Task.isCancelled else { return nil }
+            if let onPartial { await onPartial(sendable) }
+            partialShown = true
+        }
 
-            // L3a: embedded JPEG for instant feedback
-            if let jpeg = await decoder.extractJPEG(url: url),
-               let sendable = await decoder.cgImageToTexture(jpeg) {
-                guard !Task.isCancelled else { return nil }
-                store(texture: sendable.texture, for: url, isRAW: false)
-                if let onPartial { await onPartial(sendable) }
-            }
+        // L2: disk cache (~20-50ms) — also upgrades a JPEG-only memory entry
+        if let diskCache = diskCache,
+           let cgImage = await diskCache.loadPreview(for: url),
+           let sendable = await decoder.cgImageToTexture(cgImage) {
+            guard !Task.isCancelled else { return nil }
+            store(texture: sendable.texture, for: url, isRAW: true)
+            return sendable
+        }
+        guard !Task.isCancelled else { return nil }
+
+        // L3a: embedded JPEG for instant feedback (skip if L1 already showed one)
+        if !partialShown,
+           let jpeg = await decoder.extractJPEG(url: url),
+           let sendable = await decoder.cgImageToTexture(jpeg) {
+            guard !Task.isCancelled else { return nil }
+            store(texture: sendable.texture, for: url, isRAW: false)
+            if let onPartial { await onPartial(sendable) }
         }
 
         guard !Task.isCancelled else { return nil }
