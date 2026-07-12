@@ -439,6 +439,17 @@ final class CullingSessionTests: XCTestCase {
         XCTAssertEqual(selected, ["IMG_0001.CR3", "IMG_0002.JPG", "IMG_0003.NEF"])
     }
 
+    func testDeleteTrashesJPEGTwin() {
+        loadTestFiles(count: 1)  // IMG_0001.CR3
+        let twin = tempDir.appendingPathComponent("IMG_0001.JPG")
+        FileManager.default.createFile(atPath: twin.path, contents: Data())
+
+        XCTAssertTrue(session.deleteCurrentFile())
+        XCTAssertFalse(
+            FileManager.default.fileExists(atPath: twin.path),
+            "The hidden JPEG twin should be trashed with its RAW")
+    }
+
     // MARK: - XMP Sidecar
 
     func testXMPSidecarWrittenWhenEnabled() {

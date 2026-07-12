@@ -102,6 +102,22 @@ class CullingSession: ObservableObject {
         }
     }
 
+    /// A RAW's hidden JPEG twin (same basename; not shown in the list), if
+    /// one exists on disk. Pairs are treated as one photo, so deletion and
+    /// move-export take the twin along.
+    nonisolated static func jpegTwinURL(for url: URL) -> URL? {
+        guard let type = (try? url.resourceValues(forKeys: [.contentTypeKey]))?.contentType,
+              rawUTTypes.contains(where: { type.conforms(to: $0) }) else { return nil }
+        let base = url.deletingPathExtension()
+        for ext in ["jpg", "JPG", "jpeg", "JPEG"] {
+            let candidate = base.appendingPathExtension(ext)
+            if FileManager.default.fileExists(atPath: candidate.path) {
+                return candidate
+            }
+        }
+        return nil
+    }
+
     struct PhotoEntry: Codable {
         let fileName: String
         var rating: Int       // 0-5 (0 = unrated)
@@ -196,6 +212,17 @@ class CullingSession: ObservableObject {
                             try? fm.moveItem(at: srcXMP, to: dstXMP)
                         } else {
                             try? fm.copyItem(at: srcXMP, to: dstXMP)
+                        }
+                    }
+                    // A RAW's hidden JPEG twin travels too.
+                    if let twin = Self.jpegTwinURL(for: src) {
+                        let twinDst = destination.appendingPathComponent(twin.lastPathComponent)
+                        if !fm.fileExists(atPath: twinDst.path) {
+                            if move {
+                                try? fm.moveItem(at: twin, to: twinDst)
+                            } else {
+                                try? fm.copyItem(at: twin, to: twinDst)
+                            }
                         }
                     }
                 } catch {
@@ -408,6 +435,9 @@ class CullingSession: ObservableObject {
                 continue
             }
             trashXMPSidecar(for: file)
+            if let twin = Self.jpegTwinURL(for: file) {
+                try? FileManager.default.trashItem(at: twin, resultingItemURL: nil)
+            }
             undoStack.append(.deletion(url: file, index: index, entry: entries[fileName]))
             entries[fileName] = nil
             files.remove(at: index)
@@ -450,6 +480,9 @@ class CullingSession: ObservableObject {
             return false
         }
         trashXMPSidecar(for: file)
+        if let twin = Self.jpegTwinURL(for: file) {
+            try? FileManager.default.trashItem(at: twin, resultingItemURL: nil)
+        }
 
         undoStack.append(.deletion(url: file, index: index, entry: entry))
 

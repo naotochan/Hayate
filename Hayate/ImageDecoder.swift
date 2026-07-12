@@ -140,11 +140,19 @@ final class ImageDecoder: @unchecked Sendable {
 
     /// Full-quality CIImage for a file: CIRAWFilter for RAWs, plain CIImage
     /// for JPEG-only shots (which go through the same display pipeline).
+    /// Explicit type branch — a RAW that CIRAWFilter can't open must fail,
+    /// not silently degrade to an ImageIO preview decode.
     private func fullQualityImage(url: URL) -> CIImage? {
-        if let rawFilter = CIRAWFilter(imageURL: url), let output = rawFilter.outputImage {
-            return output
+        let type = (try? url.resourceValues(forKeys: [.contentTypeKey]))?.contentType
+        if let type = type,
+           CullingSession.rawUTTypes.contains(where: { type.conforms(to: $0) }) {
+            guard let rawFilter = CIRAWFilter(imageURL: url) else { return nil }
+            return rawFilter.outputImage
         }
-        return CIImage(contentsOf: url)
+        // applyOrientationProperty: CIRAWFilter output is rotation-applied;
+        // plain CIImage is not by default, and a sideways decode would stick
+        // in the HEIF disk cache.
+        return CIImage(contentsOf: url, options: [.applyOrientationProperty: true])
     }
 
     private func decodeRAWToCGImageSync(url: URL, displaySize: CGSize) -> CGImage? {
@@ -154,9 +162,10 @@ final class ImageDecoder: @unchecked Sendable {
 
         guard let outputImage = fullQualityImage(url: url) else { return nil }
 
-        let scale = min(
-            displaySize.width / outputImage.extent.width,
-            displaySize.height / outputImage.extent.height
+        // Never upscale (a small JPEG would otherwise be blown up and cached).
+        let scale = min(1,
+            min(displaySize.width / outputImage.extent.width,
+                displaySize.height / outputImage.extent.height)
         )
         let scaledImage = outputImage.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
         return ciContext.createCGImage(scaledImage, from: scaledImage.extent)
@@ -171,9 +180,9 @@ final class ImageDecoder: @unchecked Sendable {
             return nil
         }
 
-        let scale = min(
-            displaySize.width / outputImage.extent.width,
-            displaySize.height / outputImage.extent.height
+        let scale = min(1,
+            min(displaySize.width / outputImage.extent.width,
+                displaySize.height / outputImage.extent.height)
         )
         var scaledImage = outputImage.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
 
