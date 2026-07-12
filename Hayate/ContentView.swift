@@ -222,7 +222,13 @@ struct ContentView: View {
             }
         }
         .sheet(isPresented: $showExportSheet) {
-            ExportSheet()
+            ExportSheet(onBulkDelete: {
+                // The displayed photo may have been trashed; currentIndex can
+                // keep its numeric value after reindexing, so onChange alone
+                // won't reload.
+                selectedIndices.removeAll()
+                loadCurrentImage()
+            })
         }
         .onDrop(of: [.fileURL], isTargeted: nil) { providers in
             guard let provider = providers.first else { return false }
@@ -491,10 +497,12 @@ struct ContentView: View {
             return
         }
         let sendable = SendableTexture(texture: texture)
+        let file = session.currentFile
         Task {
             let data = await decoder.computeHistogram(texture: sendable)
-            // Only apply if the histogram is still showing.
-            if showHistogram {
+            // Only apply if the histogram is still showing and the user
+            // hasn't navigated away (results can complete out of order).
+            if showHistogram, session.currentFile == file {
                 histogramData = data
             }
         }

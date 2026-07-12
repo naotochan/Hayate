@@ -7,6 +7,10 @@ struct ExportSheet: View {
     @EnvironmentObject var session: CullingSession
     @Environment(\.dismiss) private var dismiss
 
+    /// Called after the bulk "move rejected to Trash" action so the host
+    /// view can reload the displayed photo and clear stale selections.
+    var onBulkDelete: () -> Void = {}
+
     enum Source: Hashable {
         case favorites
         case minRating(Int)
@@ -86,6 +90,11 @@ struct ExportSheet: View {
             HStack {
                 Spacer()
                 Button(session.exportProgress?.finished == true ? "Done" : "Cancel") {
+                    // Cancelling while an export runs stops it after the
+                    // file currently in flight.
+                    if session.exportProgress?.finished == false {
+                        session.cancelExport()
+                    }
                     dismiss()
                 }
                 .keyboardShortcut(.cancelAction)
@@ -98,6 +107,12 @@ struct ExportSheet: View {
         }
         .padding(20)
         .frame(width: 420)
+        .onAppear {
+            // A previous export may have finished after the sheet was closed.
+            if session.exportProgress?.finished == true {
+                session.exportProgress = nil
+            }
+        }
         .onDisappear {
             // Clear finished progress so the next export starts clean.
             if session.exportProgress?.finished == true {
@@ -111,6 +126,7 @@ struct ExportSheet: View {
         ) {
             Button("Move to Trash", role: .destructive) {
                 session.deleteFilesAtIndices(rejectedIndices)
+                onBulkDelete()
             }
             Button("Cancel", role: .cancel) {}
         }

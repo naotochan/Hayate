@@ -129,9 +129,17 @@ class CullingSession: ObservableObject {
         var finished: Bool
     }
 
+    private var exportTask: Task<Void, Never>?
+
+    /// Stop a running export after the file currently being copied/moved.
+    func cancelExport() {
+        exportTask?.cancel()
+    }
+
     /// Copy or move every file matching `predicate` into `destination`,
     /// publishing progress along the way. File I/O runs off the main actor.
-    /// A move rescans the folder on completion (moved files leave the
+    /// Hayate-written XMP sidecars travel with their photo. A move reloads
+    /// the folder through the UI on completion (moved files leave the
     /// session; their entries survive as orphans in .hayate.json).
     func exportPicks(where predicate: (PhotoEntry?) -> Bool, to destination: URL, move: Bool) {
         // One export at a time.
@@ -140,12 +148,14 @@ class CullingSession: ObservableObject {
         let targets = files.filter { predicate(entries[$0.lastPathComponent]) }
         guard !targets.isEmpty else { return }
         exportProgress = ExportProgress(completed: 0, total: targets.count, failed: 0, finished: false)
+        let sourceFolder = folderURL
 
-        Task.detached(priority: .userInitiated) { [weak self] in
+        exportTask = Task.detached(priority: .userInitiated) { [weak self] in
             let fm = FileManager.default
             var completed = 0
             var failed = 0
             for src in targets {
+                guard !Task.isCancelled else { break }
                 let dst = destination.appendingPathComponent(src.lastPathComponent)
                 do {
                     // Never overwrite an existing file at the destination.
@@ -154,6 +164,18 @@ class CullingSession: ObservableObject {
                         try fm.moveItem(at: src, to: dst)
                     } else {
                         try fm.copyItem(at: src, to: dst)
+                    }
+                    // Bring Hayate's sidecar along so ratings follow the file.
+                    let srcXMP = src.deletingPathExtension().appendingPathExtension("xmp")
+                    let dstXMP = dst.deletingPathExtension().appendingPathExtension("xmp")
+                    if let content = try? String(contentsOf: srcXMP, encoding: .utf8),
+                       content.contains(Self.xmpToolkitTag),
+                       !fm.fileExists(atPath: dstXMP.path) {
+                        if move {
+                            try? fm.moveItem(at: srcXMP, to: dstXMP)
+                        } else {
+                            try? fm.copyItem(at: srcXMP, to: dstXMP)
+                        }
                     }
                 } catch {
                     failed += 1
@@ -167,9 +189,11 @@ class CullingSession: ObservableObject {
             await MainActor.run { [weak self] in
                 guard let self = self else { return }
                 self.exportProgress = final
-                if move, let folder = self.folderURL {
-                    // Rescan so moved files disappear from the session.
-                    self.openFolder(folder)
+                // Reload through the UI (directOpenRequest) so ContentView
+                // resets textures/caches too — but only if the user is still
+                // looking at the folder we exported from.
+                if move, let folder = sourceFolder, self.folderURL == folder {
+                    self.requestOpen(folder: folder)
                 }
             }
         }
