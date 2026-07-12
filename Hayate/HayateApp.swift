@@ -59,6 +59,15 @@ struct HayateApp: App {
                     session.requestOpenFolder()
                 }
                 .keyboardShortcut("o", modifiers: .command)
+
+                Menu("Open Recent") {
+                    ForEach(session.recentFolders, id: \.self) { url in
+                        Button(url.lastPathComponent) {
+                            session.requestOpen(folder: url)
+                        }
+                    }
+                }
+                .disabled(session.recentFolders.isEmpty)
             }
             CommandGroup(after: .appInfo) {
                 CheckForUpdatesView(updater: updaterController.updater)

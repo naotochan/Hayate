@@ -6,9 +6,16 @@ final class CullingSessionTests: XCTestCase {
 
     private var session: CullingSession!
     private var tempDir: URL!
+    private var testDefaults: UserDefaults!
+
+    /// Isolated defaults so tests don't pollute the real recent-folders list.
+    private func makeSession() -> CullingSession {
+        CullingSession(defaults: testDefaults)
+    }
 
     override func setUp() async throws {
-        session = CullingSession()
+        testDefaults = UserDefaults(suiteName: "HayateTests-\(UUID().uuidString)")
+        session = makeSession()
         // Create a temp directory with fake files to simulate a folder
         tempDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("PicSortTests-\(UUID().uuidString)")
@@ -340,6 +347,12 @@ final class CullingSessionTests: XCTestCase {
 
     // MARK: - JSON Persistence
 
+    /// Mirror of CullingSession's on-disk format (the type itself is private).
+    private struct SessionData: Codable {
+        var entries: [String: CullingSession.PhotoEntry]
+        var lastIndex: Int?
+    }
+
     func testJSONRoundTrip() {
         loadTestFiles(count: 3)
 
@@ -355,14 +368,15 @@ final class CullingSessionTests: XCTestCase {
 
         // Read it back
         guard let data = try? Data(contentsOf: jsonURL),
-              let decoded = try? JSONDecoder().decode([String: CullingSession.PhotoEntry].self, from: data) else {
+              let decoded = try? JSONDecoder().decode(SessionData.self, from: data) else {
             XCTFail("Could not read JSON")
             return
         }
 
-        XCTAssertEqual(decoded["IMG_0001.CR3"]?.rating, 4)
-        XCTAssertTrue(decoded["IMG_0002.CR3"]?.isFavorite == true)
-        XCTAssertTrue(decoded["IMG_0003.CR3"]?.isRejected == true)
+        XCTAssertEqual(decoded.entries["IMG_0001.CR3"]?.rating, 4)
+        XCTAssertTrue(decoded.entries["IMG_0002.CR3"]?.isFavorite == true)
+        XCTAssertTrue(decoded.entries["IMG_0003.CR3"]?.isRejected == true)
+        XCTAssertEqual(decoded.lastIndex, 2, "Position at save time should be persisted")
     }
 
     func testJSONOnlySavesNonDefault() {
@@ -373,13 +387,40 @@ final class CullingSessionTests: XCTestCase {
 
         let jsonURL = tempDir.appendingPathComponent(".hayate.json")
         guard let data = try? Data(contentsOf: jsonURL),
-              let decoded = try? JSONDecoder().decode([String: CullingSession.PhotoEntry].self, from: data) else {
+              let decoded = try? JSONDecoder().decode(SessionData.self, from: data) else {
             XCTFail("Could not read JSON")
             return
         }
 
-        XCTAssertEqual(decoded.count, 1, "Only non-default entries should be saved")
-        XCTAssertNotNil(decoded["IMG_0001.CR3"])
+        XCTAssertEqual(decoded.entries.count, 1, "Only non-default entries should be saved")
+        XCTAssertNotNil(decoded.entries["IMG_0001.CR3"])
+    }
+
+    func testJSONLegacyFormatMigration() {
+        // Write the pre-lastIndex format: a bare entries dictionary.
+        loadTestFiles(count: 3)
+        let legacy = ["IMG_0002.CR3": CullingSession.PhotoEntry(fileName: "IMG_0002.CR3", rating: 5)]
+        let jsonURL = tempDir.appendingPathComponent(".hayate.json")
+        try? JSONEncoder().encode(legacy).write(to: jsonURL)
+
+        // Open in a fresh session: re-opening via `session` would first persist
+        // its current (empty) state over the legacy file we just wrote.
+        let fresh = makeSession()
+        fresh.openFolder(tempDir)
+        XCTAssertEqual(fresh.entries["IMG_0002.CR3"]?.rating, 5)
+        XCTAssertEqual(fresh.currentIndex, 0, "Legacy format has no lastIndex")
+    }
+
+    func testJSONRestoresLastIndex() {
+        loadTestFiles(count: 5)
+
+        session.currentIndex = 3
+        session.setRating(2)  // triggers save with lastIndex = 3
+
+        // Re-open the same folder in a fresh session
+        let fresh = makeSession()
+        fresh.openFolder(tempDir)
+        XCTAssertEqual(fresh.currentIndex, 3, "Should resume at the saved position")
     }
 
     // MARK: - PhotoEntry

@@ -55,6 +55,20 @@ extension ContentView {
             return false
         }
 
+        // Unmodified arrow keys in the grid — move within the filtered order;
+        // ↑↓ jump by one (approximate) row, no-op at the edges. Modified
+        // arrows fall through to the keybinding store.
+        if showGrid, [123, 124, 125, 126].contains(event.keyCode),
+           event.modifierFlags.intersection(Shortcut.relevantModifiers).isEmpty {
+            switch event.keyCode {
+            case 123: moveGridSelection(by: -1)
+            case 124: moveGridSelection(by: 1)
+            case 125: moveGridSelection(by: gridColumnCount, clamping: false)
+            default:  moveGridSelection(by: -gridColumnCount, clamping: false)
+            }
+            return true
+        }
+
         // Arrow keys — always navigate (alias for navigateBack / navigateForward).
         if event.keyCode == 123 || event.keyCode == 124 {
             return perform(event.keyCode == 123 ? .navigateBack : .navigateForward)
@@ -75,6 +89,7 @@ extension ContentView {
                 session.setRatingForIndices(selectedIndices, rating: rating)
             } else {
                 session.setRating(rating)
+                autoAdvanceIfEnabled()
             }
             return true
         }
@@ -120,6 +135,7 @@ extension ContentView {
                 session.toggleFavoriteForIndices(selectedIndices)
             } else {
                 session.toggleFavorite()
+                autoAdvanceIfEnabled()
             }
             return true
 
@@ -131,6 +147,7 @@ extension ContentView {
                 session.toggleRejectedForIndices(selectedIndices)
             } else {
                 session.toggleRejected()
+                autoAdvanceIfEnabled()
             }
             return true
 
@@ -211,6 +228,13 @@ extension ContentView {
             }
             return false
         }
+    }
+
+    /// Photo Mechanic-style auto-advance: jump to the next photo after a
+    /// rating action in the single-photo view (opt-in via Settings).
+    private func autoAdvanceIfEnabled() {
+        guard autoAdvance, !showGrid, !compareMode else { return }
+        navigateForward()
     }
 
     // MARK: - Scroll & drag (zoom / pan)
