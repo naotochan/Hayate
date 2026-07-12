@@ -10,6 +10,14 @@ struct SendableTexture: @unchecked Sendable {
     let texture: MTLTexture
 }
 
+/// 256-bin RGB histogram, normalized so the tallest bin across all channels
+/// is 1.0. Computed from the displayed texture (H key overlay).
+struct HistogramData: Sendable {
+    var red: [Float]
+    var green: [Float]
+    var blue: [Float]
+}
+
 /// Pre-formatted shooting metadata for the info overlay (I key).
 struct EXIFInfo: Sendable {
     var camera: String?
@@ -99,6 +107,13 @@ final class ImageDecoder: @unchecked Sendable {
     func extractEXIF(url: URL) async -> EXIFInfo? {
         await Task.detached(priority: .utility) { [self] in
             extractEXIFSync(url: url)
+        }.value
+    }
+
+    /// Compute an RGB histogram from a displayed texture (H key overlay).
+    func computeHistogram(texture: SendableTexture) async -> HistogramData? {
+        await Task.detached(priority: .utility) { [self] in
+            computeHistogramSync(texture: texture.texture)
         }.value
     }
 
@@ -237,6 +252,46 @@ final class ImageDecoder: @unchecked Sendable {
             info.dateTaken = Self.formatEXIFDate(raw)
         }
         return info
+    }
+
+    private func computeHistogramSync(texture: MTLTexture) -> HistogramData? {
+        guard let image = CIImage(mtlTexture: texture, options: nil) else { return nil }
+
+        guard let filter = CIFilter(name: "CIAreaHistogram", parameters: [
+            kCIInputImageKey: image,
+            kCIInputExtentKey: CIVector(cgRect: image.extent),
+            "inputCount": 256,
+            "inputScale": 1.0,
+        ]), let output = filter.outputImage else { return nil }
+
+        // Render the 256×1 histogram image into a float bitmap.
+        var bitmap = [Float](repeating: 0, count: 256 * 4)
+        ciContext.render(
+            output,
+            toBitmap: &bitmap,
+            rowBytes: 256 * 4 * MemoryLayout<Float>.size,
+            bounds: CGRect(x: 0, y: 0, width: 256, height: 1),
+            format: .RGBAf,
+            colorSpace: nil
+        )
+
+        var red = [Float](repeating: 0, count: 256)
+        var green = [Float](repeating: 0, count: 256)
+        var blue = [Float](repeating: 0, count: 256)
+        for i in 0..<256 {
+            red[i] = bitmap[i * 4]
+            green[i] = bitmap[i * 4 + 1]
+            blue[i] = bitmap[i * 4 + 2]
+        }
+
+        let maxValue = max(red.max() ?? 0, green.max() ?? 0, blue.max() ?? 0)
+        guard maxValue > 0 else { return nil }
+        for i in 0..<256 {
+            red[i] /= maxValue
+            green[i] /= maxValue
+            blue[i] /= maxValue
+        }
+        return HistogramData(red: red, green: green, blue: blue)
     }
 
     /// EXIF dates arrive as "2026:07:12 14:23:45" — reformat for display.
