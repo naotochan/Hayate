@@ -110,6 +110,32 @@ actor PrefetchManager {
             partialShown = true
         }
 
+        // A prefetch may already be decoding this URL. Wait for it and reuse
+        // its cached result instead of running the same RAW decode twice.
+        if let active = activeTasks[url] {
+            await active.value
+            guard !Task.isCancelled else { return nil }
+            if let entry = cache[url] {
+                touchAccess(url)
+                let sendable = SendableTexture(texture: entry.texture)
+                if entry.isRAW { return sendable }
+                if !partialShown, let onPartial { await onPartial(sendable) }
+                partialShown = true
+            }
+        }
+
+        return await performLoad(for: url, displaySize: displaySize, onPartial: onPartial, partialShown: partialShown)
+    }
+
+    /// Slow path of the pipeline: disk cache → embedded JPEG → full RAW.
+    /// `partialShown` suppresses the JPEG stage when a partial is already
+    /// displayed (or already sitting in the memory cache).
+    private func performLoad(
+        for url: URL,
+        displaySize: CGSize,
+        onPartial: (@MainActor @Sendable (SendableTexture) -> Void)? = nil,
+        partialShown: Bool = false
+    ) async -> SendableTexture? {
         // L2: disk cache (~20-50ms) — also upgrades a JPEG-only memory entry
         if let diskCache = diskCache,
            let cgImage = await diskCache.loadPreview(for: url),
@@ -154,12 +180,17 @@ actor PrefetchManager {
         let radius = Self.prefetchRadius
         let lower = max(0, currentIndex - radius)
         let upper = min(files.count - 1, currentIndex + radius)
-        for index in lower...upper {
+        // Skip the current photo itself: the UI's own loadTexture call decodes
+        // and caches it, so prefetching it would duplicate the work.
+        for index in lower...upper where index != currentIndex {
             targetURLs.insert(files[index])
         }
 
+        // Keep the current photo's in-flight task alive even though it's not a
+        // prefetch target — the UI's loadTexture may be joining it right now.
+        let currentURL = files.indices.contains(currentIndex) ? files[currentIndex] : nil
         for (url, task) in activeTasks {
-            if !targetURLs.contains(url) {
+            if !targetURLs.contains(url) && url != currentURL {
                 task.cancel()
                 activeTasks[url] = nil
             }
@@ -171,9 +202,12 @@ actor PrefetchManager {
             }
 
             let size = displaySize
+            // performLoad, not loadTexture: loadTexture joins activeTasks, so
+            // calling it from the task registered there would await itself.
+            let hasJPEGEntry = cache[url] != nil
 
             activeTasks[url] = Task {
-                _ = await self.loadTexture(for: url, displaySize: size)
+                _ = await self.performLoad(for: url, displaySize: size, partialShown: hasJPEGEntry)
                 await self.removeActiveTask(for: url)
             }
         }
