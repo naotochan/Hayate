@@ -245,6 +245,7 @@ class CullingSession: ObservableObject {
         var entry = entries[fileName] ?? PhotoEntry(fileName: fileName)
         entry.rating = max(0, min(5, rating))
         entries[fileName] = entry
+        writeXMPSidecar(forFileNamed: fileName)
     }
 
     /// Toggle favorite; turning it on clears rejected (mutually exclusive).
@@ -260,6 +261,7 @@ class CullingSession: ObservableObject {
             entry.isRejected = false
         }
         entries[fileName] = entry
+        writeXMPSidecar(forFileNamed: fileName)
     }
 
     /// Toggle rejected; turning it on clears favorite (mutually exclusive).
@@ -275,6 +277,7 @@ class CullingSession: ObservableObject {
             entry.isFavorite = false
         }
         entries[fileName] = entry
+        writeXMPSidecar(forFileNamed: fileName)
     }
 
     // MARK: - Deletion
@@ -299,6 +302,7 @@ class CullingSession: ObservableObject {
             } catch {
                 continue
             }
+            trashXMPSidecar(for: file)
             undoStack.append(.deletion(url: file, index: index, entry: entries[fileName]))
             entries[fileName] = nil
             files.remove(at: index)
@@ -340,6 +344,7 @@ class CullingSession: ObservableObject {
         } catch {
             return false
         }
+        trashXMPSidecar(for: file)
 
         undoStack.append(.deletion(url: file, index: index, entry: entry))
 
@@ -384,7 +389,66 @@ class CullingSession: ObservableObject {
             break
         }
 
+        // Keep the sidecar in sync with the reverted state.
+        switch action {
+        case .ratingChange(let fileName, _),
+             .favoriteChange(let fileName, _),
+             .rejectedChange(let fileName, _):
+            writeXMPSidecar(forFileNamed: fileName)
+        case .deletion:
+            break
+        }
+
         saveJSON()
+    }
+
+    // MARK: - XMP Sidecar
+
+    /// Write (or refresh) a `<basename>.xmp` sidecar next to the RAW so
+    /// Lightroom / Capture One can pick up ratings. Opt-in via Settings.
+    /// Convention: rejected → xmp:Rating="-1", favorite → xmp:Label="Red".
+    private func writeXMPSidecar(forFileNamed fileName: String) {
+        guard defaults.bool(forKey: "writeXMPSidecars"), let folderURL = folderURL else { return }
+
+        let rawURL = folderURL.appendingPathComponent(fileName)
+        let xmpURL = rawURL.deletingPathExtension().appendingPathExtension("xmp")
+
+        let entry = entries[fileName]
+        let rating = entry?.rating ?? 0
+        let isFavorite = entry?.isFavorite ?? false
+        let isRejected = entry?.isRejected ?? false
+
+        // Nothing to record and no stale sidecar to reset — skip.
+        let hasState = rating > 0 || isFavorite || isRejected
+        if !hasState && !FileManager.default.fileExists(atPath: xmpURL.path) {
+            return
+        }
+
+        var attributes = "xmp:Rating=\"\(isRejected ? -1 : rating)\""
+        if isFavorite {
+            attributes += "\n   xmp:Label=\"Red\""
+        }
+
+        let xmp = """
+        <?xpacket begin="\u{FEFF}" id="W5M0MpCehiHzreSzNTczkc9d"?>
+        <x:xmpmeta xmlns:x="adobe:ns:meta/" x:xmptk="Hayate">
+         <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+          <rdf:Description rdf:about=""
+           xmlns:xmp="http://ns.adobe.com/xap/1.0/"
+           \(attributes)/>
+         </rdf:RDF>
+        </x:xmpmeta>
+        <?xpacket end="w"?>
+        """
+        try? Data(xmp.utf8).write(to: xmpURL, options: .atomic)
+    }
+
+    /// Move a photo's sidecar to the Trash along with the photo itself.
+    private func trashXMPSidecar(for url: URL) {
+        let xmpURL = url.deletingPathExtension().appendingPathExtension("xmp")
+        if FileManager.default.fileExists(atPath: xmpURL.path) {
+            try? FileManager.default.trashItem(at: xmpURL, resultingItemURL: nil)
+        }
     }
 
     // MARK: - JSON Persistence

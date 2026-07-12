@@ -25,6 +25,7 @@ Hayate is a native macOS app for quickly reviewing and sorting RAW photos. Built
 | `P` | Toggle favorite |
 | `X` | Toggle reject |
 | `F` | Toggle focus peaking |
+| `I` | Toggle info overlay (EXIF) |
 | `Space` | Toggle fit / 2x zoom |
 | `G` | Toggle grid view |
 | `C` | Enter compare mode |

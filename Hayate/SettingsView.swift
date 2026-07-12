@@ -20,6 +20,7 @@ struct SettingsView: View {
     // MARK: - General tab
 
     @AppStorage("autoAdvance") private var autoAdvance = false
+    @AppStorage("writeXMPSidecars") private var writeXMPSidecars = false
 
     private var generalTab: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -33,6 +34,13 @@ struct SettingsView: View {
                 Section {
                     Toggle("Auto-advance after rating", isOn: $autoAdvance)
                     Text("Jump to the next photo after rating (1–5, 0), favoriting (P), or rejecting (X) in the single-photo view.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+
+                Section {
+                    Toggle("Write XMP sidecar files", isOn: $writeXMPSidecars)
+                    Text("Save ratings next to each RAW as a .xmp file that Lightroom and Capture One can read. Rejected photos get rating −1, favorites a red label. Applies to new rating changes.")
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }

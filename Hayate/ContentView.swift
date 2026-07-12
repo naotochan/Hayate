@@ -26,6 +26,9 @@ struct ContentView: View {
     @State var keyMonitor: Any?
     @State var currentDecodeTask: Task<Void, Never>?
     @State var focusPeakingEnabled = false
+    /// EXIF info overlay (I key).
+    @State var showInfo = false
+    @State var currentEXIF: EXIFInfo?
     @State var thumbnails: [URL: NSImage] = [:]
     /// Insertion order of `thumbnails` keys, oldest first, for capped eviction.
     @State var thumbnailOrder: [URL] = []
@@ -117,6 +120,17 @@ struct ContentView: View {
                 // Single photo view
                 if let device = metalDevice {
                     MetalImageView(texture: currentTexture, device: device, zoomScale: zoomScale, panOffset: panOffset)
+                }
+
+                // Top-left overlay: EXIF info (I key)
+                if showInfo {
+                    VStack {
+                        HStack {
+                            exifOverlay
+                            Spacer()
+                        }
+                        Spacer()
+                    }
                 }
 
                 // Bottom overlay: filmstrip + status bar
@@ -295,6 +309,8 @@ struct ContentView: View {
 
         // View helpers
         focusPeakingEnabled = false
+        showInfo = false
+        currentEXIF = nil
     }
 
     // MARK: - Navigation
@@ -320,6 +336,10 @@ struct ContentView: View {
               let decoder = decoder else {
             currentTexture = nil
             return
+        }
+
+        if showInfo {
+            loadEXIF()
         }
 
         // Fire the neighbor prefetch in its own Task so rapid navigation can't
@@ -382,6 +402,50 @@ struct ContentView: View {
             }
             decodeTimeMs = (CFAbsoluteTimeGetCurrent() - start) * 1000
             isLoading = false
+        }
+    }
+
+    // MARK: - EXIF overlay
+
+    @ViewBuilder
+    var exifOverlay: some View {
+        if let info = currentEXIF {
+            VStack(alignment: .leading, spacing: 4) {
+                if let camera = info.camera {
+                    Text(camera).fontWeight(.semibold)
+                }
+                if let lens = info.lens {
+                    Text(lens)
+                }
+                if !info.exposureLine.isEmpty {
+                    Text(info.exposureLine.joined(separator: "  "))
+                }
+                if let date = info.dateTaken {
+                    Text(date).foregroundColor(.gray)
+                }
+            }
+            .font(.system(size: 11, design: .monospaced))
+            .foregroundColor(.white)
+            .padding(10)
+            .background(Color.black.opacity(0.65))
+            .cornerRadius(6)
+            .padding(12)
+        }
+    }
+
+    /// Fetch EXIF for the current photo (called on toggle and on navigation
+    /// while the overlay is visible).
+    func loadEXIF() {
+        guard let file = session.currentFile, let decoder = decoder else {
+            currentEXIF = nil
+            return
+        }
+        Task {
+            let info = await decoder.extractEXIF(url: file)
+            // Ignore late results after further navigation.
+            if session.currentFile == file {
+                currentEXIF = info
+            }
         }
     }
 

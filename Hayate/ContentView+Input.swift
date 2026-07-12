@@ -182,6 +182,16 @@ extension ContentView {
             loadCurrentImage()
             return true
 
+        case .toggleInfo:
+            if compareMode || showGrid { return false }
+            showInfo.toggle()
+            if showInfo {
+                loadEXIF()
+            } else {
+                currentEXIF = nil
+            }
+            return true
+
         case .deletePhoto:
             if showGrid && !selectedIndices.isEmpty {
                 pendingDeletionIndices = selectedIndices
