@@ -10,6 +10,21 @@ struct SendableTexture: @unchecked Sendable {
     let texture: MTLTexture
 }
 
+/// Pre-formatted shooting metadata for the info overlay (I key).
+struct EXIFInfo: Sendable {
+    var camera: String?
+    var lens: String?
+    var shutter: String?
+    var aperture: String?
+    var iso: String?
+    var focalLength: String?
+    var dateTaken: String?
+
+    var exposureLine: [String] {
+        [shutter, aperture, iso, focalLength].compactMap { $0 }
+    }
+}
+
 /// Handles RAW and JPEG decoding.
 ///
 /// Unlike an actor, this class lets multiple decodes run in parallel: each public
@@ -77,6 +92,13 @@ final class ImageDecoder: @unchecked Sendable {
     func extractThumbnail(url: URL, maxSize: Int = 400) async -> CGImage? {
         await Task.detached(priority: .utility) { [self] in
             extractThumbnailSync(url: url, maxSize: maxSize)
+        }.value
+    }
+
+    /// Read shooting metadata (shutter, aperture, ISO, …) for the info overlay.
+    func extractEXIF(url: URL) async -> EXIFInfo? {
+        await Task.detached(priority: .utility) { [self] in
+            extractEXIFSync(url: url)
         }.value
     }
 
@@ -178,6 +200,62 @@ final class ImageDecoder: @unchecked Sendable {
             kCGImageSourceShouldCache: false
         ]
         return CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
+    }
+
+    private func extractEXIFSync(url: URL) -> EXIFInfo? {
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+              let props = CGImageSourceCopyPropertiesAtIndex(
+                source, 0, [kCGImageSourceShouldCache: false] as CFDictionary
+              ) as? [CFString: Any] else {
+            return nil
+        }
+
+        let exif = props[kCGImagePropertyExifDictionary] as? [CFString: Any] ?? [:]
+        let tiff = props[kCGImagePropertyTIFFDictionary] as? [CFString: Any] ?? [:]
+
+        var info = EXIFInfo()
+        info.camera = tiff[kCGImagePropertyTIFFModel] as? String
+        info.lens = exif[kCGImagePropertyExifLensModel] as? String
+        if let t = exif[kCGImagePropertyExifExposureTime] as? Double, t > 0 {
+            // Near-1s speeds (0.5, 0.6, 0.8 …) read better as decimals; the
+            // reciprocal form would misreport 0.6s as 1/2s.
+            info.shutter = t >= 0.4
+                ? String(format: "%gs", t)
+                : "1/\(Int((1 / t).rounded()))s"
+        }
+        if let f = exif[kCGImagePropertyExifFNumber] as? Double {
+            info.aperture = String(format: "f/%.1f", f)
+        }
+        if let isos = exif[kCGImagePropertyExifISOSpeedRatings] as? [Any],
+           let iso = isos.first as? Int {
+            info.iso = "ISO \(iso)"
+        }
+        if let fl = exif[kCGImagePropertyExifFocalLength] as? Double {
+            info.focalLength = "\(Int(fl.rounded()))mm"
+        }
+        if let raw = exif[kCGImagePropertyExifDateTimeOriginal] as? String {
+            info.dateTaken = Self.formatEXIFDate(raw)
+        }
+        return info
+    }
+
+    /// EXIF dates arrive as "2026:07:12 14:23:45" — reformat for display.
+    /// (DateFormatter is thread-safe for formatting on modern macOS.)
+    private static let exifDateParser: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy:MM:dd HH:mm:ss"
+        f.locale = Locale(identifier: "en_US_POSIX")
+        return f
+    }()
+    private static let exifDateDisplay: DateFormatter = {
+        let f = DateFormatter()
+        f.dateStyle = .medium
+        f.timeStyle = .short
+        return f
+    }()
+    private static func formatEXIFDate(_ raw: String) -> String {
+        guard let date = exifDateParser.date(from: raw) else { return raw }
+        return exifDateDisplay.string(from: date)
     }
 
     /// Apply Leica-style focus peaking: thin green lines on in-focus edges.
