@@ -102,6 +102,7 @@ enum ActionID: String, Codable, CaseIterable, Identifiable {
     case toggleCompare
     case toggleFitZoom
     case toggleFocusPeaking
+    case toggleInfo
     case deletePhoto
     case undo
     case selectAllGrid
@@ -121,6 +122,7 @@ enum ActionID: String, Codable, CaseIterable, Identifiable {
         case .toggleCompare: return "Toggle compare mode"
         case .toggleFitZoom: return "Toggle fit / 2× zoom"
         case .toggleFocusPeaking: return "Toggle focus peaking"
+        case .toggleInfo: return "Toggle info overlay (EXIF)"
         case .deletePhoto: return "Move photo to Trash"
         case .undo: return "Undo"
         case .selectAllGrid: return "Select all (grid)"
@@ -145,7 +147,7 @@ enum ActionID: String, Codable, CaseIterable, Identifiable {
         switch self {
         case .navigateBack, .navigateForward: return .navigation
         case .toggleFavorite, .toggleRejected: return .rating
-        case .toggleGrid, .toggleCompare, .toggleFitZoom, .toggleFocusPeaking: return .view
+        case .toggleGrid, .toggleCompare, .toggleFitZoom, .toggleFocusPeaking, .toggleInfo: return .view
         case .deletePhoto, .undo, .selectAllGrid: return .editing
         case .openFolder: return .file
         case .pickCompare, .skipNextBaseline: return .compareMode
@@ -173,6 +175,7 @@ final class KeybindingStore: ObservableObject {
         .toggleCompare: Shortcut(keyCode: 8),                           // C
         .toggleFitZoom: Shortcut(keyCode: 49),                          // Space
         .toggleFocusPeaking: Shortcut(keyCode: 3),                      // F
+        .toggleInfo: Shortcut(keyCode: 34),                             // I
         .deletePhoto: Shortcut(keyCode: 51),                            // ⌫
         .undo: Shortcut(keyCode: 6, modifiers: .command),               // ⌘Z
         .selectAllGrid: Shortcut(keyCode: 0, modifiers: .command),      // ⌘A
@@ -222,10 +225,14 @@ final class KeybindingStore: ObservableObject {
         let defaults = UserDefaults.standard
         if let data = defaults.data(forKey: Self.storageKey),
            let decoded = try? JSONDecoder().decode([ActionID: Shortcut].self, from: data) {
-            // Merge with defaults so newly introduced actions pick up a
-            // shortcut without wiping the user's custom bindings.
-            var merged = Self.defaults
-            for (action, shortcut) in decoded {
+            // Saved bindings win. Defaults only fill actions introduced after
+            // the user's last save — and never with a shortcut the user has
+            // assigned elsewhere, otherwise two actions would share one key
+            // and fire nondeterministically.
+            var merged = decoded
+            let taken = Set(decoded.values)
+            for (action, shortcut) in Self.defaults
+            where merged[action] == nil && !taken.contains(shortcut) {
                 merged[action] = shortcut
             }
             bindings = merged
