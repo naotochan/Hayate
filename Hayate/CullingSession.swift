@@ -71,7 +71,7 @@ class CullingSession: ObservableObject {
     }
 
     /// Supported RAW UTTypes that CIRAWFilter can handle.
-    static let rawUTTypes: Set<UTType> = [
+    nonisolated static let rawUTTypes: Set<UTType> = [
         .rawImage,
         UTType("com.canon.cr3-raw-image"),
         UTType("com.canon.cr2-raw-image"),
@@ -80,6 +80,27 @@ class CullingSession: ObservableObject {
         UTType("com.adobe.raw-image"),
         UTType("public.camera-raw-image"),
     ].compactMap { $0 }.reduce(into: Set<UTType>()) { $0.insert($1) }
+
+    /// Select which files a folder scan should show: every RAW, plus JPEGs
+    /// that have no RAW twin with the same basename. RAW+JPEG shooting thus
+    /// lists only the RAW, while JPEG-only shots still appear.
+    nonisolated static func selectPhotoFiles(from contents: [URL]) -> [URL] {
+        var raws: [URL] = []
+        var jpegs: [URL] = []
+        for url in contents {
+            guard let type = (try? url.resourceValues(forKeys: [.contentTypeKey]))?.contentType else { continue }
+            if rawUTTypes.contains(where: { type.conforms(to: $0) }) {
+                raws.append(url)
+            } else if type.conforms(to: .jpeg) {
+                jpegs.append(url)
+            }
+        }
+        let rawBasenames = Set(raws.map { $0.deletingPathExtension().lastPathComponent })
+        let soloJPEGs = jpegs.filter { !rawBasenames.contains($0.deletingPathExtension().lastPathComponent) }
+        return (raws + soloJPEGs).sorted {
+            $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending
+        }
+    }
 
     struct PhotoEntry: Codable {
         let fileName: String
@@ -228,13 +249,7 @@ class CullingSession: ObservableObject {
         undoStack.removeAll()
         addToRecents(url)
 
-        files = contents.filter { fileURL in
-            guard let resourceValues = try? fileURL.resourceValues(forKeys: [.contentTypeKey]),
-                  let contentType = resourceValues.contentType else {
-                return false
-            }
-            return Self.rawUTTypes.contains(where: { contentType.conforms(to: $0) })
-        }.sorted { $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending }
+        files = Self.selectPhotoFiles(from: contents)
 
         currentIndex = 0
 

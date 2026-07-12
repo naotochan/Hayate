@@ -138,13 +138,21 @@ final class ImageDecoder: @unchecked Sendable {
         return CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
     }
 
+    /// Full-quality CIImage for a file: CIRAWFilter for RAWs, plain CIImage
+    /// for JPEG-only shots (which go through the same display pipeline).
+    private func fullQualityImage(url: URL) -> CIImage? {
+        if let rawFilter = CIRAWFilter(imageURL: url), let output = rawFilter.outputImage {
+            return output
+        }
+        return CIImage(contentsOf: url)
+    }
+
     private func decodeRAWToCGImageSync(url: URL, displaySize: CGSize) -> CGImage? {
         let signpostID = OSSignpostID(log: signpostLog)
         os_signpost(.begin, log: signpostLog, name: "decodeRAWCGImage", signpostID: signpostID, "file: %{public}s", url.lastPathComponent)
         defer { os_signpost(.end, log: signpostLog, name: "decodeRAWCGImage", signpostID: signpostID) }
 
-        guard let rawFilter = CIRAWFilter(imageURL: url) else { return nil }
-        guard let outputImage = rawFilter.outputImage else { return nil }
+        guard let outputImage = fullQualityImage(url: url) else { return nil }
 
         let scale = min(
             displaySize.width / outputImage.extent.width,
@@ -159,11 +167,7 @@ final class ImageDecoder: @unchecked Sendable {
         os_signpost(.begin, log: signpostLog, name: "decodeRAW", signpostID: signpostID, "file: %{public}s", url.lastPathComponent)
         defer { os_signpost(.end, log: signpostLog, name: "decodeRAW", signpostID: signpostID) }
 
-        guard let rawFilter = CIRAWFilter(imageURL: url) else {
-            return nil
-        }
-
-        guard let outputImage = rawFilter.outputImage else {
+        guard let outputImage = fullQualityImage(url: url) else {
             return nil
         }
 
@@ -186,11 +190,7 @@ final class ImageDecoder: @unchecked Sendable {
         os_signpost(.begin, log: signpostLog, name: "decodeRAWFull", signpostID: signpostID, "file: %{public}s", url.lastPathComponent)
         defer { os_signpost(.end, log: signpostLog, name: "decodeRAWFull", signpostID: signpostID) }
 
-        guard let rawFilter = CIRAWFilter(imageURL: url) else {
-            return nil
-        }
-
-        guard let outputImage = rawFilter.outputImage else {
+        guard let outputImage = fullQualityImage(url: url) else {
             return nil
         }
 
