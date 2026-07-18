@@ -36,6 +36,7 @@ struct OnboardingOverlay: View {
     let frames: [OnboardingAnchor: CGRect]
     let onDismiss: () -> Void
 
+    @EnvironmentObject private var L: LocalizationStore
     @State private var step = 0
 
     private let calloutWidth: CGFloat = 320
@@ -113,7 +114,7 @@ struct OnboardingOverlay: View {
                 )
 
             HStack(spacing: 10) {
-                Button("Skip", action: onDismiss)
+                Button(L.t("Skip", ja: "スキップ"), action: onDismiss)
                     .buttonStyle(.plain)
                     .font(.system(size: 11))
                     .foregroundColor(.white.opacity(0.45))
@@ -121,13 +122,15 @@ struct OnboardingOverlay: View {
                 Spacer()
 
                 if step > 0 {
-                    Button("Back") { step -= 1 }
+                    Button(L.t("Back", ja: "戻る")) { step -= 1 }
                         .buttonStyle(.plain)
                         .font(.system(size: 11, weight: .medium))
                         .foregroundColor(.white.opacity(0.7))
                 }
 
-                Button(step == steps.count - 1 ? "Done" : "Next") {
+                Button(step == steps.count - 1
+                       ? L.t("Done", ja: "完了")
+                       : L.t("Next", ja: "次へ")) {
                     if step == steps.count - 1 {
                         onDismiss()
                     } else {
@@ -184,9 +187,9 @@ struct OnboardingOverlay: View {
             }
         case 1:
             VStack(alignment: .leading, spacing: 6) {
-                previewSectionLabel("Pinned")
+                previewSectionLabel(L.t("Pinned", ja: "ピン留め"))
                 previewFolderRow(name: "Wedding_Main", path: "/Volumes/SSD/2026", pinned: true)
-                previewSectionLabel("Recent")
+                previewSectionLabel(L.t("Recent", ja: "最近"))
                     .padding(.top, 2)
                 previewFolderRow(name: "2026-04-03", path: "/Volumes/SanDisk/日常/Leica", pinned: false)
             }
@@ -204,9 +207,9 @@ struct OnboardingOverlay: View {
                             .foregroundColor(.white.opacity(0.6))
                     )
                 HStack(spacing: 8) {
-                    previewKeyCap(bindings[.toggleFavorite]?.display ?? "K", label: "Keep")
-                    previewKeyCap(bindings[.setTriageMaybe]?.display ?? "M", label: "Maybe")
-                    previewKeyCap(bindings[.toggleRejected]?.display ?? "O", label: "Out")
+                    previewKeyCap(bindings[.toggleFavorite]?.display ?? "K", label: L.t("Keep", ja: "キープ"))
+                    previewKeyCap(bindings[.setTriageMaybe]?.display ?? "M", label: L.t("Maybe", ja: "保留"))
+                    previewKeyCap(bindings[.toggleRejected]?.display ?? "O", label: L.t("Out", ja: "アウト"))
                 }
             }
         }
@@ -303,18 +306,27 @@ struct OnboardingOverlay: View {
         return [
             Step(
                 icon: "folder.badge.plus",
-                title: "Open a photo folder",
-                body: "Start here to choose a folder. You can also drag a folder directly onto the main area."
+                title: L.t("Open a photo folder", ja: "写真フォルダを開く"),
+                body: L.t(
+                    "Start here to choose a folder. You can also drag a folder directly onto the main area.",
+                    ja: "ここからフォルダを選びます。メインエリアにフォルダをドラッグしても開けます。"
+                )
             ),
             Step(
                 icon: "sidebar.left",
-                title: "Switch folders quickly",
-                body: "Pinned folders stay at the top; recently opened folders appear below. Use \(sidebar) to show or hide this sidebar."
+                title: L.t("Switch folders quickly", ja: "フォルダをすばやく切り替え"),
+                body: L.t(
+                    "Pinned folders stay at the top; recently opened folders appear below. Use \(sidebar) to show or hide this sidebar.",
+                    ja: "ピン留めは上部に固定され、最近開いたフォルダはその下に並びます。\(sidebar) でサイドバーの表示を切り替えます。"
+                )
             ),
             Step(
                 icon: "hand.tap",
-                title: "Drop, then cull",
-                body: "Drop a folder in this area. Once photos open, use \(keep) Keep · \(maybe) Maybe · \(out) Out. Press ? anytime for every shortcut."
+                title: L.t("Drop, then cull", ja: "ドロップして選別"),
+                body: L.t(
+                    "Drop a folder in this area. Once photos open, use \(keep) Keep · \(maybe) Maybe · \(out) Out. Press ? anytime for every shortcut.",
+                    ja: "このエリアにフォルダをドロップ。写真が開いたら \(keep) キープ · \(maybe) 保留 · \(out) アウト。? でいつでも全ショートカットを表示できます。"
+                )
             ),
         ]
     }

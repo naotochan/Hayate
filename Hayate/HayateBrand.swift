@@ -13,6 +13,8 @@ struct HayateBrandScreen: View {
     /// A folder drag is hovering over the window — show the drop affordance.
     var dropTargeted: Bool = false
 
+    @EnvironmentObject private var L: LocalizationStore
+
     /// Subsequent launches shorten the intro.
     @AppStorage("hayateLaunchCount") private var launchCount = 0
     @State private var markOpacity: Double = 0
@@ -47,16 +49,18 @@ struct HayateBrandScreen: View {
                         .tracking(1.2)
                         .foregroundColor(.white.opacity(0.92))
 
-                    Text(isLoading ? "Preparing…"
-                         : dropTargeted ? "Release to open this folder"
-                         : "Drop a folder or open one to begin")
+                    Text(isLoading
+                         ? L.t("Preparing…", ja: "準備中…")
+                         : dropTargeted
+                         ? L.t("Release to open this folder", ja: "離してこのフォルダを開く")
+                         : L.t("Drop a folder or open one to begin", ja: "フォルダをドロップするか開いて始めましょう"))
                         .font(.system(size: 13))
                         .foregroundColor(.white.opacity(dropTargeted ? 0.85 : 0.4))
                 }
                 .opacity(textOpacity)
 
                 if case .empty(let onOpen, let recent, let onOpenRecent) = mode {
-                    Button("Open Folder…", action: onOpen)
+                    Button(L.t("Open Folder…", ja: "フォルダを開く…"), action: onOpen)
                         .buttonStyle(.borderedProminent)
                         .tint(Color.white.opacity(0.18))
                         .foregroundColor(.white.opacity(0.9))
@@ -95,7 +99,7 @@ struct HayateBrandScreen: View {
 
     private func recentFoldersList(_ folders: [URL], onOpen: @escaping (URL) -> Void) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("Recent Folders")
+            Text(L.t("Recent Folders", ja: "最近のフォルダ"))
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundColor(.white.opacity(0.4))
                 .textCase(.uppercase)
@@ -126,7 +130,7 @@ struct HayateBrandScreen: View {
                         }
                         Spacer(minLength: 0)
                         if !available {
-                            Text("Unavailable")
+                            Text(L.t("Unavailable", ja: "利用不可"))
                                 .font(.system(size: 10))
                                 .foregroundColor(.white.opacity(0.3))
                         }
@@ -140,7 +144,9 @@ struct HayateBrandScreen: View {
                 }
                 .buttonStyle(.plain)
                 .disabled(!available)
-                .help(available ? url.path : "This folder is not currently reachable")
+                .help(available
+                      ? url.path
+                      : L.t("This folder is not currently reachable", ja: "このフォルダには現在アクセスできません"))
             }
         }
     }

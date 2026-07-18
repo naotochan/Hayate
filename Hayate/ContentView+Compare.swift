@@ -53,7 +53,7 @@ extension ContentView {
 
                                 // "PICK" hint on active slot
                                 if isActive {
-                                    Text("⏎ Pick")
+                                    Text(L.t("⏎ Pick", ja: "⏎ 選ぶ"))
                                         .font(.system(size: 13, weight: .semibold))
                                         .foregroundColor(.white)
                                         .padding(.horizontal, 12)
@@ -90,11 +90,14 @@ extension ContentView {
                 Divider()
                     .frame(height: 14)
 
-                Text("COMPARE")
+                Text(L.t("COMPARE", ja: "比較"))
                     .font(.system(size: 11, weight: .bold, design: .monospaced))
                     .foregroundColor(.accentColor)
 
-                Text("←→ select  |  ⏎ pick  |  Tab skip  |  Esc exit")
+                Text(L.t(
+                    "←→ select  |  ⏎ pick  |  Tab skip  |  Esc exit",
+                    ja: "←→ 選択  |  ⏎ 選ぶ  |  Tab スキップ  |  Esc 終了"
+                ))
                     .font(.system(size: 11))
                     .foregroundColor(.gray)
 

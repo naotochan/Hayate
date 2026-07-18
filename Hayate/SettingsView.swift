@@ -3,16 +3,17 @@ import AppKit
 
 struct SettingsView: View {
     @EnvironmentObject private var keybindings: KeybindingStore
+    @EnvironmentObject private var L: LocalizationStore
     @State private var recordingAction: ActionID?
 
     var body: some View {
         TabView {
             generalTab
-                .tabItem { Label("General", systemImage: "gearshape") }
+                .tabItem { Label(L.t("General", ja: "一般"), systemImage: "gearshape") }
             shortcutsTab
-                .tabItem { Label("Shortcuts", systemImage: "keyboard") }
+                .tabItem { Label(L.t("Shortcuts", ja: "ショートカット"), systemImage: "keyboard") }
             cacheTab
-                .tabItem { Label("Cache", systemImage: "internaldrive") }
+                .tabItem { Label(L.t("Cache", ja: "キャッシュ"), systemImage: "internaldrive") }
         }
         .frame(width: 520, height: 560)
     }
@@ -25,10 +26,11 @@ struct SettingsView: View {
     @AppStorage("colorizeKeepOnly") private var colorizeKeepOnly = true
     @AppStorage("cullingProfileTriage") private var cullingProfileTriage = true
     @AppStorage("sceneGapMinutes") private var sceneGapMinutes = 15
+    @AppStorage("appAppearance") private var appAppearance: AppAppearance = .system
 
     private var generalTab: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("General")
+            Text(L.t("General", ja: "一般"))
                 .font(.title2)
                 .fontWeight(.semibold)
                 .padding(.horizontal)
@@ -36,64 +38,117 @@ struct SettingsView: View {
 
             Form {
                 Section {
-                    Toggle("Draft cull mode", isOn: $cullModeDraft)
-                    Text("Navigate using embedded JPEG (and disk cache) only. Full RAW decode runs when you enable focus peaking (F) or zoom in. Fastest path for large shoots.")
+                    Picker(L.t("Appearance", ja: "外観"), selection: $appAppearance) {
+                        ForEach(AppAppearance.allCases) { mode in
+                            Text(mode.label(L.resolved)).tag(mode)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    Text(L.t(
+                        "Applies to settings and system chrome. The photo viewer stays dark for accurate culling.",
+                        ja: "設定やシステムの枠に反映されます。写真ビューアは正確な選別のためダークのままです。"
+                    ))
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                }
+
+                Section {
+                    Picker(L.t("Language", ja: "言語"), selection: $L.language) {
+                        ForEach(AppLanguage.allCases) { lang in
+                            Text(lang.pickerLabel).tag(lang)
+                        }
+                    }
+                    Text(L.t(
+                        "Applies immediately to menus and on-screen text.",
+                        ja: "メニューや画面上の文言にすぐ反映されます。"
+                    ))
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                }
+
+                Section {
+                    Toggle(L.t("Draft cull mode", ja: "下書き選別モード"), isOn: $cullModeDraft)
+                    Text(L.t(
+                        "Navigate using embedded JPEG (and disk cache) only. Full RAW decode runs when you enable focus peaking (F) or zoom in. Fastest path for large shoots.",
+                        ja: "埋め込みJPEG（とディスクキャッシュ）だけでナビゲートします。フォーカスピーキング（F）やズーム時だけフルRAWをデコード。大量撮影向きの最速パスです。"
+                    ))
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
 
                 Section {
-                    Picker("Culling profile", selection: $cullingProfileTriage) {
-                        Text("Keep / Maybe / Out").tag(true)
-                        Text("Stars (1–5)").tag(false)
+                    Picker(L.t("Culling profile", ja: "選別プロファイル"), selection: $cullingProfileTriage) {
+                        Text(L.t("Keep / Maybe / Out", ja: "キープ / 保留 / アウト")).tag(true)
+                        Text(L.t("Stars (1–5)", ja: "星（1–5）")).tag(false)
                     }
                     Text(cullingProfileTriage
-                         ? "K = Keep, M = Maybe, O = Out. Same key again clears. Stored as favorite / rating 3 / reject so existing files stay compatible."
-                         : "Number keys 1–5 set stars; K favorites; O rejects.")
+                         ? L.t(
+                            "K = Keep, M = Maybe, O = Out. Same key again clears. Stored as favorite / rating 3 / reject so existing files stay compatible.",
+                            ja: "K = キープ、M = 保留、O = アウト。同じキーでもう一度押すと解除。お気に入り / 星3 / 却下として保存し、既存ファイルと互換を保ちます。"
+                         )
+                         : L.t(
+                            "Number keys 1–5 set stars; K favorites; O rejects.",
+                            ja: "数字キー1–5で星、Kでお気に入り、Oで却下。"
+                         ))
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
 
                 Section {
-                    Toggle("Colorize Keep only", isOn: $colorizeKeepOnly)
-                    Text("In the filmstrip and grid, Keep stays full color; other thumbnails go nearly grayscale. The main viewer is always full color. Badges still show state.")
+                    Toggle(L.t("Colorize Keep only", ja: "キープだけカラー表示"), isOn: $colorizeKeepOnly)
+                    Text(L.t(
+                        "In the filmstrip and grid, Keep stays full color; other thumbnails go nearly grayscale. The main viewer is always full color. Badges still show state.",
+                        ja: "フィルムストリップとグリッドではキープだけフルカラー、他はほぼグレースケール。メインビューアは常にフルカラー。バッジは状態を表示します。"
+                    ))
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
 
                 Section {
-                    Toggle("Auto-advance after rating", isOn: $autoAdvance)
-                    Text("Jump to the next photo after Keep / Maybe / Out (or stars / favorite / reject) in the single-photo view.")
+                    Toggle(L.t("Auto-advance after rating", ja: "評価後に自動で次へ"), isOn: $autoAdvance)
+                    Text(L.t(
+                        "Jump to the next photo after Keep / Maybe / Out (or stars / favorite / reject) in the single-photo view.",
+                        ja: "1枚表示でキープ / 保留 / アウト（または星 / お気に入り / 却下）のあと、次の写真へ進みます。"
+                    ))
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
 
                 Section {
-                    Toggle("Write XMP sidecar files", isOn: $writeXMPSidecars)
-                    Text("Save ratings next to each RAW as a .xmp file that Lightroom and Capture One can read. Rejected photos get rating −1 (Bridge convention), favorites a red label. Sidecars created by other apps are never modified.")
+                    Toggle(L.t("Write XMP sidecar files", ja: "XMPサイドカーを書き出す"), isOn: $writeXMPSidecars)
+                    Text(L.t(
+                        "Save ratings next to each RAW as a .xmp file that Lightroom and Capture One can read. Rejected photos get rating −1 (Bridge convention), favorites a red label. Sidecars created by other apps are never modified.",
+                        ja: "各RAWの横にLightroomやCapture Oneが読める.xmpを保存。却下は評価−1（Bridge慣習）、お気に入りは赤いラベル。他アプリが作ったサイドカーは変更しません。"
+                    ))
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
 
                 Section {
-                    Picker("Grid scene gap", selection: $sceneGapMinutes) {
-                        Text("Off").tag(0)
-                        Text("5 minutes").tag(5)
-                        Text("10 minutes").tag(10)
-                        Text("15 minutes").tag(15)
-                        Text("30 minutes").tag(30)
-                        Text("60 minutes").tag(60)
+                    Picker(L.t("Grid scene gap", ja: "グリッドのシーン区切り"), selection: $sceneGapMinutes) {
+                        Text(L.t("Off", ja: "オフ")).tag(0)
+                        Text(L.t("5 minutes", ja: "5分")).tag(5)
+                        Text(L.t("10 minutes", ja: "10分")).tag(10)
+                        Text(L.t("15 minutes", ja: "15分")).tag(15)
+                        Text(L.t("30 minutes", ja: "30分")).tag(30)
+                        Text(L.t("60 minutes", ja: "60分")).tag(60)
                     }
-                    Text("Draw a thin separator in the grid when consecutive photos are farther apart than this (by EXIF capture time). Photos without EXIF dates never create a break.")
+                    Text(L.t(
+                        "Draw a thin separator in the grid when consecutive photos are farther apart than this (by EXIF capture time). Photos without EXIF dates never create a break.",
+                        ja: "連続する写真の撮影時刻（EXIF）がこの間隔より空いたとき、グリッドに細い区切りを描きます。EXIF日付がない写真では区切りません。"
+                    ))
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
 
                 Section {
-                    Button("Show Welcome Guide…") {
+                    Button(L.t("Show Welcome Guide…", ja: "ようこそガイドを表示…")) {
                         NotificationCenter.default.post(name: .showOnboarding, object: nil)
                     }
-                    Text("Reopen the 3-step intro (open folder, cull keys, sidebar / shortcuts).")
+                    Text(L.t(
+                        "Reopen the 3-step intro (open folder, cull keys, sidebar / shortcuts).",
+                        ja: "3ステップの導入（フォルダを開く、選別キー、サイドバー / ショートカット）を再表示します。"
+                    ))
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
@@ -121,7 +176,7 @@ struct SettingsView: View {
 
     private var cacheTab: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Preview Cache")
+            Text(L.t("Preview Cache", ja: "プレビューキャッシュ"))
                 .font(.title2)
                 .fontWeight(.semibold)
                 .padding(.horizontal)
@@ -131,7 +186,7 @@ struct SettingsView: View {
                 Section {
                     HStack {
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("Cache Location")
+                            Text(L.t("Cache Location", ja: "キャッシュの場所"))
                                 .fontWeight(.medium)
                             Text(effectiveCacheRoot.path)
                                 .font(.caption)
@@ -140,24 +195,24 @@ struct SettingsView: View {
                                 .truncationMode(.middle)
                         }
                         Spacer()
-                        Button("Change…") {
+                        Button(L.t("Change…", ja: "変更…")) {
                             chooseCacheLocation()
                         }
                         if !cacheLocationPath.isEmpty {
-                            Button("Reset") {
+                            Button(L.t("Reset", ja: "リセット")) {
                                 cacheLocationPath = ""
                             }
                             .controlSize(.small)
                         }
                     }
 
-                    Picker("Maximum Cache Size", selection: $cacheSizeLimitGB) {
+                    Picker(L.t("Maximum Cache Size", ja: "キャッシュ上限"), selection: $cacheSizeLimitGB) {
                         Text("1 GB").tag(1)
                         Text("5 GB").tag(5)
                         Text("10 GB").tag(10)
                         Text("20 GB").tag(20)
                         Text("50 GB").tag(50)
-                        Text("Unlimited").tag(0)
+                        Text(L.t("Unlimited", ja: "無制限")).tag(0)
                     }
                     .pickerStyle(.menu)
                 }
@@ -165,14 +220,17 @@ struct SettingsView: View {
                 Section {
                     HStack {
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("Current Usage")
+                            Text(L.t("Current Usage", ja: "現在の使用量"))
                                 .fontWeight(.medium)
-                            Text("\(formattedSize(cacheUsageBytes)) — \(cacheFileCount) files")
+                            Text(L.t(
+                                "\(formattedSize(cacheUsageBytes)) — \(cacheFileCount) files",
+                                ja: "\(formattedSize(cacheUsageBytes)) — \(cacheFileCount) ファイル"
+                            ))
                                 .font(.caption)
                                 .foregroundColor(.secondary)
                         }
                         Spacer()
-                        Button("Clear Cache") {
+                        Button(L.t("Clear Cache", ja: "キャッシュをクリア")) {
                             showClearConfirmation = true
                         }
                         .disabled(cacheFileCount == 0)
@@ -181,7 +239,10 @@ struct SettingsView: View {
             }
             .formStyle(.grouped)
 
-            Text("Cache location changes take effect on next app launch.")
+            Text(L.t(
+                "Cache location changes take effect on next app launch.",
+                ja: "キャッシュ場所の変更は次回起動時に反映されます。"
+            ))
                 .font(.caption)
                 .foregroundColor(.secondary)
                 .padding(.horizontal)
@@ -190,11 +251,14 @@ struct SettingsView: View {
         }
         .onAppear { refreshCacheUsage() }
         .onChange(of: cacheSizeLimitGB) { _ in triggerEviction() }
-        .alert("Clear Preview Cache?", isPresented: $showClearConfirmation) {
-            Button("Clear", role: .destructive) { clearCache() }
-            Button("Cancel", role: .cancel) {}
+        .alert(L.t("Clear Preview Cache?", ja: "プレビューキャッシュをクリアしますか？"), isPresented: $showClearConfirmation) {
+            Button(L.t("Clear", ja: "クリア"), role: .destructive) { clearCache() }
+            Button(L.t("Cancel", ja: "キャンセル"), role: .cancel) {}
         } message: {
-            Text("This will delete all \(cacheFileCount) cached preview files (\(formattedSize(cacheUsageBytes))). Previews will be regenerated as you browse.")
+            Text(L.t(
+                "This will delete all \(cacheFileCount) cached preview files (\(formattedSize(cacheUsageBytes))). Previews will be regenerated as you browse.",
+                ja: "キャッシュ済みプレビュー \(cacheFileCount) 件（\(formattedSize(cacheUsageBytes))）をすべて削除します。閲覧に応じて再生成されます。"
+            ))
         }
     }
 
@@ -203,8 +267,11 @@ struct SettingsView: View {
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
         panel.canCreateDirectories = true
-        panel.prompt = "Select"
-        panel.message = "Choose a folder to store preview cache files"
+        panel.prompt = L.t("Select", ja: "選択")
+        panel.message = L.t(
+            "Choose a folder to store preview cache files",
+            ja: "プレビューキャッシュを保存するフォルダを選んでください"
+        )
         if panel.runModal() == .OK, let url = panel.url {
             cacheLocationPath = url.path
         }
@@ -254,11 +321,11 @@ struct SettingsView: View {
     private var shortcutsTab: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("Keyboard Shortcuts")
+                Text(L.t("Keyboard Shortcuts", ja: "キーボードショートカット"))
                     .font(.title2)
                     .fontWeight(.semibold)
                 Spacer()
-                Button("Reset to Defaults") {
+                Button(L.t("Reset to Defaults", ja: "デフォルトに戻す")) {
                     keybindings.resetToDefaults()
                     recordingAction = nil
                 }
@@ -266,14 +333,17 @@ struct SettingsView: View {
             .padding(.horizontal)
             .padding(.top)
 
-            Text("Rating keys (0–5), ⎋, ?, and ⌘, are fixed and cannot be rebound. Press ? or / for the on-screen cheat sheet.")
+            Text(L.t(
+                "Rating keys (0–5), ⎋, ?, and ⌘, are fixed and cannot be rebound. Press ? or / for the on-screen cheat sheet.",
+                ja: "評価キー（0–5）、⎋、?、⌘, は固定で変更できません。? または / で画面上の早見表を表示します。"
+            ))
                 .font(.caption)
                 .foregroundColor(.secondary)
                 .padding(.horizontal)
 
             List {
                 ForEach(ActionID.Category.allCases) { category in
-                    Section(category.rawValue) {
+                    Section(category.title(L.resolved)) {
                         ForEach(actions(in: category)) { action in
                             row(for: action)
                         }
@@ -289,10 +359,11 @@ struct SettingsView: View {
 
     private func row(for action: ActionID) -> some View {
         HStack {
-            Text(action.title)
+            Text(action.title(L.resolved))
             Spacer()
             if recordingAction == action {
                 ShortcutRecorder(
+                    prompt: L.t("Press a key…", ja: "キーを押してください…"),
                     onCapture: { shortcut in
                         keybindings.bind(shortcut, to: action)
                         recordingAction = nil
@@ -305,7 +376,7 @@ struct SettingsView: View {
                 Text(keybindings.bindings[action]?.display ?? "—")
                     .foregroundColor(.secondary)
                     .font(.system(.body, design: .monospaced))
-                Button("Record") {
+                Button(L.t("Record", ja: "記録")) {
                     recordingAction = action
                 }
                 .controlSize(.small)
@@ -317,7 +388,7 @@ struct SettingsView: View {
                             .foregroundColor(.secondary)
                     }
                     .buttonStyle(.plain)
-                    .help("Clear binding")
+                    .help(L.t("Clear binding", ja: "割り当てを解除"))
                 }
             }
         }
@@ -327,11 +398,13 @@ struct SettingsView: View {
 /// One-shot recorder: pops up a capture field that consumes the next keyDown
 /// and hands the result back via `onCapture`.
 private struct ShortcutRecorder: NSViewRepresentable {
+    let prompt: String
     let onCapture: (Shortcut) -> Void
     let onCancel: () -> Void
 
     func makeNSView(context: Context) -> RecorderView {
         let view = RecorderView()
+        view.prompt = prompt
         view.onCapture = onCapture
         view.onCancel = onCancel
         DispatchQueue.main.async {
@@ -341,11 +414,14 @@ private struct ShortcutRecorder: NSViewRepresentable {
     }
 
     func updateNSView(_ nsView: RecorderView, context: Context) {
+        nsView.prompt = prompt
         nsView.onCapture = onCapture
         nsView.onCancel = onCancel
+        nsView.needsDisplay = true
     }
 
     final class RecorderView: NSView {
+        var prompt: String = "Press a key…"
         var onCapture: ((Shortcut) -> Void)?
         var onCancel: (() -> Void)?
 
@@ -358,7 +434,7 @@ private struct ShortcutRecorder: NSViewRepresentable {
                 .font: NSFont.systemFont(ofSize: 11),
                 .foregroundColor: NSColor.controlAccentColor,
             ]
-            let text = "Press a key…"
+            let text = prompt
             let size = (text as NSString).size(withAttributes: attrs)
             let origin = NSPoint(
                 x: (bounds.width - size.width) / 2,
