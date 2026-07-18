@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import AppKit
 
 /// User-facing language preference. Persisted via UserDefaults.
 enum AppLanguage: String, CaseIterable, Identifiable {
@@ -89,5 +90,27 @@ enum AppAppearance: String, CaseIterable, Identifiable {
         case .light: return lang.t("Light", ja: "ライト")
         case .dark: return lang.t("Dark", ja: "ダーク")
         }
+    }
+
+    /// Sync AppKit with the preference. `preferredColorScheme` alone can leave
+    /// `NSApp`/window appearance stuck after Light → System, so custom
+    /// `HayateTheme` colors and Settings Form chrome stay half light / half dark.
+    @MainActor
+    func applyToApp() {
+        switch self {
+        case .system:
+            NSApp.appearance = nil
+        case .light:
+            NSApp.appearance = NSAppearance(named: .aqua)
+        case .dark:
+            NSApp.appearance = NSAppearance(named: .darkAqua)
+        }
+    }
+
+    /// Read persisted preference and apply before the first window draws.
+    @MainActor
+    static func applyStoredToApp() {
+        let raw = UserDefaults.standard.string(forKey: "appAppearance") ?? AppAppearance.system.rawValue
+        (AppAppearance(rawValue: raw) ?? .system).applyToApp()
     }
 }

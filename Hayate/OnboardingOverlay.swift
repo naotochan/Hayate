@@ -187,9 +187,9 @@ struct OnboardingOverlay: View {
             }
         case 1:
             VStack(alignment: .leading, spacing: 6) {
-                previewSectionLabel(L.t("Pinned", ja: "ピン留め"))
+                previewSectionLabel("Pinned")
                 previewFolderRow(name: "Wedding_Main", path: "/Volumes/SSD/2026", pinned: true)
-                previewSectionLabel(L.t("Recent", ja: "最近"))
+                previewSectionLabel("Recent")
                     .padding(.top, 2)
                 previewFolderRow(name: "2026-04-03", path: "/Volumes/SanDisk/日常/Leica", pinned: false)
             }
@@ -207,9 +207,9 @@ struct OnboardingOverlay: View {
                             .foregroundColor(.white.opacity(0.6))
                     )
                 HStack(spacing: 8) {
-                    previewKeyCap(bindings[.toggleFavorite]?.display ?? "K", label: L.t("Keep", ja: "キープ"))
-                    previewKeyCap(bindings[.setTriageMaybe]?.display ?? "M", label: L.t("Maybe", ja: "保留"))
-                    previewKeyCap(bindings[.toggleRejected]?.display ?? "O", label: L.t("Out", ja: "アウト"))
+                    previewKeyCap(bindings[.toggleFavorite]?.display ?? "K", label: "Keep")
+                    previewKeyCap(bindings[.setTriageMaybe]?.display ?? "M", label: "Maybe")
+                    previewKeyCap(bindings[.toggleRejected]?.display ?? "O", label: "Out")
                 }
             }
         }
@@ -317,7 +317,7 @@ struct OnboardingOverlay: View {
                 title: L.t("Switch folders quickly", ja: "フォルダをすばやく切り替え"),
                 body: L.t(
                     "Pinned folders stay at the top; recently opened folders appear below. Use \(sidebar) to show or hide this sidebar.",
-                    ja: "ピン留めは上部に固定され、最近開いたフォルダはその下に並びます。\(sidebar) でサイドバーの表示を切り替えます。"
+                    ja: "Pinned は上部に固定され、Recent はその下に並びます。\(sidebar) でサイドバーの表示を切り替えます。"
                 )
             ),
             Step(
@@ -325,7 +325,7 @@ struct OnboardingOverlay: View {
                 title: L.t("Drop, then cull", ja: "ドロップして選別"),
                 body: L.t(
                     "Drop a folder in this area. Once photos open, use \(keep) Keep · \(maybe) Maybe · \(out) Out. Press ? anytime for every shortcut.",
-                    ja: "このエリアにフォルダをドロップ。写真が開いたら \(keep) キープ · \(maybe) 保留 · \(out) アウト。? でいつでも全ショートカットを表示できます。"
+                    ja: "このエリアにフォルダをドロップ。写真が開いたら \(keep) Keep · \(maybe) Maybe · \(out) Out。? でいつでも全ショートカットを表示できます。"
                 )
             ),
         ]

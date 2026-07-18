@@ -15,7 +15,9 @@ extension ContentView {
                 .padding(.horizontal, 4)
             }
             .frame(height: 68)
-            .background(Color.black.opacity(0.6))
+            // Always dark: a light `HayateTheme.bar` shows through dimmed
+            // thumbnails (opacity < 1) as a washed horizontal band.
+            .background(Color.black.opacity(0.85))
             .onChange(of: session.currentIndex) { _, newIndex in
                 withAnimation(.easeInOut(duration: 0.15)) {
                     proxy.scrollTo(newIndex, anchor: .center)
@@ -32,18 +34,25 @@ extension ContentView {
         let entry = session.entries[url.lastPathComponent]
 
         return ZStack(alignment: .bottomTrailing) {
-            if let nsImage = thumbnails[url] {
-                Image(nsImage: nsImage)
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-                    .frame(width: 80, height: 60)
-                    .clipped()
-                    .saturation(CullThumbnailStyle.saturation(for: entry, enabled: colorizeKeepOnly))
-            } else {
-                Rectangle()
-                    .fill(Color.gray.opacity(0.3))
-                    .frame(width: 80, height: 60)
-                    .onAppear { loadThumbnail(for: url) }
+            Group {
+                if let nsImage = thumbnails[url] {
+                    Image(nsImage: nsImage)
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                        .saturation(CullThumbnailStyle.saturation(for: entry, enabled: colorizeKeepOnly))
+                } else {
+                    Color.gray.opacity(0.3)
+                        .onAppear { loadThumbnail(for: url) }
+                }
+            }
+            .frame(width: 80, height: 60)
+            .clipped()
+            // Dim via overlay (not view opacity) so a light chrome behind
+            // the strip cannot wash through non-current thumbs.
+            .overlay {
+                if !isCurrent {
+                    Color.black.opacity(0.4)
+                }
             }
 
             // Rating/favorite/rejected indicator
@@ -60,7 +69,6 @@ extension ContentView {
                 .padding(2)
         }
         .border(isCurrent ? Color.white : Color.clear, width: 2)
-        .opacity(isCurrent ? 1.0 : 0.6)
         .onTapGesture {
             session.currentIndex = index
         }
@@ -117,7 +125,7 @@ extension ContentView {
 
                 // Cull mode / focus peaking indicators
                 if cullModeDraft {
-                    Text(L.t("DRAFT", ja: "下書き"))
+                    Text("DRAFT")
                         .font(.system(size: 10, weight: .bold, design: .monospaced))
                         .foregroundColor(.cyan)
                         .padding(.horizontal, 4)
@@ -126,11 +134,11 @@ extension ContentView {
                         .cornerRadius(3)
                         .help(L.t(
                             "Draft mode: embedded JPEG previews. Press F or zoom for full RAW.",
-                            ja: "下書きモード: 埋め込みJPEGプレビュー。F またはズームでフルRAW。"
+                            ja: "Draft モード: 埋め込みJPEGプレビュー。F またはズームでフルRAW。"
                         ))
                 }
                 if focusPeakingEnabled {
-                    Text(L.t("PEAK", ja: "ピーク"))
+                    Text("PEAK")
                         .font(.system(size: 10, weight: .bold, design: .monospaced))
                         .foregroundColor(.red)
                         .padding(.horizontal, 4)
@@ -160,7 +168,7 @@ extension ContentView {
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
         .background(.ultraThinMaterial)
-        .foregroundColor(.white)
+        .foregroundColor(HayateTheme.fg(0.92))
         .font(.system(size: 13))
     }
 
@@ -178,7 +186,7 @@ extension ContentView {
             let recent = session.otherRecentFolders
             if !recent.isEmpty {
                 Divider()
-                Section(L.t("Recent Folders", ja: "最近のフォルダ")) {
+                Section("Recent Folders") {
                     ForEach(recent, id: \.path) { url in
                         Button {
                             session.requestOpen(folder: url)
@@ -193,17 +201,17 @@ extension ContentView {
             HStack(spacing: 5) {
                 Image(systemName: "folder.fill")
                     .font(.system(size: 11))
-                Text(session.folderURL?.lastPathComponent ?? L.t("Folder", ja: "フォルダ"))
+                Text(session.folderURL?.lastPathComponent ?? "Folder")
                     .lineLimit(1)
                     .truncationMode(.middle)
                 Image(systemName: "chevron.down")
                     .font(.system(size: 8, weight: .bold))
                     .opacity(0.65)
             }
-            .foregroundColor(.white.opacity(0.9))
+            .foregroundColor(HayateTheme.fg(0.9))
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
-            .background(Color.white.opacity(0.1))
+            .background(HayateTheme.wash(0.1))
             .cornerRadius(4)
             .contentShape(Rectangle())
         }
@@ -221,13 +229,13 @@ extension ContentView {
     private var triageStatusControls: some View {
         let state = CullingSession.TriageState.of(session.currentEntry)
         return HStack(spacing: 6) {
-            triageChip(L.t("Keep", ja: "キープ"), key: "K", active: state == .keep, color: .red) {
+            triageChip("Keep", key: "K", active: state == .keep, color: .red) {
                 session.setTriage(.keep)
             }
-            triageChip(L.t("Maybe", ja: "保留"), key: "M", active: state == .maybe, color: .yellow) {
+            triageChip("Maybe", key: "M", active: state == .maybe, color: .yellow) {
                 session.setTriage(.maybe)
             }
-            triageChip(L.t("Out", ja: "アウト"), key: "O", active: state == .out, color: .orange) {
+            triageChip("Out", key: "O", active: state == .out, color: .orange) {
                 session.setTriage(.out)
             }
         }

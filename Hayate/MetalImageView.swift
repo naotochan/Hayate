@@ -8,6 +8,7 @@ struct MetalImageView: NSViewRepresentable {
     let device: MTLDevice
     var zoomScale: CGFloat = 1.0
     var panOffset: CGPoint = .zero
+    @Environment(\.colorScheme) private var colorScheme
 
     func makeNSView(context: Context) -> MTKView {
         let mtkView = MTKView(frame: .zero, device: device)
@@ -15,7 +16,7 @@ struct MetalImageView: NSViewRepresentable {
         mtkView.enableSetNeedsDisplay = true
         mtkView.isPaused = true
         mtkView.colorPixelFormat = .bgra8Unorm
-        mtkView.clearColor = MTLClearColor(red: 0.1, green: 0.1, blue: 0.1, alpha: 1.0)
+        mtkView.clearColor = HayateTheme.metalClear(for: colorScheme)
         mtkView.layer?.isOpaque = true
         return mtkView
     }
@@ -24,6 +25,7 @@ struct MetalImageView: NSViewRepresentable {
         context.coordinator.texture = texture
         context.coordinator.zoomScale = Float(zoomScale)
         context.coordinator.panOffset = panOffset
+        mtkView.clearColor = HayateTheme.metalClear(for: colorScheme)
         mtkView.setNeedsDisplay(mtkView.bounds)
     }
 

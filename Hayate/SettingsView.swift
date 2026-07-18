@@ -45,8 +45,8 @@ struct SettingsView: View {
                     }
                     .pickerStyle(.segmented)
                     Text(L.t(
-                        "Applies to settings and system chrome. The photo viewer stays dark for accurate culling.",
-                        ja: "設定やシステムの枠に反映されます。写真ビューアは正確な選別のためダークのままです。"
+                        "Applies immediately to the whole window — sidebar, empty screen, and chrome.",
+                        ja: "サイドバー・空画面・枠などウィンドウ全体にすぐ反映されます。"
                     ))
                     .font(.caption)
                     .foregroundColor(.secondary)
@@ -78,27 +78,27 @@ struct SettingsView: View {
 
                 Section {
                     Picker(L.t("Culling profile", ja: "選別プロファイル"), selection: $cullingProfileTriage) {
-                        Text(L.t("Keep / Maybe / Out", ja: "キープ / 保留 / アウト")).tag(true)
+                        Text("Keep / Maybe / Out").tag(true)
                         Text(L.t("Stars (1–5)", ja: "星（1–5）")).tag(false)
                     }
                     Text(cullingProfileTriage
                          ? L.t(
                             "K = Keep, M = Maybe, O = Out. Same key again clears. Stored as favorite / rating 3 / reject so existing files stay compatible.",
-                            ja: "K = キープ、M = 保留、O = アウト。同じキーでもう一度押すと解除。お気に入り / 星3 / 却下として保存し、既存ファイルと互換を保ちます。"
+                            ja: "K = Keep、M = Maybe、O = Out。同じキーでもう一度押すと解除。favorite / rating 3 / reject として保存し、既存ファイルと互換を保ちます。"
                          )
                          : L.t(
                             "Number keys 1–5 set stars; K favorites; O rejects.",
-                            ja: "数字キー1–5で星、Kでお気に入り、Oで却下。"
+                            ja: "数字キー1–5で星、K で favorite、O で reject。"
                          ))
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
 
                 Section {
-                    Toggle(L.t("Colorize Keep only", ja: "キープだけカラー表示"), isOn: $colorizeKeepOnly)
+                    Toggle(L.t("Colorize Keep only", ja: "Keep だけカラー表示"), isOn: $colorizeKeepOnly)
                     Text(L.t(
                         "In the filmstrip and grid, Keep stays full color; other thumbnails go nearly grayscale. The main viewer is always full color. Badges still show state.",
-                        ja: "フィルムストリップとグリッドではキープだけフルカラー、他はほぼグレースケール。メインビューアは常にフルカラー。バッジは状態を表示します。"
+                        ja: "フィルムストリップとグリッドでは Keep だけフルカラー、他はほぼグレースケール。メインビューアは常にフルカラー。バッジは状態を表示します。"
                     ))
                         .font(.caption)
                         .foregroundColor(.secondary)
@@ -108,7 +108,7 @@ struct SettingsView: View {
                     Toggle(L.t("Auto-advance after rating", ja: "評価後に自動で次へ"), isOn: $autoAdvance)
                     Text(L.t(
                         "Jump to the next photo after Keep / Maybe / Out (or stars / favorite / reject) in the single-photo view.",
-                        ja: "1枚表示でキープ / 保留 / アウト（または星 / お気に入り / 却下）のあと、次の写真へ進みます。"
+                        ja: "1枚表示で Keep / Maybe / Out（または星 / favorite / reject）のあと、次の写真へ進みます。"
                     ))
                         .font(.caption)
                         .foregroundColor(.secondary)
@@ -343,7 +343,7 @@ struct SettingsView: View {
 
             List {
                 ForEach(ActionID.Category.allCases) { category in
-                    Section(category.title(L.resolved)) {
+                    Section(category.title) {
                         ForEach(actions(in: category)) { action in
                             row(for: action)
                         }
@@ -359,7 +359,7 @@ struct SettingsView: View {
 
     private func row(for action: ActionID) -> some View {
         HStack {
-            Text(action.title(L.resolved))
+            Text(action.title)
             Spacer()
             if recordingAction == action {
                 ShortcutRecorder(

@@ -102,32 +102,24 @@ struct ShortcutsHelpOverlay: View {
         var result: [Section] = []
 
         // Fixed keys that never go through KeybindingStore.
+        // Labels stay English — short chrome, same as the rest of the cheat sheet.
         var fixed: [Row] = [
-            Row(
-                keys: "← →",
-                label: L.t("Previous / next photo", ja: "前 / 次の写真")
-            ),
-            Row(
-                keys: "⎋",
-                label: L.t("Cancel / exit mode / reset zoom", ja: "キャンセル / モード終了 / ズームリセット")
-            ),
+            Row(keys: "← →", label: "Previous / next photo"),
+            Row(keys: "⎋", label: "Cancel / exit mode / reset zoom"),
         ]
         if !triageMode {
-            fixed.append(Row(
-                keys: "0–5",
-                label: L.t("Set star rating", ja: "星評価を設定")
-            ))
+            fixed.append(Row(keys: "0–5", label: "Set star rating"))
         }
-        result.append(Section(title: L.t("Always", ja: "常時"), rows: fixed))
+        result.append(Section(title: "Always", rows: fixed))
 
         for category in ActionID.Category.allCases {
             let actions = ActionID.allCases.filter { $0.category == category }
             let rows = actions.compactMap { action -> Row? in
                 guard let shortcut = bindings[action] else { return nil }
-                return Row(keys: shortcut.display, label: action.helpTitle(triageMode: triageMode, L.resolved))
+                return Row(keys: shortcut.display, label: action.helpTitle(triageMode: triageMode))
             }
             if !rows.isEmpty {
-                result.append(Section(title: category.title(L.resolved), rows: rows))
+                result.append(Section(title: category.title, rows: rows))
             }
         }
         return result
@@ -136,24 +128,19 @@ struct ShortcutsHelpOverlay: View {
 
 extension ActionID {
     /// Overlay-friendly titles that reflect Keep/Maybe/Out vs stars.
-    func helpTitle(triageMode: Bool, _ lang: ResolvedLanguage) -> String {
+    /// Kept in English on purpose (product chrome).
+    func helpTitle(triageMode: Bool) -> String {
         switch self {
         case .toggleFavorite:
-            return triageMode
-                ? lang.t("Keep", ja: "キープ")
-                : lang.t("Toggle favorite", ja: "お気に入りを切り替え")
+            return triageMode ? "Keep" : "Toggle favorite"
         case .toggleRejected:
-            return triageMode
-                ? lang.t("Out", ja: "アウト")
-                : lang.t("Toggle rejected", ja: "却下を切り替え")
+            return triageMode ? "Out" : "Toggle rejected"
         case .setTriageMaybe:
-            return triageMode
-                ? lang.t("Maybe", ja: "保留")
-                : lang.t("Maybe (triage)", ja: "保留（トリアージ）")
+            return triageMode ? "Maybe" : "Maybe (triage)"
         case .toggleShortcutsHelp:
-            return lang.t("Show / hide this cheat sheet", ja: "この早見表の表示 / 非表示")
+            return "Show / hide this cheat sheet"
         default:
-            return title(lang)
+            return title
         }
     }
 }

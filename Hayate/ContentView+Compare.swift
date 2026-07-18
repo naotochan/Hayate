@@ -30,9 +30,9 @@ extension ContentView {
                                     // Slot number (always visible)
                                     Text("\(slot + 1)")
                                         .font(.system(size: 14, weight: .bold, design: .monospaced))
-                                        .foregroundColor(.white)
+                                        .foregroundColor(HayateTheme.fg(1))
                                         .frame(width: 24, height: 24)
-                                        .background(isActive ? Color.accentColor : Color.white.opacity(0.3))
+                                        .background(isActive ? Color.accentColor : HayateTheme.wash(0.3))
                                         .cornerRadius(12)
                                         .padding(8)
 
@@ -53,7 +53,7 @@ extension ContentView {
 
                                 // "PICK" hint on active slot
                                 if isActive {
-                                    Text(L.t("⏎ Pick", ja: "⏎ 選ぶ"))
+                                    Text("⏎ Pick")
                                         .font(.system(size: 13, weight: .semibold))
                                         .foregroundColor(.white)
                                         .padding(.horizontal, 12)
@@ -72,8 +72,8 @@ extension ContentView {
                             .padding(.horizontal, 8)
                             .padding(.vertical, 4)
                             .frame(maxWidth: .infinity)
-                            .background(isActive ? Color.accentColor.opacity(0.3) : Color.black.opacity(0.4))
-                            .foregroundColor(.white)
+                            .background(isActive ? Color.accentColor.opacity(0.3) : HayateTheme.bar)
+                            .foregroundColor(HayateTheme.fg(0.92))
                             .font(.system(size: 11))
                     }
                     .overlay(
@@ -90,14 +90,11 @@ extension ContentView {
                 Divider()
                     .frame(height: 14)
 
-                Text(L.t("COMPARE", ja: "比較"))
+                Text("COMPARE")
                     .font(.system(size: 11, weight: .bold, design: .monospaced))
                     .foregroundColor(.accentColor)
 
-                Text(L.t(
-                    "←→ select  |  ⏎ pick  |  Tab skip  |  Esc exit",
-                    ja: "←→ 選択  |  ⏎ 選ぶ  |  Tab スキップ  |  Esc 終了"
-                ))
+                Text("←→ select  |  ⏎ pick  |  Tab skip  |  Esc exit")
                     .font(.system(size: 11))
                     .foregroundColor(.gray)
 

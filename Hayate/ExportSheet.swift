@@ -55,12 +55,12 @@ struct ExportSheet: View {
                 Section {
                     Picker(L.t("Photos", ja: "写真"), selection: $source) {
                         if cullingProfileTriage {
-                            Text(L.t("Keep", ja: "キープ")).tag(Source.favorites)
-                            Text(L.t("Keep + Maybe", ja: "キープ + 保留")).tag(Source.keepOrMaybe)
+                            Text("Keep").tag(Source.favorites)
+                            Text("Keep + Maybe").tag(Source.keepOrMaybe)
                         } else {
-                            Text(L.t("♥ Favorites", ja: "♥ お気に入り")).tag(Source.favorites)
+                            Text("♥ Favorites").tag(Source.favorites)
                             ForEach(1...5, id: \.self) { n in
-                                Text(L.t("Rating ≥ \(n)", ja: "評価 ≥ \(n)")).tag(Source.minRating(n))
+                                Text("Rating ≥ \(n)").tag(Source.minRating(n))
                             }
                         }
                     }
@@ -86,15 +86,15 @@ struct ExportSheet: View {
                 Section {
                     HStack {
                         Text(cullingProfileTriage
-                             ? L.t("\(rejectedIndices.count) Out photos", ja: "アウト \(rejectedIndices.count) 枚")
-                             : L.t("\(rejectedIndices.count) rejected photos", ja: "却下 \(rejectedIndices.count) 枚"))
+                             ? L.t("\(rejectedIndices.count) Out photos", ja: "Out \(rejectedIndices.count) 枚")
+                             : L.t("\(rejectedIndices.count) rejected photos", ja: "Rejected \(rejectedIndices.count) 枚"))
                             .font(.caption)
                             .foregroundColor(.secondary)
                         Spacer()
                         Button(
                             cullingProfileTriage
-                                ? L.t("Move Out to Trash…", ja: "アウトをゴミ箱へ…")
-                                : L.t("Move Rejected to Trash…", ja: "却下をゴミ箱へ…"),
+                                ? L.t("Move Out to Trash…", ja: "Out をゴミ箱へ…")
+                                : L.t("Move Rejected to Trash…", ja: "Rejected をゴミ箱へ…"),
                             role: .destructive
                         ) {
                             showTrashConfirmation = true
@@ -143,11 +143,11 @@ struct ExportSheet: View {
             cullingProfileTriage
                 ? L.t(
                     "Move \(rejectedIndices.count) Out photos to Trash?",
-                    ja: "アウト \(rejectedIndices.count) 枚をゴミ箱に移しますか？"
+                    ja: "Out \(rejectedIndices.count) 枚をゴミ箱に移しますか？"
                 )
                 : L.t(
                     "Move \(rejectedIndices.count) rejected photos to Trash?",
-                    ja: "却下 \(rejectedIndices.count) 枚をゴミ箱に移しますか？"
+                    ja: "Rejected \(rejectedIndices.count) 枚をゴミ箱に移しますか？"
                 ),
             isPresented: $showTrashConfirmation,
             titleVisibility: .visible
