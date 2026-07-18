@@ -85,6 +85,11 @@ extension ContentView {
 
             // Compare mode footer
             HStack {
+                folderSwitcher
+
+                Divider()
+                    .frame(height: 14)
+
                 Text("COMPARE")
                     .font(.system(size: 11, weight: .bold, design: .monospaced))
                     .foregroundColor(.accentColor)

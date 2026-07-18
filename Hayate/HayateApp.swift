@@ -28,6 +28,13 @@ struct HayateApp: App {
     private let device: MTLDevice
     private let updaterController: SPUStandardUpdaterController
 
+    private static var windowTitle: String {
+        let info = Bundle.main.infoDictionary
+        let version = info?["CFBundleShortVersionString"] as? String ?? "—"
+        let build = info?["CFBundleVersion"] as? String ?? "—"
+        return "Hayate (\(version) · build \(build))"
+    }
+
     init() {
         guard let device = MTLCreateSystemDefaultDevice() else {
             fatalError("Metal is not supported on this device")
@@ -41,7 +48,7 @@ struct HayateApp: App {
     }
 
     var body: some Scene {
-        WindowGroup {
+        WindowGroup(Self.windowTitle) {
             ContentView()
                 .environmentObject(session)
                 .environmentObject(keybindings)
