@@ -33,10 +33,10 @@ struct FolderSidebar: View {
         }
         .frame(width: isOpen ? openWidth : closedWidth, alignment: .top)
         .frame(maxHeight: .infinity)
-        .background(Color(nsColor: NSColor(red: 0.08, green: 0.08, blue: 0.08, alpha: 1)))
+        .background(HayateTheme.sidebar)
         .overlay(alignment: .trailing) {
             Rectangle()
-                .fill(Color.white.opacity(0.06))
+                .fill(HayateTheme.separator)
                 .frame(width: 1)
         }
         .animation(.easeOut(duration: 0.18), value: isOpen)
@@ -49,7 +49,7 @@ struct FolderSidebar: View {
             Button(action: onToggle) {
                 Image(systemName: "sidebar.left")
                     .font(.system(size: 13, weight: .medium))
-                    .foregroundColor(.white.opacity(0.75))
+                    .foregroundColor(HayateTheme.fg(0.75))
                     .frame(width: 28, height: 28)
                     .contentShape(Rectangle())
             }
@@ -64,7 +64,7 @@ struct FolderSidebar: View {
                 Button(action: onOpenFolder) {
                     Image(systemName: "folder.badge.plus")
                         .font(.system(size: 13, weight: .medium))
-                        .foregroundColor(.white.opacity(0.75))
+                        .foregroundColor(HayateTheme.fg(0.75))
                         .frame(width: 28, height: 28)
                         .contentShape(Rectangle())
                 }
@@ -81,9 +81,9 @@ struct FolderSidebar: View {
 
     private var pinnedSection: some View {
         VStack(alignment: .leading, spacing: 4) {
-            sectionTitle(L.t("Pinned", ja: "ピン留め"))
+            sectionTitle("Pinned")
             if session.pinnedFolders.isEmpty {
-                emptyHint(L.t("Pin folders you revisit often", ja: "よく使うフォルダをピン留め"))
+                emptyHint(L.t("Pin folders you revisit often", ja: "よく使うフォルダを Pin する"))
             } else {
                 ForEach(session.pinnedFolders, id: \.path) { url in
                     folderRow(url, pinned: true) {
@@ -96,7 +96,7 @@ struct FolderSidebar: View {
 
     private var recentSection: some View {
         VStack(alignment: .leading, spacing: 4) {
-            sectionTitle(L.t("Recent", ja: "最近"))
+            sectionTitle("Recent")
             if session.unpinnedRecentFolders.isEmpty {
                 emptyHint(L.t("Opened folders appear here", ja: "開いたフォルダがここに表示されます"))
             } else {
@@ -112,7 +112,7 @@ struct FolderSidebar: View {
     private func sectionTitle(_ title: String) -> some View {
         Text(title)
             .font(.system(size: 10, weight: .semibold))
-            .foregroundColor(.white.opacity(0.38))
+            .foregroundColor(HayateTheme.fg(0.38))
             .textCase(.uppercase)
             .tracking(0.6)
             .padding(.horizontal, 6)
@@ -121,7 +121,7 @@ struct FolderSidebar: View {
     private func emptyHint(_ text: String) -> some View {
         Text(text)
             .font(.system(size: 11))
-            .foregroundColor(.white.opacity(0.28))
+            .foregroundColor(HayateTheme.fg(0.28))
             .padding(.horizontal, 6)
             .padding(.vertical, 4)
     }
@@ -133,9 +133,7 @@ struct FolderSidebar: View {
     ) -> some View {
         let available = FileManager.default.isReadableFile(atPath: url.path)
         let isCurrent = session.folderURL?.standardizedFileURL.path == url.standardizedFileURL.path
-        let pinTitle = pinned
-            ? L.t("Unpin", ja: "ピン解除")
-            : L.t("Pin", ja: "ピン留め")
+        let pinTitle = pinned ? "Unpin" : "Pin"
 
         return HStack(spacing: 4) {
             Button {
@@ -146,20 +144,20 @@ struct FolderSidebar: View {
                     Image(systemName: "folder.fill")
                         .font(.system(size: 12))
                         .foregroundColor(available
-                                         ? (isCurrent ? Color.accentColor : Color.white.opacity(0.55))
-                                         : Color.white.opacity(0.22))
+                                         ? (isCurrent ? Color.accentColor : HayateTheme.fg(0.55))
+                                         : HayateTheme.fg(0.22))
                         .frame(width: 16)
 
                     VStack(alignment: .leading, spacing: 1) {
                         Text(url.lastPathComponent)
                             .font(.system(size: 12, weight: isCurrent ? .semibold : .regular))
                             .foregroundColor(available
-                                             ? (isCurrent ? .white : .white.opacity(0.82))
-                                             : .white.opacity(0.32))
+                                             ? (isCurrent ? HayateTheme.fg(1) : HayateTheme.fg(0.82))
+                                             : HayateTheme.fg(0.32))
                             .lineLimit(1)
                         Text(url.deletingLastPathComponent().path)
                             .font(.system(size: 9))
-                            .foregroundColor(.white.opacity(available ? 0.28 : 0.16))
+                            .foregroundColor(HayateTheme.fg(available ? 0.28 : 0.16))
                             .lineLimit(1)
                             .truncationMode(.middle)
                     }
@@ -179,7 +177,7 @@ struct FolderSidebar: View {
             Button(action: pinAction) {
                 Image(systemName: pinned ? "pin.fill" : "pin")
                     .font(.system(size: 10, weight: .medium))
-                    .foregroundColor(pinned ? .accentColor.opacity(0.85) : .white.opacity(0.35))
+                    .foregroundColor(pinned ? .accentColor.opacity(0.85) : HayateTheme.fg(0.35))
                     .frame(width: 22, height: 22)
                     .contentShape(Rectangle())
             }
@@ -189,7 +187,7 @@ struct FolderSidebar: View {
         }
         .background(
             RoundedRectangle(cornerRadius: 6)
-                .fill(isCurrent ? Color.white.opacity(0.1) : Color.clear)
+                .fill(isCurrent ? HayateTheme.wash(0.1) : Color.clear)
         )
         .contextMenu {
             Button(L.t("Open", ja: "開く")) {
@@ -202,7 +200,7 @@ struct FolderSidebar: View {
             if session.recentFolders.contains(where: {
                 $0.standardizedFileURL.path == url.standardizedFileURL.path
             }) {
-                Button(L.t("Remove from Recent", ja: "最近から削除"), role: .destructive) {
+                Button(L.t("Remove from Recent", ja: "Recent から削除"), role: .destructive) {
                     session.removeFromRecents(url)
                 }
             }

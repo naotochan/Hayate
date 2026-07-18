@@ -39,12 +39,12 @@ extension ContentView {
                     Button {
                         gridFilter = filter
                     } label: {
-                        Text(filter.title(L.resolved))
+                        Text(filter.title)
                             .font(.system(size: 11, weight: gridFilter == filter ? .bold : .regular))
-                            .foregroundColor(gridFilter == filter ? .white : .gray)
+                            .foregroundColor(gridFilter == filter ? HayateTheme.fg(1) : .secondary)
                             .padding(.horizontal, 8)
                             .padding(.vertical, 4)
-                            .background(gridFilter == filter ? Color.white.opacity(0.2) : Color.clear)
+                            .background(gridFilter == filter ? HayateTheme.wash(0.2) : Color.clear)
                             .cornerRadius(4)
                     }
                     .buttonStyle(.plain)
@@ -59,7 +59,7 @@ extension ContentView {
                 if !selectedIndices.isEmpty {
                     Text(L.t("\(selectedIndices.count) selected", ja: "\(selectedIndices.count) 件選択"))
                         .font(.system(size: 11))
-                        .foregroundColor(.white)
+                        .foregroundColor(HayateTheme.fg(1))
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
                         .background(Color.accentColor.opacity(0.5))
@@ -146,7 +146,7 @@ extension ContentView {
 
     private var sceneSeparator: some View {
         Rectangle()
-            .fill(Color.white.opacity(0.14))
+            .fill(HayateTheme.wash(0.14))
             .frame(height: 1)
             .padding(.vertical, 6)
             .frame(maxWidth: .infinity)
@@ -262,18 +262,18 @@ extension ContentView {
             // File name
             Text(url.deletingPathExtension().lastPathComponent)
                 .font(.system(size: 10))
-                .foregroundColor(isCurrent ? .white : .gray)
+                .foregroundColor(isCurrent ? HayateTheme.fg(1) : .secondary)
                 .lineLimit(1)
                 .truncationMode(.middle)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 3)
-                .background(isCurrent ? Color.white.opacity(0.15) : Color.clear)
+                .background(isCurrent ? HayateTheme.wash(0.15) : Color.clear)
         }
-        .background(Color.gray.opacity(0.1))
+        .background(HayateTheme.wash(0.06))
         .cornerRadius(4)
         .overlay(
             RoundedRectangle(cornerRadius: 4)
-                .stroke(isSelected ? Color.accentColor : (isCurrent && selectedIndices.isEmpty ? Color.white : Color.clear), lineWidth: 2)
+                .stroke(isSelected ? Color.accentColor : (isCurrent && selectedIndices.isEmpty ? HayateTheme.fg(1) : Color.clear), lineWidth: 2)
         )
         .opacity(entry?.isRejected == true ? 0.5 : 1.0)
         .onTapGesture(count: 2) {

@@ -47,6 +47,7 @@ struct HayateApp: App {
             updaterDelegate: nil,
             userDriverDelegate: nil
         )
+        AppAppearance.applyStoredToApp()
     }
 
     var body: some Scene {
@@ -59,6 +60,10 @@ struct HayateApp: App {
                 .environment(\.metalDevice, device)
                 .preferredColorScheme(appAppearance.preferredColorScheme)
                 .id(localization.language)
+                .onAppear { appAppearance.applyToApp() }
+                .onChange(of: appAppearance) { _, newValue in
+                    newValue.applyToApp()
+                }
                 .task {
                     ciContextHolder.initialize(device: device)
                 }
@@ -72,7 +77,7 @@ struct HayateApp: App {
                 }
                 .keyboardShortcut("o", modifiers: .command)
 
-                Menu(localization.t("Open Recent", ja: "最近使った項目を開く")) {
+                Menu("Open Recent") {
                     ForEach(session.recentFolders, id: \.path) { url in
                         Button(url.lastPathComponent) {
                             session.requestOpen(folder: url)
@@ -107,7 +112,13 @@ struct HayateApp: App {
                 .environmentObject(keybindings)
                 .environmentObject(localization)
                 .preferredColorScheme(appAppearance.preferredColorScheme)
-                .id(localization.language)
+                // Recreate Settings when appearance flips so Form grouped
+                // backgrounds don't stay stuck on the previous scheme.
+                .id("\(localization.language.rawValue)-\(appAppearance.rawValue)")
+                .onAppear { appAppearance.applyToApp() }
+                .onChange(of: appAppearance) { _, newValue in
+                    newValue.applyToApp()
+                }
         }
     }
 }

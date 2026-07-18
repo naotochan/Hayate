@@ -107,17 +107,18 @@ struct ContentView: View {
                 : [.all, .favorites, .rejected, .rated, .unrated]
         }
 
-        func title(_ lang: ResolvedLanguage) -> String {
+        /// Product filter chrome — keep English in both languages.
+        var title: String {
             switch self {
-            case .all: return lang.t("All", ja: "すべて")
-            case .favorites: return lang.t("♥ Favorites", ja: "♥ お気に入り")
-            case .rejected: return lang.t("✗ Rejected", ja: "✗ 却下")
-            case .rated: return lang.t("★ Rated", ja: "★ 評価済み")
-            case .unrated: return lang.t("Unrated", ja: "未評価")
-            case .keep: return lang.t("Keep", ja: "キープ")
-            case .maybe: return lang.t("Maybe", ja: "保留")
-            case .out: return lang.t("Out", ja: "アウト")
-            case .undecided: return lang.t("Undecided", ja: "未決定")
+            case .all: return "All"
+            case .favorites: return "♥ Favorites"
+            case .rejected: return "✗ Rejected"
+            case .rated: return "★ Rated"
+            case .unrated: return "Unrated"
+            case .keep: return "Keep"
+            case .maybe: return "Maybe"
+            case .out: return "Out"
+            case .undecided: return "Undecided"
             }
         }
     }
@@ -144,7 +145,7 @@ struct ContentView: View {
                 }
 
                 ZStack {
-                    Color(nsColor: NSColor(red: 0.1, green: 0.1, blue: 0.1, alpha: 1.0))
+                    HayateTheme.canvas
                         .ignoresSafeArea()
 
                 if ciContext == nil {
