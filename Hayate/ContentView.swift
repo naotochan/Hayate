@@ -120,7 +120,11 @@ struct ContentView: View {
                 HayateBrandScreen(mode: .loading)
             } else if session.files.isEmpty {
                 HayateBrandScreen(
-                    mode: .empty(onOpen: { session.requestOpenFolder() }),
+                    mode: .empty(
+                        onOpen: { session.requestOpenFolder() },
+                        recentFolders: session.recentFolders,
+                        onOpenRecent: { session.requestOpen(folder: $0) }
+                    ),
                     dropTargeted: isDropTargeted
                 )
             } else if showGrid {
@@ -318,8 +322,12 @@ struct ContentView: View {
     /// switched folders; otherwise the screen keeps showing the old folder.
     func openFolderAndReload(_ url: URL) {
         guard session.openFolder(url) else {
-            // Deleted or unmounted folder from the recents menu — drop it.
-            session.removeFromRecents(url)
+            // Only drop from Recents when the folder itself is gone but its
+            // parent volume is still mounted. Unmounted drives stay listed.
+            let parent = url.deletingLastPathComponent()
+            if FileManager.default.fileExists(atPath: parent.path) {
+                session.removeFromRecents(url)
+            }
             return
         }
         resetViewState()

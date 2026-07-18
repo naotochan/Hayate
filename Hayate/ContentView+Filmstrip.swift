@@ -169,15 +169,15 @@ extension ContentView {
                 Label("Open Folder…", systemImage: "folder.badge.plus")
             }
 
-            let recent = session.recentFolders.filter { $0 != session.folderURL }
+            let recent = session.otherRecentFolders
             if !recent.isEmpty {
                 Divider()
                 Section("Recent Folders") {
-                    ForEach(recent, id: \.self) { url in
+                    ForEach(recent, id: \.path) { url in
                         Button {
                             session.requestOpen(folder: url)
                         } label: {
-                            Label(url.lastPathComponent, systemImage: "folder")
+                            Text(url.lastPathComponent)
                         }
                         .help(url.path)
                     }
@@ -185,21 +185,26 @@ extension ContentView {
             }
         } label: {
             HStack(spacing: 5) {
-                Image(systemName: "folder")
+                Image(systemName: "folder.fill")
                     .font(.system(size: 11))
                 Text(session.folderURL?.lastPathComponent ?? "Folder")
                     .lineLimit(1)
                     .truncationMode(.middle)
-                Image(systemName: "chevron.up.chevron.down")
-                    .font(.system(size: 8, weight: .semibold))
-                    .opacity(0.55)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 8, weight: .bold))
+                    .opacity(0.65)
             }
-            .foregroundColor(.white.opacity(0.85))
+            .foregroundColor(.white.opacity(0.9))
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(Color.white.opacity(0.1))
+            .cornerRadius(4)
             .contentShape(Rectangle())
         }
         .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
         .fixedSize()
-        .help(session.folderURL?.path ?? "Switch folder")
+        .help("Switch folder — \(session.folderURL?.path ?? "")")
         .accessibilityLabel("Switch photo folder")
     }
 
