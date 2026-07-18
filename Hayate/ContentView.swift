@@ -32,6 +32,10 @@ struct ContentView: View {
     /// Histogram overlay (H key).
     @State var showHistogram = false
     @State var histogramData: HistogramData?
+    /// Keyboard shortcuts cheat sheet (? key).
+    @State var showShortcutsHelp = false
+    /// A folder is currently being dragged over the window (drop feedback).
+    @State var isDropTargeted = false
     /// Export sheet (File > Export Picks…).
     @State var showExportSheet = false
     @State var thumbnails: [URL: NSImage] = [:]
@@ -115,7 +119,10 @@ struct ContentView: View {
             if ciContext == nil {
                 HayateBrandScreen(mode: .loading)
             } else if session.files.isEmpty {
-                HayateBrandScreen(mode: .empty(onOpen: { session.requestOpenFolder() }))
+                HayateBrandScreen(
+                    mode: .empty(onOpen: { session.requestOpenFolder() }),
+                    dropTargeted: isDropTargeted
+                )
             } else if showGrid {
                 gridView
             } else if compareMode {
@@ -155,6 +162,14 @@ struct ContentView: View {
                     filmstrip
                     statusBar
                 }
+            }
+
+            if showShortcutsHelp {
+                ShortcutsHelpOverlay(
+                    bindings: keybindings.bindings,
+                    triageMode: cullingProfileTriage,
+                    onDismiss: { showShortcutsHelp = false }
+                )
             }
         }
         .onAppear {
@@ -241,7 +256,7 @@ struct ContentView: View {
                 loadCurrentImage()
             })
         }
-        .onDrop(of: [.fileURL], isTargeted: nil) { providers in
+        .onDrop(of: [.fileURL], isTargeted: $isDropTargeted) { providers in
             guard let provider = providers.first else { return false }
             _ = provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
                 guard let data = item as? Data,
@@ -365,6 +380,7 @@ struct ContentView: View {
         currentEXIF = nil
         showHistogram = false
         histogramData = nil
+        showShortcutsHelp = false
     }
 
     // MARK: - Navigation

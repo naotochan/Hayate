@@ -37,8 +37,12 @@ extension ContentView {
     private func handleKeyEvent(_ event: NSEvent) -> Bool {
         // ---- Fixed bindings that cannot be rebound ----
 
-        // Escape — universal cancel / exit mode / reset zoom.
+        // Escape — dismiss shortcuts help, then universal cancel / exit mode.
         if event.keyCode == 53 {
+            if showShortcutsHelp {
+                showShortcutsHelp = false
+                return true
+            }
             if compareMode {
                 exitCompareMode()
                 return true
@@ -53,6 +57,21 @@ extension ContentView {
                 return true
             }
             return false
+        }
+
+        // Help overlay — layout-independent.
+        // 1) Character "?" (US Shift+/, JIS "?")  2) bare "/"  3) ANSI slash key
+        // Kept fixed (like Escape): keyCodes for "?" differ across keyboards.
+        if event.modifierFlags.intersection([.command, .option, .control]).isEmpty {
+            let isQuestion = event.characters == "?"
+            let isBareSlash = event.modifierFlags.intersection(Shortcut.relevantModifiers).isEmpty
+                && (event.charactersIgnoringModifiers == "/" || event.keyCode == 44)
+            let isShiftSlash = event.keyCode == 44
+                && event.modifierFlags.contains(.shift)
+            if isQuestion || isBareSlash || isShiftSlash {
+                showShortcutsHelp.toggle()
+                return true
+            }
         }
 
         // Unmodified arrow keys in the grid — move within the filtered order;
@@ -215,6 +234,10 @@ extension ContentView {
             } else {
                 histogramData = nil
             }
+            return true
+
+        case .toggleShortcutsHelp:
+            showShortcutsHelp.toggle()
             return true
 
         case .deletePhoto:

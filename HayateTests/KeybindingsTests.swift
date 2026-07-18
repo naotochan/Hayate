@@ -33,6 +33,13 @@ final class KeybindingsTests: XCTestCase {
 
         let cmdShiftZ = Shortcut(keyCode: 6, modifiers: [.command, .shift])
         XCTAssertEqual(cmdShiftZ.display, "⇧⌘Z")
+
+        let help = Shortcut(keyCode: 44, modifiers: .shift)
+        XCTAssertEqual(help.display, "?", "Shift+/ should display as ?")
+    }
+
+    func testDefaultsIncludeShortcutsHelp() {
+        XCTAssertEqual(store.bindings[.toggleShortcutsHelp]?.display, "?")
     }
 
     func testShortcutIgnoresIrrelevantModifiers() {
