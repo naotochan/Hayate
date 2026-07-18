@@ -10,6 +10,8 @@ struct HayateBrandScreen: View {
     }
 
     let mode: Mode
+    /// A folder drag is hovering over the window — show the drop affordance.
+    var dropTargeted: Bool = false
 
     /// Subsequent launches shorten the intro.
     @AppStorage("hayateLaunchCount") private var launchCount = 0
@@ -45,9 +47,11 @@ struct HayateBrandScreen: View {
                         .tracking(1.2)
                         .foregroundColor(.white.opacity(0.92))
 
-                    Text(isLoading ? "Preparing…" : "Drop a folder or open one to begin")
+                    Text(isLoading ? "Preparing…"
+                         : dropTargeted ? "Release to open this folder"
+                         : "Drop a folder or open one to begin")
                         .font(.system(size: 13))
-                        .foregroundColor(.white.opacity(0.4))
+                        .foregroundColor(.white.opacity(dropTargeted ? 0.85 : 0.4))
                 }
                 .opacity(textOpacity)
 
@@ -64,8 +68,19 @@ struct HayateBrandScreen: View {
                         .opacity(textOpacity * 0.7)
                 }
             }
+            // Drop-target frame: dashed border while a folder hovers.
+            if dropTargeted {
+                RoundedRectangle(cornerRadius: 16)
+                    .strokeBorder(
+                        Color.white.opacity(0.5),
+                        style: StrokeStyle(lineWidth: 2, dash: [8, 6])
+                    )
+                    .padding(20)
+                    .transition(.opacity)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .animation(.easeOut(duration: 0.15), value: dropTargeted)
         .onAppear {
             runIntro()
         }

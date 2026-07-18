@@ -257,7 +257,7 @@ struct SettingsView: View {
             .padding(.horizontal)
             .padding(.top)
 
-            Text("Rating keys (0–5), ⎋, and ⌘, are fixed and cannot be rebound.")
+            Text("Rating keys (0–5), ⎋, ?, and ⌘, are fixed and cannot be rebound. Press ? or / for the on-screen cheat sheet.")
                 .font(.caption)
                 .foregroundColor(.secondary)
                 .padding(.horizontal)
