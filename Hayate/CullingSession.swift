@@ -49,7 +49,15 @@ class CullingSession: ObservableObject {
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         if let paths = defaults.stringArray(forKey: Self.recentFoldersKey) {
-            recentFolders = paths.map { URL(fileURLWithPath: $0, isDirectory: true) }
+            // Drop ephemeral test / system temp folders that leaked into
+            // preferences; keep everything else (including unmounted volumes)
+            // so the user can still see the names.
+            recentFolders = paths
+                .filter { !$0.hasPrefix("/var/folders/") && !$0.hasPrefix("/tmp/") }
+                .map { URL(fileURLWithPath: $0, isDirectory: true) }
+            if recentFolders.map(\.path) != paths {
+                defaults.set(recentFolders.map(\.path), forKey: Self.recentFoldersKey)
+            }
         }
         // Persist the browsing position (lastFileName / lastIndex) on quit —
         // ratings are saved on every change, but plain navigation isn't.
@@ -309,7 +317,11 @@ class CullingSession: ObservableObject {
 
     /// Move `url` to the front of the recent-folders list and persist it.
     private func addToRecents(_ url: URL) {
-        var paths = [url.path] + recentFolders.map(\.path).filter { $0 != url.path }
+        // Never persist ephemeral test / system temp directories.
+        let path = url.path
+        guard !path.hasPrefix("/var/folders/"), !path.hasPrefix("/tmp/") else { return }
+
+        var paths = [path] + recentFolders.map(\.path).filter { $0 != path }
         if paths.count > Self.maxRecentFolders {
             paths = Array(paths.prefix(Self.maxRecentFolders))
         }
@@ -322,6 +334,13 @@ class CullingSession: ObservableObject {
         let paths = recentFolders.map(\.path).filter { $0 != url.path }
         recentFolders = paths.map { URL(fileURLWithPath: $0, isDirectory: true) }
         defaults.set(paths, forKey: Self.recentFoldersKey)
+    }
+
+    /// Recent folders excluding the one currently open (path-based, so
+    /// trailing-slash / fileURL differences don't hide the list).
+    var otherRecentFolders: [URL] {
+        let current = folderURL?.standardizedFileURL.path
+        return recentFolders.filter { $0.standardizedFileURL.path != current }
     }
 
     // MARK: - Navigation

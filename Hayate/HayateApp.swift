@@ -68,10 +68,11 @@ struct HayateApp: App {
                 .keyboardShortcut("o", modifiers: .command)
 
                 Menu("Open Recent") {
-                    ForEach(session.recentFolders, id: \.self) { url in
+                    ForEach(session.recentFolders, id: \.path) { url in
                         Button(url.lastPathComponent) {
                             session.requestOpen(folder: url)
                         }
+                        .help(url.path)
                     }
                 }
                 .disabled(session.recentFolders.isEmpty)
