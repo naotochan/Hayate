@@ -110,7 +110,11 @@ struct ContentView: View {
             if ciContext == nil {
                 HayateBrandScreen(mode: .loading)
             } else if session.files.isEmpty {
-                HayateBrandScreen(mode: .empty(onOpen: { session.requestOpenFolder() }))
+                HayateBrandScreen(mode: .empty(
+                    onOpen: { session.requestOpenFolder() },
+                    recentFolders: session.recentFolders,
+                    onOpenRecent: { session.requestOpen(folder: $0) }
+                ))
             } else if showGrid {
                 gridView
             } else if compareMode {
