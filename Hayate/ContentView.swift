@@ -36,6 +36,8 @@ struct ContentView: View {
     @State var showShortcutsHelp = false
     /// A folder is currently being dragged over the window (drop feedback).
     @State var isDropTargeted = false
+    /// Cursor-style folder sidebar (Pinned + Recent).
+    @AppStorage("sidebarVisible") var sidebarVisible = true
     /// Export sheet (File > Export Picks…).
     @State var showExportSheet = false
     @State var thumbnails: [URL: NSImage] = [:]
@@ -112,69 +114,81 @@ struct ContentView: View {
     }
 
     var body: some View {
-        ZStack {
-            Color(nsColor: NSColor(red: 0.1, green: 0.1, blue: 0.1, alpha: 1.0))
-                .ignoresSafeArea()
-
-            if ciContext == nil {
-                HayateBrandScreen(mode: .loading)
-            } else if session.files.isEmpty {
-                HayateBrandScreen(
-                    mode: .empty(
-                        onOpen: { session.requestOpenFolder() },
-                        recentFolders: session.recentFolders,
-                        onOpenRecent: { session.requestOpen(folder: $0) }
-                    ),
-                    dropTargeted: isDropTargeted
+        HStack(spacing: 0) {
+            if ciContext != nil {
+                FolderSidebar(
+                    isOpen: sidebarVisible,
+                    onToggle: { sidebarVisible.toggle() },
+                    onOpenFolder: { session.requestOpenFolder() },
+                    onSelect: { session.requestOpen(folder: $0) }
                 )
-            } else if showGrid {
-                gridView
-            } else if compareMode {
-                compareView
-            } else {
-                // Single photo view
-                if let device = metalDevice {
-                    MetalImageView(texture: currentTexture, device: device, zoomScale: zoomScale, panOffset: panOffset)
-                }
+            }
 
-                // Top-left overlay: EXIF info (I key)
-                if showInfo {
-                    VStack {
-                        HStack {
-                            exifOverlay
+            ZStack {
+                Color(nsColor: NSColor(red: 0.1, green: 0.1, blue: 0.1, alpha: 1.0))
+                    .ignoresSafeArea()
+
+                if ciContext == nil {
+                    HayateBrandScreen(mode: .loading)
+                } else if session.files.isEmpty {
+                    HayateBrandScreen(
+                        mode: .empty(
+                            onOpen: { session.requestOpenFolder() },
+                            recentFolders: [],
+                            onOpenRecent: { session.requestOpen(folder: $0) }
+                        ),
+                        dropTargeted: isDropTargeted
+                    )
+                } else if showGrid {
+                    gridView
+                } else if compareMode {
+                    compareView
+                } else {
+                    // Single photo view
+                    if let device = metalDevice {
+                        MetalImageView(texture: currentTexture, device: device, zoomScale: zoomScale, panOffset: panOffset)
+                    }
+
+                    // Top-left overlay: EXIF info (I key)
+                    if showInfo {
+                        VStack {
+                            HStack {
+                                exifOverlay
+                                Spacer()
+                            }
                             Spacer()
                         }
+                    }
+
+                    // Top-right overlay: histogram (H key)
+                    if showHistogram, let histogramData = histogramData {
+                        VStack {
+                            HStack {
+                                Spacer()
+                                HistogramView(data: histogramData)
+                                    .padding(12)
+                            }
+                            Spacer()
+                        }
+                    }
+
+                    // Bottom overlay: filmstrip + status bar
+                    VStack(spacing: 0) {
                         Spacer()
+                        filmstrip
+                        statusBar
                     }
                 }
 
-                // Top-right overlay: histogram (H key)
-                if showHistogram, let histogramData = histogramData {
-                    VStack {
-                        HStack {
-                            Spacer()
-                            HistogramView(data: histogramData)
-                                .padding(12)
-                        }
-                        Spacer()
-                    }
-                }
-
-                // Bottom overlay: filmstrip + status bar
-                VStack(spacing: 0) {
-                    Spacer()
-                    filmstrip
-                    statusBar
+                if showShortcutsHelp {
+                    ShortcutsHelpOverlay(
+                        bindings: keybindings.bindings,
+                        triageMode: cullingProfileTriage,
+                        onDismiss: { showShortcutsHelp = false }
+                    )
                 }
             }
-
-            if showShortcutsHelp {
-                ShortcutsHelpOverlay(
-                    bindings: keybindings.bindings,
-                    triageMode: cullingProfileTriage,
-                    onDismiss: { showShortcutsHelp = false }
-                )
-            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .onAppear {
             initializeDecoder()
