@@ -86,6 +86,7 @@ struct HayateBrandScreen: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .onboardingAnchor(.dropArea)
         .animation(.easeOut(duration: 0.15), value: dropTargeted)
         .onAppear {
             runIntro()

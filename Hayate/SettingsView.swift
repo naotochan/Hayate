@@ -88,6 +88,15 @@ struct SettingsView: View {
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
+
+                Section {
+                    Button("Show Welcome Guide…") {
+                        NotificationCenter.default.post(name: .showOnboarding, object: nil)
+                    }
+                    Text("Reopen the 3-step intro (open folder, cull keys, sidebar / shortcuts).")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
             }
             .formStyle(.grouped)
 

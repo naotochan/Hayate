@@ -23,6 +23,8 @@ struct FolderSidebar: View {
                     }
                     .padding(.horizontal, 10)
                     .padding(.vertical, 12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .onboardingAnchor(.folderList)
                 }
             } else {
                 Spacer(minLength: 0)
@@ -54,32 +56,18 @@ struct FolderSidebar: View {
             .help(isOpen ? "Hide sidebar (⌘B)" : "Show sidebar (⌘B)")
 
             if isOpen {
+                Spacer(minLength: 0)
+
                 Button(action: onOpenFolder) {
-                    Label("Open…", systemImage: "folder.badge.plus")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundColor(.white.opacity(0.8))
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 5)
-                        .background(Color.white.opacity(0.08))
-                        .cornerRadius(5)
+                    Image(systemName: "folder.badge.plus")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundColor(.white.opacity(0.75))
+                        .frame(width: 28, height: 28)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .help("Open folder…")
-
-                Spacer(minLength: 0)
-
-                if let current = session.folderURL {
-                    Button {
-                        session.togglePinned(current)
-                    } label: {
-                        Image(systemName: session.isPinned(current) ? "pin.fill" : "pin")
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundColor(session.isPinned(current) ? .accentColor : .white.opacity(0.55))
-                            .frame(width: 24, height: 24)
-                    }
-                    .buttonStyle(.plain)
-                    .help(session.isPinned(current) ? "Unpin current folder" : "Pin current folder")
-                }
+                .onboardingAnchor(.openFolderButton)
             }
         }
         .padding(.horizontal, isOpen ? 10 : 8)

@@ -37,8 +37,13 @@ extension ContentView {
     private func handleKeyEvent(_ event: NSEvent) -> Bool {
         // ---- Fixed bindings that cannot be rebound ----
 
-        // Escape — dismiss shortcuts help, then universal cancel / exit mode.
+        // Escape — dismiss onboarding / shortcuts help, then universal cancel.
         if event.keyCode == 53 {
+            if showOnboarding {
+                showOnboarding = false
+                hasCompletedOnboarding = true
+                return true
+            }
             if showShortcutsHelp {
                 showShortcutsHelp = false
                 return true
@@ -69,6 +74,7 @@ extension ContentView {
             let isShiftSlash = event.keyCode == 44
                 && event.modifierFlags.contains(.shift)
             if isQuestion || isBareSlash || isShiftSlash {
+                if showOnboarding { return true }
                 showShortcutsHelp.toggle()
                 return true
             }

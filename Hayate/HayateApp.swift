@@ -88,6 +88,12 @@ struct HayateApp: App {
             CommandGroup(after: .appInfo) {
                 CheckForUpdatesView(updater: updaterController.updater)
             }
+            CommandGroup(before: .help) {
+                Button("Welcome Guide") {
+                    NotificationCenter.default.post(name: .showOnboarding, object: nil)
+                }
+                .keyboardShortcut("h", modifiers: [.command, .shift])
+            }
         }
 
         Settings {
