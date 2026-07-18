@@ -30,6 +30,11 @@ extension ContentView {
         VStack(spacing: 0) {
             // Filter bar
             HStack(spacing: 8) {
+                folderSwitcher
+
+                Divider()
+                    .frame(height: 14)
+
                 ForEach(GridFilter.visible(triage: cullingProfileTriage), id: \.self) { filter in
                     Button {
                         gridFilter = filter

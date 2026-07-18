@@ -69,6 +69,11 @@ extension ContentView {
     var statusBar: some View {
         HStack {
             if !session.files.isEmpty {
+                folderSwitcher
+
+                Divider()
+                    .frame(height: 14)
+
                 // Position
                 Text("\(session.currentIndex + 1)/\(session.files.count)")
                     .monospacedDigit()
@@ -151,6 +156,51 @@ extension ContentView {
         .background(.ultraThinMaterial)
         .foregroundColor(.white)
         .font(.system(size: 13))
+    }
+
+    /// The current folder doubles as an in-context switcher. File > Open
+    /// Recent remains available, but this keeps folder navigation discoverable
+    /// while the user is actively culling.
+    var folderSwitcher: some View {
+        Menu {
+            Button {
+                session.requestOpenFolder()
+            } label: {
+                Label("Open Folder…", systemImage: "folder.badge.plus")
+            }
+
+            let recent = session.recentFolders.filter { $0 != session.folderURL }
+            if !recent.isEmpty {
+                Divider()
+                Section("Recent Folders") {
+                    ForEach(recent, id: \.self) { url in
+                        Button {
+                            session.requestOpen(folder: url)
+                        } label: {
+                            Label(url.lastPathComponent, systemImage: "folder")
+                        }
+                        .help(url.path)
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: "folder")
+                    .font(.system(size: 11))
+                Text(session.folderURL?.lastPathComponent ?? "Folder")
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.system(size: 8, weight: .semibold))
+                    .opacity(0.55)
+            }
+            .foregroundColor(.white.opacity(0.85))
+            .contentShape(Rectangle())
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .help(session.folderURL?.path ?? "Switch folder")
+        .accessibilityLabel("Switch photo folder")
     }
 
     /// Keep / Maybe / Out controls for triage profile (K / M / O).
