@@ -3,7 +3,6 @@ import SwiftUI
 /// Cursor-style left pane: pinned folders + recent folders, with collapse.
 struct FolderSidebar: View {
     @EnvironmentObject private var session: CullingSession
-    @EnvironmentObject private var L: LocalizationStore
 
     let isOpen: Bool
     let onToggle: () -> Void
@@ -54,9 +53,7 @@ struct FolderSidebar: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .help(isOpen
-                  ? L.t("Hide sidebar (⌘B)", ja: "サイドバーを隠す（⌘B）")
-                  : L.t("Show sidebar (⌘B)", ja: "サイドバーを表示（⌘B）"))
+            .help(isOpen ? "Hide sidebar (⌘B)" : "Show sidebar (⌘B)")
 
             if isOpen {
                 Spacer(minLength: 0)
@@ -69,7 +66,7 @@ struct FolderSidebar: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .help(L.t("Open folder…", ja: "フォルダを開く…"))
+                .help("Open folder…")
                 .onboardingAnchor(.openFolderButton)
             }
         }
@@ -82,13 +79,9 @@ struct FolderSidebar: View {
     private var pinnedSection: some View {
         VStack(alignment: .leading, spacing: 4) {
             sectionTitle("Pinned")
-            if session.pinnedFolders.isEmpty {
-                emptyHint(L.t("Pin folders you revisit often", ja: "よく使うフォルダを Pin する"))
-            } else {
-                ForEach(session.pinnedFolders, id: \.path) { url in
-                    folderRow(url, pinned: true) {
-                        session.unpinFolder(url)
-                    }
+            ForEach(session.pinnedFolders, id: \.path) { url in
+                folderRow(url, pinned: true) {
+                    session.unpinFolder(url)
                 }
             }
         }
@@ -97,13 +90,9 @@ struct FolderSidebar: View {
     private var recentSection: some View {
         VStack(alignment: .leading, spacing: 4) {
             sectionTitle("Recent")
-            if session.unpinnedRecentFolders.isEmpty {
-                emptyHint(L.t("Opened folders appear here", ja: "開いたフォルダがここに表示されます"))
-            } else {
-                ForEach(session.unpinnedRecentFolders, id: \.path) { url in
-                    folderRow(url, pinned: false) {
-                        session.pinFolder(url)
-                    }
+            ForEach(session.unpinnedRecentFolders, id: \.path) { url in
+                folderRow(url, pinned: false) {
+                    session.pinFolder(url)
                 }
             }
         }
@@ -116,14 +105,6 @@ struct FolderSidebar: View {
             .textCase(.uppercase)
             .tracking(0.6)
             .padding(.horizontal, 6)
-    }
-
-    private func emptyHint(_ text: String) -> some View {
-        Text(text)
-            .font(.system(size: 11))
-            .foregroundColor(HayateTheme.fg(0.28))
-            .padding(.horizontal, 6)
-            .padding(.vertical, 4)
     }
 
     private func folderRow(
@@ -170,9 +151,7 @@ struct FolderSidebar: View {
             }
             .buttonStyle(.plain)
             .disabled(!available)
-            .help(available
-                  ? url.path
-                  : L.t("This folder is not currently reachable", ja: "このフォルダには現在アクセスできません"))
+            .help(available ? url.path : "This folder is not currently reachable")
 
             Button(action: pinAction) {
                 Image(systemName: pinned ? "pin.fill" : "pin")
@@ -190,7 +169,7 @@ struct FolderSidebar: View {
                 .fill(isCurrent ? HayateTheme.wash(0.1) : Color.clear)
         )
         .contextMenu {
-            Button(L.t("Open", ja: "開く")) {
+            Button("Open") {
                 guard available else { return }
                 onSelect(url)
             }
@@ -200,7 +179,7 @@ struct FolderSidebar: View {
             if session.recentFolders.contains(where: {
                 $0.standardizedFileURL.path == url.standardizedFileURL.path
             }) {
-                Button(L.t("Remove from Recent", ja: "Recent から削除"), role: .destructive) {
+                Button("Remove from Recent", role: .destructive) {
                     session.removeFromRecents(url)
                 }
             }

@@ -47,7 +47,6 @@ struct HayateApp: App {
             updaterDelegate: nil,
             userDriverDelegate: nil
         )
-        AppAppearance.applyStoredToApp()
     }
 
     var body: some Scene {
