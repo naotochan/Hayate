@@ -34,6 +34,9 @@ struct ContentView: View {
     @State var histogramData: HistogramData?
     /// Keyboard shortcuts cheat sheet (? key).
     @State var showShortcutsHelp = false
+    /// First-launch / on-demand welcome guide.
+    @State var showOnboarding = false
+    @AppStorage("hasCompletedOnboarding") var hasCompletedOnboarding = false
     /// A folder is currently being dragged over the window (drop feedback).
     @State var isDropTargeted = false
     /// Cursor-style folder sidebar (Pinned + Recent).
@@ -114,19 +117,20 @@ struct ContentView: View {
     }
 
     var body: some View {
-        HStack(spacing: 0) {
-            if ciContext != nil {
-                FolderSidebar(
-                    isOpen: sidebarVisible,
-                    onToggle: { sidebarVisible.toggle() },
-                    onOpenFolder: { session.requestOpenFolder() },
-                    onSelect: { session.requestOpen(folder: $0) }
-                )
-            }
+        ZStack {
+            HStack(spacing: 0) {
+                if ciContext != nil {
+                    FolderSidebar(
+                        isOpen: sidebarVisible,
+                        onToggle: { sidebarVisible.toggle() },
+                        onOpenFolder: { session.requestOpenFolder() },
+                        onSelect: { session.requestOpen(folder: $0) }
+                    )
+                }
 
-            ZStack {
-                Color(nsColor: NSColor(red: 0.1, green: 0.1, blue: 0.1, alpha: 1.0))
-                    .ignoresSafeArea()
+                ZStack {
+                    Color(nsColor: NSColor(red: 0.1, green: 0.1, blue: 0.1, alpha: 1.0))
+                        .ignoresSafeArea()
 
                 if ciContext == nil {
                     HayateBrandScreen(mode: .loading)
@@ -180,19 +184,45 @@ struct ContentView: View {
                     }
                 }
 
-                if showShortcutsHelp {
-                    ShortcutsHelpOverlay(
+                    if showShortcutsHelp {
+                        ShortcutsHelpOverlay(
+                            bindings: keybindings.bindings,
+                            triageMode: cullingProfileTriage,
+                            onDismiss: { showShortcutsHelp = false }
+                        )
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+
+        }
+        .overlayPreferenceValue(OnboardingAnchorKey.self) { anchors in
+            GeometryReader { proxy in
+                if showOnboarding {
+                    let frames = anchors.mapValues { proxy[$0] }
+                    OnboardingOverlay(
                         bindings: keybindings.bindings,
-                        triageMode: cullingProfileTriage,
-                        onDismiss: { showShortcutsHelp = false }
+                        frames: frames,
+                        onDismiss: {
+                            showOnboarding = false
+                            hasCompletedOnboarding = true
+                        }
                     )
                 }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .onAppear {
             initializeDecoder()
             installKeyHandler()
+            if !hasCompletedOnboarding {
+                sidebarVisible = true
+                showOnboarding = true
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .showOnboarding)) { _ in
+            showShortcutsHelp = false
+            sidebarVisible = true
+            showOnboarding = true
         }
         .onChange(of: ciContext != nil) { _, available in
             // Re-initialize decoder when CIContext becomes available (async load)
@@ -403,6 +433,7 @@ struct ContentView: View {
         showHistogram = false
         histogramData = nil
         showShortcutsHelp = false
+        showOnboarding = false
     }
 
     // MARK: - Navigation
