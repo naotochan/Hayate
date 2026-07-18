@@ -1,0 +1,56 @@
+---
+description: Hayate のバージョン / ビルド番号の上げ方と Applications インストール時の扱い
+alwaysApply: true
+---
+
+# Versioning (Hayate)
+
+## 番号の意味
+
+| 値 | Xcode キー | 例 | ルール |
+|---|---|---|---|
+| 表示バージョン | `MARKETING_VERSION` | `0.6.1` | SemVer。ユーザーに見える |
+| ビルド番号 | `CURRENT_PROJECT_VERSION` | `37` | **単調増加の整数**。Sparkle 比較用にも使う |
+
+ソース・オブ・トゥルースは `Hayate.xcodeproj/project.pbxproj` の **Hayate アプリターゲット**（Debug / Release の両方を同じ値に揃える）。  
+テストターゲット（`1.0` / `1`）は触らない。
+
+`Info.plist` は `$(MARKETING_VERSION)` / `$(CURRENT_PROJECT_VERSION)` を参照するだけ。直接編集しない。
+
+## いつ上げるか（エージェントは聞かない）
+
+**Applications へ入れるとき・リリース準備のとき**は、ユーザーに確認せずよしなに上げる。
+
+1. **ビルド番号** — 毎回 `+1`（必須）
+2. **表示バージョン**
+   - バグ修正・文言・見た目の調整 → **patch**（`0.6.0` → `0.6.1`）
+   - 機能追加 → **minor**（`0.6.1` → `0.7.0`）
+   - 破壊的変更 → **major**（滅多にない）
+   - 同じ表示バージョンでビルドだけ重ねるローカル反復も可（ビルド番号だけ上げる）
+
+通常の WIP コミットや、インストールしない調査だけの変更では上げない。
+
+## 手順
+
+ローカルで `/Applications` に入れるとき:
+
+```bash
+./scripts/dev-install.sh --run
+```
+
+このスクリプトがビルド番号を `+1` してから Release ビルド → コピーする。  
+表示バージョンも変えたいときは先に pbxproj を更新するか、`--bump-patch` / `--bump-minor` を付ける。
+
+正式リリース（zip / Sparkle appcast）:
+
+```bash
+./scripts/build-release.sh <version>
+```
+
+こちらは引数の表示バージョンと、git コミット数ベースのビルド番号を **ビルド時に上書き**する（pbxproj は書き換えない）。リリース後は pbxproj 側も同じ表示バージョン・それ以上のビルド番号に揃えておく。
+
+## やらないこと
+
+- ユーザーに「バージョン上げますか？」と毎回聞かない（インストール / リリース文脈では自動）
+- テストターゲットのバージョンをいじらない
+- appcast / GitHub Release を `dev-install` で触らない（ローカル反復用）
