@@ -3,6 +3,7 @@ import SwiftUI
 /// Cursor-style left pane: pinned folders + recent folders, with collapse.
 struct FolderSidebar: View {
     @EnvironmentObject private var session: CullingSession
+    @EnvironmentObject private var L: LocalizationStore
 
     let isOpen: Bool
     let onToggle: () -> Void
@@ -53,7 +54,9 @@ struct FolderSidebar: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .help(isOpen ? "Hide sidebar (⌘B)" : "Show sidebar (⌘B)")
+            .help(isOpen
+                  ? L.t("Hide sidebar (⌘B)", ja: "サイドバーを隠す（⌘B）")
+                  : L.t("Show sidebar (⌘B)", ja: "サイドバーを表示（⌘B）"))
 
             if isOpen {
                 Spacer(minLength: 0)
@@ -66,7 +69,7 @@ struct FolderSidebar: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .help("Open folder…")
+                .help(L.t("Open folder…", ja: "フォルダを開く…"))
                 .onboardingAnchor(.openFolderButton)
             }
         }
@@ -78,12 +81,12 @@ struct FolderSidebar: View {
 
     private var pinnedSection: some View {
         VStack(alignment: .leading, spacing: 4) {
-            sectionTitle("Pinned")
+            sectionTitle(L.t("Pinned", ja: "ピン留め"))
             if session.pinnedFolders.isEmpty {
-                emptyHint("Pin folders you revisit often")
+                emptyHint(L.t("Pin folders you revisit often", ja: "よく使うフォルダをピン留め"))
             } else {
                 ForEach(session.pinnedFolders, id: \.path) { url in
-                    folderRow(url, pinActionTitle: "Unpin") {
+                    folderRow(url, pinned: true) {
                         session.unpinFolder(url)
                     }
                 }
@@ -93,12 +96,12 @@ struct FolderSidebar: View {
 
     private var recentSection: some View {
         VStack(alignment: .leading, spacing: 4) {
-            sectionTitle("Recent")
+            sectionTitle(L.t("Recent", ja: "最近"))
             if session.unpinnedRecentFolders.isEmpty {
-                emptyHint("Opened folders appear here")
+                emptyHint(L.t("Opened folders appear here", ja: "開いたフォルダがここに表示されます"))
             } else {
                 ForEach(session.unpinnedRecentFolders, id: \.path) { url in
-                    folderRow(url, pinActionTitle: "Pin") {
+                    folderRow(url, pinned: false) {
                         session.pinFolder(url)
                     }
                 }
@@ -125,11 +128,14 @@ struct FolderSidebar: View {
 
     private func folderRow(
         _ url: URL,
-        pinActionTitle: String,
+        pinned: Bool,
         pinAction: @escaping () -> Void
     ) -> some View {
         let available = FileManager.default.isReadableFile(atPath: url.path)
         let isCurrent = session.folderURL?.standardizedFileURL.path == url.standardizedFileURL.path
+        let pinTitle = pinned
+            ? L.t("Unpin", ja: "ピン解除")
+            : L.t("Pin", ja: "ピン留め")
 
         return HStack(spacing: 4) {
             Button {
@@ -166,17 +172,19 @@ struct FolderSidebar: View {
             }
             .buttonStyle(.plain)
             .disabled(!available)
-            .help(available ? url.path : "This folder is not currently reachable")
+            .help(available
+                  ? url.path
+                  : L.t("This folder is not currently reachable", ja: "このフォルダには現在アクセスできません"))
 
             Button(action: pinAction) {
-                Image(systemName: pinActionTitle == "Pin" ? "pin" : "pin.fill")
+                Image(systemName: pinned ? "pin.fill" : "pin")
                     .font(.system(size: 10, weight: .medium))
-                    .foregroundColor(pinActionTitle == "Pin" ? .white.opacity(0.35) : .accentColor.opacity(0.85))
+                    .foregroundColor(pinned ? .accentColor.opacity(0.85) : .white.opacity(0.35))
                     .frame(width: 22, height: 22)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .help(pinActionTitle)
+            .help(pinTitle)
             .padding(.trailing, 4)
         }
         .background(
@@ -184,17 +192,17 @@ struct FolderSidebar: View {
                 .fill(isCurrent ? Color.white.opacity(0.1) : Color.clear)
         )
         .contextMenu {
-            Button("Open") {
+            Button(L.t("Open", ja: "開く")) {
                 guard available else { return }
                 onSelect(url)
             }
             .disabled(!available)
             Divider()
-            Button(pinActionTitle, action: pinAction)
+            Button(pinTitle, action: pinAction)
             if session.recentFolders.contains(where: {
                 $0.standardizedFileURL.path == url.standardizedFileURL.path
             }) {
-                Button("Remove from Recent", role: .destructive) {
+                Button(L.t("Remove from Recent", ja: "最近から削除"), role: .destructive) {
                     session.removeFromRecents(url)
                 }
             }

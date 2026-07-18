@@ -24,6 +24,8 @@ struct HayateApp: App {
     @StateObject private var session = CullingSession()
     @StateObject private var ciContextHolder = CIContextHolder()
     @StateObject private var keybindings = KeybindingStore()
+    @StateObject private var localization = LocalizationStore()
+    @AppStorage("appAppearance") private var appAppearance: AppAppearance = .system
 
     private let device: MTLDevice
     private let updaterController: SPUStandardUpdaterController
@@ -52,8 +54,11 @@ struct HayateApp: App {
             ContentView()
                 .environmentObject(session)
                 .environmentObject(keybindings)
+                .environmentObject(localization)
                 .environment(\.ciContext, ciContextHolder.ciContext)
                 .environment(\.metalDevice, device)
+                .preferredColorScheme(appAppearance.preferredColorScheme)
+                .id(localization.language)
                 .task {
                     ciContextHolder.initialize(device: device)
                 }
@@ -62,12 +67,12 @@ struct HayateApp: App {
         .defaultSize(width: 1200, height: 800)
         .commands {
             CommandGroup(replacing: .newItem) {
-                Button("Open Folder…") {
+                Button(localization.t("Open Folder…", ja: "フォルダを開く…")) {
                     session.requestOpenFolder()
                 }
                 .keyboardShortcut("o", modifiers: .command)
 
-                Menu("Open Recent") {
+                Menu(localization.t("Open Recent", ja: "最近使った項目を開く")) {
                     ForEach(session.recentFolders, id: \.path) { url in
                         Button(url.lastPathComponent) {
                             session.requestOpen(folder: url)
@@ -79,7 +84,7 @@ struct HayateApp: App {
 
                 Divider()
 
-                Button("Export Picks…") {
+                Button(localization.t("Export Picks…", ja: "選別結果を書き出す…")) {
                     session.requestExport()
                 }
                 .keyboardShortcut("e", modifiers: .command)
@@ -87,9 +92,10 @@ struct HayateApp: App {
             }
             CommandGroup(after: .appInfo) {
                 CheckForUpdatesView(updater: updaterController.updater)
+                    .environmentObject(localization)
             }
             CommandGroup(before: .help) {
-                Button("Welcome Guide") {
+                Button(localization.t("Welcome Guide", ja: "ようこそガイド")) {
                     NotificationCenter.default.post(name: .showOnboarding, object: nil)
                 }
                 .keyboardShortcut("h", modifiers: [.command, .shift])
@@ -99,6 +105,9 @@ struct HayateApp: App {
         Settings {
             SettingsView()
                 .environmentObject(keybindings)
+                .environmentObject(localization)
+                .preferredColorScheme(appAppearance.preferredColorScheme)
+                .id(localization.language)
         }
     }
 }
@@ -106,6 +115,7 @@ struct HayateApp: App {
 // MARK: - Sparkle Update Menu
 
 struct CheckForUpdatesView: View {
+    @EnvironmentObject private var L: LocalizationStore
     @ObservedObject private var checkForUpdatesViewModel: CheckForUpdatesViewModel
     let updater: SPUUpdater
 
@@ -115,7 +125,7 @@ struct CheckForUpdatesView: View {
     }
 
     var body: some View {
-        Button("Check for Updates…", action: updater.checkForUpdates)
+        Button(L.t("Check for Updates…", ja: "アップデートを確認…"), action: updater.checkForUpdates)
             .disabled(!checkForUpdatesViewModel.canCheckForUpdates)
     }
 }

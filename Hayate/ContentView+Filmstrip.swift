@@ -117,17 +117,20 @@ extension ContentView {
 
                 // Cull mode / focus peaking indicators
                 if cullModeDraft {
-                    Text("DRAFT")
+                    Text(L.t("DRAFT", ja: "下書き"))
                         .font(.system(size: 10, weight: .bold, design: .monospaced))
                         .foregroundColor(.cyan)
                         .padding(.horizontal, 4)
                         .padding(.vertical, 1)
                         .background(Color.cyan.opacity(0.2))
                         .cornerRadius(3)
-                        .help("Draft mode: embedded JPEG previews. Press F or zoom for full RAW.")
+                        .help(L.t(
+                            "Draft mode: embedded JPEG previews. Press F or zoom for full RAW.",
+                            ja: "下書きモード: 埋め込みJPEGプレビュー。F またはズームでフルRAW。"
+                        ))
                 }
                 if focusPeakingEnabled {
-                    Text("PEAK")
+                    Text(L.t("PEAK", ja: "ピーク"))
                         .font(.system(size: 10, weight: .bold, design: .monospaced))
                         .foregroundColor(.red)
                         .padding(.horizontal, 4)
@@ -145,7 +148,10 @@ extension ContentView {
 
                 // Background build progress
                 if buildProgress.isBuilding {
-                    Text("Building previews: \(buildProgress.completed)/\(buildProgress.total)")
+                    Text(L.t(
+                        "Building previews: \(buildProgress.completed)/\(buildProgress.total)",
+                        ja: "プレビュー生成中: \(buildProgress.completed)/\(buildProgress.total)"
+                    ))
                         .foregroundColor(.gray)
                         .font(.system(size: 11, design: .monospaced))
                 }
@@ -166,13 +172,13 @@ extension ContentView {
             Button {
                 session.requestOpenFolder()
             } label: {
-                Label("Open Folder…", systemImage: "folder.badge.plus")
+                Label(L.t("Open Folder…", ja: "フォルダを開く…"), systemImage: "folder.badge.plus")
             }
 
             let recent = session.otherRecentFolders
             if !recent.isEmpty {
                 Divider()
-                Section("Recent Folders") {
+                Section(L.t("Recent Folders", ja: "最近のフォルダ")) {
                     ForEach(recent, id: \.path) { url in
                         Button {
                             session.requestOpen(folder: url)
@@ -187,7 +193,7 @@ extension ContentView {
             HStack(spacing: 5) {
                 Image(systemName: "folder.fill")
                     .font(.system(size: 11))
-                Text(session.folderURL?.lastPathComponent ?? "Folder")
+                Text(session.folderURL?.lastPathComponent ?? L.t("Folder", ja: "フォルダ"))
                     .lineLimit(1)
                     .truncationMode(.middle)
                 Image(systemName: "chevron.down")
@@ -204,21 +210,24 @@ extension ContentView {
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
         .fixedSize()
-        .help("Switch folder — \(session.folderURL?.path ?? "")")
-        .accessibilityLabel("Switch photo folder")
+        .help(L.t(
+            "Switch folder — \(session.folderURL?.path ?? "")",
+            ja: "フォルダを切り替え — \(session.folderURL?.path ?? "")"
+        ))
+        .accessibilityLabel(L.t("Switch photo folder", ja: "写真フォルダを切り替え"))
     }
 
     /// Keep / Maybe / Out controls for triage profile (K / M / O).
     private var triageStatusControls: some View {
         let state = CullingSession.TriageState.of(session.currentEntry)
         return HStack(spacing: 6) {
-            triageChip("Keep", key: "K", active: state == .keep, color: .red) {
+            triageChip(L.t("Keep", ja: "キープ"), key: "K", active: state == .keep, color: .red) {
                 session.setTriage(.keep)
             }
-            triageChip("Maybe", key: "M", active: state == .maybe, color: .yellow) {
+            triageChip(L.t("Maybe", ja: "保留"), key: "M", active: state == .maybe, color: .yellow) {
                 session.setTriage(.maybe)
             }
-            triageChip("Out", key: "O", active: state == .out, color: .orange) {
+            triageChip(L.t("Out", ja: "アウト"), key: "O", active: state == .out, color: .orange) {
                 session.setTriage(.out)
             }
         }

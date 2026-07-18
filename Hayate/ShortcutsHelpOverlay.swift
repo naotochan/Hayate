@@ -7,6 +7,8 @@ struct ShortcutsHelpOverlay: View {
     let triageMode: Bool
     let onDismiss: () -> Void
 
+    @EnvironmentObject private var L: LocalizationStore
+
     var body: some View {
         ZStack {
             Color.black.opacity(0.55)
@@ -15,11 +17,11 @@ struct ShortcutsHelpOverlay: View {
 
             VStack(alignment: .leading, spacing: 0) {
                 HStack(alignment: .firstTextBaseline) {
-                    Text("Keyboard Shortcuts")
+                    Text(L.t("Keyboard Shortcuts", ja: "キーボードショートカット"))
                         .font(.system(size: 18, weight: .semibold))
                         .foregroundColor(.white)
                     Spacer()
-                    Text("? or / or ⎋ to close")
+                    Text(L.t("? or / or ⎋ to close", ja: "? または / または ⎋ で閉じる"))
                         .font(.system(size: 11))
                         .foregroundColor(.white.opacity(0.45))
                 }
@@ -101,22 +103,31 @@ struct ShortcutsHelpOverlay: View {
 
         // Fixed keys that never go through KeybindingStore.
         var fixed: [Row] = [
-            Row(keys: "← →", label: "Previous / next photo"),
-            Row(keys: "⎋", label: "Cancel / exit mode / reset zoom"),
+            Row(
+                keys: "← →",
+                label: L.t("Previous / next photo", ja: "前 / 次の写真")
+            ),
+            Row(
+                keys: "⎋",
+                label: L.t("Cancel / exit mode / reset zoom", ja: "キャンセル / モード終了 / ズームリセット")
+            ),
         ]
         if !triageMode {
-            fixed.append(Row(keys: "0–5", label: "Set star rating"))
+            fixed.append(Row(
+                keys: "0–5",
+                label: L.t("Set star rating", ja: "星評価を設定")
+            ))
         }
-        result.append(Section(title: "Always", rows: fixed))
+        result.append(Section(title: L.t("Always", ja: "常時"), rows: fixed))
 
         for category in ActionID.Category.allCases {
             let actions = ActionID.allCases.filter { $0.category == category }
             let rows = actions.compactMap { action -> Row? in
                 guard let shortcut = bindings[action] else { return nil }
-                return Row(keys: shortcut.display, label: action.helpTitle(triageMode: triageMode))
+                return Row(keys: shortcut.display, label: action.helpTitle(triageMode: triageMode, L.resolved))
             }
             if !rows.isEmpty {
-                result.append(Section(title: category.rawValue, rows: rows))
+                result.append(Section(title: category.title(L.resolved), rows: rows))
             }
         }
         return result
@@ -125,18 +136,24 @@ struct ShortcutsHelpOverlay: View {
 
 extension ActionID {
     /// Overlay-friendly titles that reflect Keep/Maybe/Out vs stars.
-    func helpTitle(triageMode: Bool) -> String {
+    func helpTitle(triageMode: Bool, _ lang: ResolvedLanguage) -> String {
         switch self {
         case .toggleFavorite:
-            return triageMode ? "Keep" : "Toggle favorite"
+            return triageMode
+                ? lang.t("Keep", ja: "キープ")
+                : lang.t("Toggle favorite", ja: "お気に入りを切り替え")
         case .toggleRejected:
-            return triageMode ? "Out" : "Toggle rejected"
+            return triageMode
+                ? lang.t("Out", ja: "アウト")
+                : lang.t("Toggle rejected", ja: "却下を切り替え")
         case .setTriageMaybe:
-            return triageMode ? "Maybe" : "Maybe (triage)"
+            return triageMode
+                ? lang.t("Maybe", ja: "保留")
+                : lang.t("Maybe (triage)", ja: "保留（トリアージ）")
         case .toggleShortcutsHelp:
-            return "Show / hide this cheat sheet"
+            return lang.t("Show / hide this cheat sheet", ja: "この早見表の表示 / 非表示")
         default:
-            return title
+            return title(lang)
         }
     }
 }

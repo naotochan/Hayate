@@ -5,6 +5,7 @@ import AppKit
 /// destination folder, plus a bulk "trash all rejected" action.
 struct ExportSheet: View {
     @EnvironmentObject var session: CullingSession
+    @EnvironmentObject private var L: LocalizationStore
     @Environment(\.dismiss) private var dismiss
     @AppStorage("cullingProfileTriage") private var cullingProfileTriage = true
 
@@ -46,29 +47,29 @@ struct ExportSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Export Picks")
+            Text(L.t("Export Picks", ja: "選別結果を書き出す"))
                 .font(.title2)
                 .fontWeight(.semibold)
 
             Form {
                 Section {
-                    Picker("Photos", selection: $source) {
+                    Picker(L.t("Photos", ja: "写真"), selection: $source) {
                         if cullingProfileTriage {
-                            Text("Keep").tag(Source.favorites)
-                            Text("Keep + Maybe").tag(Source.keepOrMaybe)
+                            Text(L.t("Keep", ja: "キープ")).tag(Source.favorites)
+                            Text(L.t("Keep + Maybe", ja: "キープ + 保留")).tag(Source.keepOrMaybe)
                         } else {
-                            Text("♥ Favorites").tag(Source.favorites)
+                            Text(L.t("♥ Favorites", ja: "♥ お気に入り")).tag(Source.favorites)
                             ForEach(1...5, id: \.self) { n in
-                                Text("Rating ≥ \(n)").tag(Source.minRating(n))
+                                Text(L.t("Rating ≥ \(n)", ja: "評価 ≥ \(n)")).tag(Source.minRating(n))
                             }
                         }
                     }
-                    Picker("Action", selection: $move) {
-                        Text("Copy").tag(false)
-                        Text("Move").tag(true)
+                    Picker(L.t("Action", ja: "操作"), selection: $move) {
+                        Text(L.t("Copy", ja: "コピー")).tag(false)
+                        Text(L.t("Move", ja: "移動")).tag(true)
                     }
                     .pickerStyle(.segmented)
-                    Text("\(matchCount) photos match")
+                    Text(L.t("\(matchCount) photos match", ja: "\(matchCount) 枚が一致"))
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
@@ -85,13 +86,15 @@ struct ExportSheet: View {
                 Section {
                     HStack {
                         Text(cullingProfileTriage
-                             ? "\(rejectedIndices.count) Out photos"
-                             : "\(rejectedIndices.count) rejected photos")
+                             ? L.t("\(rejectedIndices.count) Out photos", ja: "アウト \(rejectedIndices.count) 枚")
+                             : L.t("\(rejectedIndices.count) rejected photos", ja: "却下 \(rejectedIndices.count) 枚"))
                             .font(.caption)
                             .foregroundColor(.secondary)
                         Spacer()
                         Button(
-                            cullingProfileTriage ? "Move Out to Trash…" : "Move Rejected to Trash…",
+                            cullingProfileTriage
+                                ? L.t("Move Out to Trash…", ja: "アウトをゴミ箱へ…")
+                                : L.t("Move Rejected to Trash…", ja: "却下をゴミ箱へ…"),
                             role: .destructive
                         ) {
                             showTrashConfirmation = true
@@ -104,7 +107,9 @@ struct ExportSheet: View {
 
             HStack {
                 Spacer()
-                Button(session.exportProgress?.finished == true ? "Done" : "Cancel") {
+                Button(session.exportProgress?.finished == true
+                       ? L.t("Done", ja: "完了")
+                       : L.t("Cancel", ja: "キャンセル")) {
                     // Cancelling while an export runs stops it after the
                     // file currently in flight.
                     if session.exportProgress?.finished == false {
@@ -113,7 +118,7 @@ struct ExportSheet: View {
                     dismiss()
                 }
                 .keyboardShortcut(.cancelAction)
-                Button("Export…") {
+                Button(L.t("Export…", ja: "書き出す…")) {
                     chooseDestinationAndExport()
                 }
                 .keyboardShortcut(.defaultAction)
@@ -136,26 +141,38 @@ struct ExportSheet: View {
         }
         .confirmationDialog(
             cullingProfileTriage
-                ? "Move \(rejectedIndices.count) Out photos to Trash?"
-                : "Move \(rejectedIndices.count) rejected photos to Trash?",
+                ? L.t(
+                    "Move \(rejectedIndices.count) Out photos to Trash?",
+                    ja: "アウト \(rejectedIndices.count) 枚をゴミ箱に移しますか？"
+                )
+                : L.t(
+                    "Move \(rejectedIndices.count) rejected photos to Trash?",
+                    ja: "却下 \(rejectedIndices.count) 枚をゴミ箱に移しますか？"
+                ),
             isPresented: $showTrashConfirmation,
             titleVisibility: .visible
         ) {
-            Button("Move to Trash", role: .destructive) {
+            Button(L.t("Move to Trash", ja: "ゴミ箱に移す"), role: .destructive) {
                 session.deleteFilesAtIndices(rejectedIndices)
                 onBulkDelete()
             }
-            Button("Cancel", role: .cancel) {}
+            Button(L.t("Cancel", ja: "キャンセル"), role: .cancel) {}
         }
     }
 
     private func progressText(_ progress: CullingSession.ExportProgress) -> String {
         if progress.finished {
             return progress.failed > 0
-                ? "Done — \(progress.completed - progress.failed) exported, \(progress.failed) failed (already exists or unwritable)"
-                : "Done — \(progress.completed) exported"
+                ? L.t(
+                    "Done — \(progress.completed - progress.failed) exported, \(progress.failed) failed (already exists or unwritable)",
+                    ja: "完了 — \(progress.completed - progress.failed) 件書き出し、\(progress.failed) 件失敗（既存または書き込み不可）"
+                )
+                : L.t("Done — \(progress.completed) exported", ja: "完了 — \(progress.completed) 件書き出し")
         }
-        return "Exporting \(progress.completed)/\(progress.total)…"
+        return L.t(
+            "Exporting \(progress.completed)/\(progress.total)…",
+            ja: "書き出し中 \(progress.completed)/\(progress.total)…"
+        )
     }
 
     private func chooseDestinationAndExport() {
@@ -163,8 +180,8 @@ struct ExportSheet: View {
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
         panel.canCreateDirectories = true
-        panel.prompt = "Export"
-        panel.message = "Choose a destination folder"
+        panel.prompt = L.t("Export", ja: "書き出す")
+        panel.message = L.t("Choose a destination folder", ja: "保存先フォルダを選んでください")
         guard panel.runModal() == .OK, let url = panel.url else { return }
         session.exportPicks(where: matches, to: url, move: move)
     }

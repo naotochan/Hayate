@@ -122,40 +122,51 @@ enum ActionID: String, Codable, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
-    var title: String {
+    func title(_ lang: ResolvedLanguage) -> String {
         switch self {
-        case .navigateBack: return "Previous photo"
-        case .navigateForward: return "Next photo"
-        case .toggleFavorite: return "Toggle favorite / Keep"
-        case .toggleRejected: return "Toggle rejected / Out"
-        case .setTriageMaybe: return "Maybe (triage)"
-        case .toggleGrid: return "Toggle grid view"
-        case .toggleCompare: return "Toggle compare mode"
-        case .toggleFitZoom: return "Toggle fit / 2× zoom"
-        case .toggleFocusPeaking: return "Toggle focus peaking"
-        case .toggleCullModeDraft: return "Toggle draft cull mode"
-        case .toggleInfo: return "Toggle info overlay (EXIF)"
-        case .toggleHistogram: return "Toggle histogram"
-        case .toggleShortcutsHelp: return "Show keyboard shortcuts"
-        case .toggleSidebar: return "Toggle folder sidebar"
-        case .deletePhoto: return "Move photo to Trash"
-        case .undo: return "Undo"
-        case .selectAllGrid: return "Select all (grid)"
-        case .openFolder: return "Open folder…"
-        case .pickCompare: return "Pick active (compare)"
-        case .skipNextBaseline: return "Skip to next baseline (compare)"
+        case .navigateBack: return lang.t("Previous photo", ja: "前の写真")
+        case .navigateForward: return lang.t("Next photo", ja: "次の写真")
+        case .toggleFavorite: return lang.t("Toggle favorite / Keep", ja: "お気に入り / キープ")
+        case .toggleRejected: return lang.t("Toggle rejected / Out", ja: "却下 / アウト")
+        case .setTriageMaybe: return lang.t("Maybe (triage)", ja: "保留（トリアージ）")
+        case .toggleGrid: return lang.t("Toggle grid view", ja: "グリッド表示を切り替え")
+        case .toggleCompare: return lang.t("Toggle compare mode", ja: "比較モードを切り替え")
+        case .toggleFitZoom: return lang.t("Toggle fit / 2× zoom", ja: "フィット / 2×ズームを切り替え")
+        case .toggleFocusPeaking: return lang.t("Toggle focus peaking", ja: "フォーカスピーキングを切り替え")
+        case .toggleCullModeDraft: return lang.t("Toggle draft cull mode", ja: "下書き選別モードを切り替え")
+        case .toggleInfo: return lang.t("Toggle info overlay (EXIF)", ja: "情報オーバーレイ（EXIF）を切り替え")
+        case .toggleHistogram: return lang.t("Toggle histogram", ja: "ヒストグラムを切り替え")
+        case .toggleShortcutsHelp: return lang.t("Show keyboard shortcuts", ja: "キーボードショートカットを表示")
+        case .toggleSidebar: return lang.t("Toggle folder sidebar", ja: "フォルダサイドバーを切り替え")
+        case .deletePhoto: return lang.t("Move photo to Trash", ja: "写真をゴミ箱へ移動")
+        case .undo: return lang.t("Undo", ja: "取り消す")
+        case .selectAllGrid: return lang.t("Select all (grid)", ja: "すべて選択（グリッド）")
+        case .openFolder: return lang.t("Open folder…", ja: "フォルダを開く…")
+        case .pickCompare: return lang.t("Pick active (compare)", ja: "アクティブを選ぶ（比較）")
+        case .skipNextBaseline: return lang.t("Skip to next baseline (compare)", ja: "次の基準へスキップ（比較）")
         }
     }
 
     enum Category: String, CaseIterable, Identifiable {
-        case navigation = "Navigation"
-        case rating = "Rating"
-        case view = "View"
-        case editing = "Editing"
-        case file = "File"
-        case compareMode = "Compare"
+        case navigation
+        case rating
+        case view
+        case editing
+        case file
+        case compareMode
 
         var id: String { rawValue }
+
+        func title(_ lang: ResolvedLanguage) -> String {
+            switch self {
+            case .navigation: return lang.t("Navigation", ja: "ナビ")
+            case .rating: return lang.t("Rating", ja: "評価")
+            case .view: return lang.t("View", ja: "表示")
+            case .editing: return lang.t("Editing", ja: "編集")
+            case .file: return lang.t("File", ja: "ファイル")
+            case .compareMode: return lang.t("Compare", ja: "比較")
+            }
+        }
     }
 
     var category: Category {

@@ -9,6 +9,7 @@ import UniformTypeIdentifiers
 struct ContentView: View {
     @EnvironmentObject var session: CullingSession
     @EnvironmentObject var keybindings: KeybindingStore
+    @EnvironmentObject var L: LocalizationStore
     @Environment(\.ciContext) var ciContext
     @Environment(\.metalDevice) var metalDevice
 
@@ -90,20 +91,34 @@ struct ContentView: View {
     @State var compareTextures: [Int: MTLTexture] = [:]
 
     enum GridFilter: String, CaseIterable {
-        case all = "All"
-        case favorites = "♥ Favorites"
-        case rejected = "✗ Rejected"
-        case rated = "★ Rated"
-        case unrated = "Unrated"
-        case keep = "Keep"
-        case maybe = "Maybe"
-        case out = "Out"
-        case undecided = "Undecided"
+        case all
+        case favorites
+        case rejected
+        case rated
+        case unrated
+        case keep
+        case maybe
+        case out
+        case undecided
 
         static func visible(triage: Bool) -> [GridFilter] {
             triage
                 ? [.all, .keep, .maybe, .out, .undecided]
                 : [.all, .favorites, .rejected, .rated, .unrated]
+        }
+
+        func title(_ lang: ResolvedLanguage) -> String {
+            switch self {
+            case .all: return lang.t("All", ja: "すべて")
+            case .favorites: return lang.t("♥ Favorites", ja: "♥ お気に入り")
+            case .rejected: return lang.t("✗ Rejected", ja: "✗ 却下")
+            case .rated: return lang.t("★ Rated", ja: "★ 評価済み")
+            case .unrated: return lang.t("Unrated", ja: "未評価")
+            case .keep: return lang.t("Keep", ja: "キープ")
+            case .maybe: return lang.t("Maybe", ja: "保留")
+            case .out: return lang.t("Out", ja: "アウト")
+            case .undecided: return lang.t("Undecided", ja: "未決定")
+            }
         }
     }
 
@@ -238,7 +253,7 @@ struct ContentView: View {
             isPresented: $showDeleteConfirmation,
             titleVisibility: .visible
         ) {
-            Button("Move to Trash", role: .destructive) {
+            Button(L.t("Move to Trash", ja: "ゴミ箱に移す"), role: .destructive) {
                 if let indices = pendingDeletionIndices {
                     let deleted = session.deleteFilesAtIndices(indices)
                     selectedIndices.removeAll()
@@ -251,7 +266,7 @@ struct ContentView: View {
                     loadCurrentImage()
                 }
             }
-            Button("Cancel", role: .cancel) {
+            Button(L.t("Cancel", ja: "キャンセル"), role: .cancel) {
                 pendingDeletionIndices = nil
             }
         } message: {
@@ -333,9 +348,9 @@ struct ContentView: View {
 
     private var deletionDialogTitle: String {
         if let count = pendingDeletionIndices?.count, count > 1 {
-            return "Delete \(count) photos?"
+            return L.t("Delete \(count) photos?", ja: "\(count) 枚の写真を削除しますか？")
         }
-        return "Delete this photo?"
+        return L.t("Delete this photo?", ja: "この写真を削除しますか？")
     }
 
     private var deletionDialogMessage: String {
@@ -343,7 +358,10 @@ struct ContentView: View {
             if indices.count == 1, let only = indices.first, session.files.indices.contains(only) {
                 return session.files[only].lastPathComponent
             }
-            return "Move \(indices.count) selected photos to Trash."
+            return L.t(
+                "Move \(indices.count) selected photos to Trash.",
+                ja: "選択中の \(indices.count) 枚をゴミ箱に移します。"
+            )
         }
         return session.currentFile?.lastPathComponent ?? ""
     }
@@ -355,7 +373,10 @@ struct ContentView: View {
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
         panel.allowsMultipleSelection = false
-        panel.message = "Select a folder containing RAW photos"
+        panel.message = L.t(
+            "Select a folder containing RAW photos",
+            ja: "RAW写真が入ったフォルダを選んでください"
+        )
 
         guard panel.runModal() == .OK, let url = panel.url else { return }
         openFolderAndReload(url)

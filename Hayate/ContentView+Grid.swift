@@ -39,7 +39,7 @@ extension ContentView {
                     Button {
                         gridFilter = filter
                     } label: {
-                        Text(filter.rawValue)
+                        Text(filter.title(L.resolved))
                             .font(.system(size: 11, weight: gridFilter == filter ? .bold : .regular))
                             .foregroundColor(gridFilter == filter ? .white : .gray)
                             .padding(.horizontal, 8)
@@ -57,7 +57,7 @@ extension ContentView {
                     .foregroundColor(.gray)
 
                 if !selectedIndices.isEmpty {
-                    Text("\(selectedIndices.count) selected")
+                    Text(L.t("\(selectedIndices.count) selected", ja: "\(selectedIndices.count) 件選択"))
                         .font(.system(size: 11))
                         .foregroundColor(.white)
                         .padding(.horizontal, 6)
