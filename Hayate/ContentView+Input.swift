@@ -240,6 +240,10 @@ extension ContentView {
             showShortcutsHelp.toggle()
             return true
 
+        case .toggleSidebar:
+            sidebarVisible.toggle()
+            return true
+
         case .deletePhoto:
             if showGrid && !selectedIndices.isEmpty {
                 pendingDeletionIndices = selectedIndices

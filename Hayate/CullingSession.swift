@@ -30,9 +30,13 @@ class CullingSession: ObservableObject {
 
     /// Recently opened folders, most recent first (persisted to UserDefaults).
     @Published private(set) var recentFolders: [URL] = []
+    /// User-pinned folders for the sidebar (persisted, order preserved).
+    @Published private(set) var pinnedFolders: [URL] = []
 
     static let recentFoldersKey = "recentFolders"
+    static let pinnedFoldersKey = "pinnedFolders"
     static let maxRecentFolders = 10
+    static let maxPinnedFolders = 20
 
     /// Undo stack (session-only, lost on quit).
     private var undoStack: [UndoAction] = []
@@ -52,11 +56,15 @@ class CullingSession: ObservableObject {
             // Drop ephemeral test / system temp folders that leaked into
             // preferences; keep everything else (including unmounted volumes)
             // so the user can still see the names.
-            recentFolders = paths
-                .filter { !$0.hasPrefix("/var/folders/") && !$0.hasPrefix("/tmp/") }
-                .map { URL(fileURLWithPath: $0, isDirectory: true) }
+            recentFolders = Self.sanitizeFolderPaths(paths)
             if recentFolders.map(\.path) != paths {
                 defaults.set(recentFolders.map(\.path), forKey: Self.recentFoldersKey)
+            }
+        }
+        if let paths = defaults.stringArray(forKey: Self.pinnedFoldersKey) {
+            pinnedFolders = Self.sanitizeFolderPaths(paths)
+            if pinnedFolders.map(\.path) != paths {
+                defaults.set(pinnedFolders.map(\.path), forKey: Self.pinnedFoldersKey)
             }
         }
         // Persist the browsing position (lastFileName / lastIndex) on quit —
@@ -319,7 +327,7 @@ class CullingSession: ObservableObject {
     private func addToRecents(_ url: URL) {
         // Never persist ephemeral test / system temp directories.
         let path = url.path
-        guard !path.hasPrefix("/var/folders/"), !path.hasPrefix("/tmp/") else { return }
+        guard Self.isPersistableFolderPath(path) else { return }
 
         var paths = [path] + recentFolders.map(\.path).filter { $0 != path }
         if paths.count > Self.maxRecentFolders {
@@ -331,7 +339,8 @@ class CullingSession: ObservableObject {
 
     /// Drop a folder from the recents list (e.g. it no longer exists).
     func removeFromRecents(_ url: URL) {
-        let paths = recentFolders.map(\.path).filter { $0 != url.path }
+        let path = url.standardizedFileURL.path
+        let paths = recentFolders.map(\.path).filter { $0 != path }
         recentFolders = paths.map { URL(fileURLWithPath: $0, isDirectory: true) }
         defaults.set(paths, forKey: Self.recentFoldersKey)
     }
@@ -341,6 +350,54 @@ class CullingSession: ObservableObject {
     var otherRecentFolders: [URL] {
         let current = folderURL?.standardizedFileURL.path
         return recentFolders.filter { $0.standardizedFileURL.path != current }
+    }
+
+    /// Recent folders that aren't already pinned (for the sidebar Recent section).
+    var unpinnedRecentFolders: [URL] {
+        let pinned = Set(pinnedFolders.map { $0.standardizedFileURL.path })
+        return recentFolders.filter { !pinned.contains($0.standardizedFileURL.path) }
+    }
+
+    func isPinned(_ url: URL) -> Bool {
+        let path = url.standardizedFileURL.path
+        return pinnedFolders.contains { $0.standardizedFileURL.path == path }
+    }
+
+    func pinFolder(_ url: URL) {
+        let path = url.standardizedFileURL.path
+        guard Self.isPersistableFolderPath(path) else { return }
+        guard !isPinned(url) else { return }
+        var paths = pinnedFolders.map(\.path) + [path]
+        if paths.count > Self.maxPinnedFolders {
+            paths = Array(paths.suffix(Self.maxPinnedFolders))
+        }
+        pinnedFolders = paths.map { URL(fileURLWithPath: $0, isDirectory: true) }
+        defaults.set(paths, forKey: Self.pinnedFoldersKey)
+    }
+
+    func unpinFolder(_ url: URL) {
+        let path = url.standardizedFileURL.path
+        let paths = pinnedFolders.map(\.path).filter { $0 != path }
+        pinnedFolders = paths.map { URL(fileURLWithPath: $0, isDirectory: true) }
+        defaults.set(paths, forKey: Self.pinnedFoldersKey)
+    }
+
+    func togglePinned(_ url: URL) {
+        if isPinned(url) {
+            unpinFolder(url)
+        } else {
+            pinFolder(url)
+        }
+    }
+
+    private static func isPersistableFolderPath(_ path: String) -> Bool {
+        !path.hasPrefix("/var/folders/") && !path.hasPrefix("/tmp/")
+    }
+
+    private static func sanitizeFolderPaths(_ paths: [String]) -> [URL] {
+        paths
+            .filter { isPersistableFolderPath($0) }
+            .map { URL(fileURLWithPath: $0, isDirectory: true) }
     }
 
     // MARK: - Navigation

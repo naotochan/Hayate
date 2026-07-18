@@ -112,6 +112,7 @@ enum ActionID: String, Codable, CaseIterable, Identifiable {
     case toggleInfo
     case toggleHistogram
     case toggleShortcutsHelp
+    case toggleSidebar
     case deletePhoto
     case undo
     case selectAllGrid
@@ -136,6 +137,7 @@ enum ActionID: String, Codable, CaseIterable, Identifiable {
         case .toggleInfo: return "Toggle info overlay (EXIF)"
         case .toggleHistogram: return "Toggle histogram"
         case .toggleShortcutsHelp: return "Show keyboard shortcuts"
+        case .toggleSidebar: return "Toggle folder sidebar"
         case .deletePhoto: return "Move photo to Trash"
         case .undo: return "Undo"
         case .selectAllGrid: return "Select all (grid)"
@@ -160,7 +162,7 @@ enum ActionID: String, Codable, CaseIterable, Identifiable {
         switch self {
         case .navigateBack, .navigateForward: return .navigation
         case .toggleFavorite, .toggleRejected, .setTriageMaybe: return .rating
-        case .toggleGrid, .toggleCompare, .toggleFitZoom, .toggleFocusPeaking, .toggleCullModeDraft, .toggleInfo, .toggleHistogram, .toggleShortcutsHelp: return .view
+        case .toggleGrid, .toggleCompare, .toggleFitZoom, .toggleFocusPeaking, .toggleCullModeDraft, .toggleInfo, .toggleHistogram, .toggleShortcutsHelp, .toggleSidebar: return .view
         case .deletePhoto, .undo, .selectAllGrid: return .editing
         case .openFolder: return .file
         case .pickCompare, .skipNextBaseline: return .compareMode
@@ -195,6 +197,7 @@ final class KeybindingStore: ObservableObject {
         // Display-only default — actual help trigger is character-based ("?" / "/")
         // in ContentView+Input so JIS and US keyboards both work.
         .toggleShortcutsHelp: Shortcut(keyCode: 44, modifiers: .shift), // ?
+        .toggleSidebar: Shortcut(keyCode: 11, modifiers: .command),     // ⌘B
         .deletePhoto: Shortcut(keyCode: 51),                            // ⌫
         .undo: Shortcut(keyCode: 6, modifiers: .command),               // ⌘Z
         .selectAllGrid: Shortcut(keyCode: 0, modifiers: .command),      // ⌘A

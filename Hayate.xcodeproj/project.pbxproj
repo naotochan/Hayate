@@ -28,6 +28,7 @@
 		A10019 /* HistogramView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20019; };
 		A10020 /* HayateBrand.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20020; };
 		A10021 /* ShortcutsHelpOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20022; };
+		A10022 /* FolderSidebar.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20023; };
 		B10001 /* CullingSessionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20001; };
 		B10002 /* KeybindingsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20002; };
 /* End PBXBuildFile section */
@@ -65,6 +66,7 @@
 		A20020 /* HayateBrand.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HayateBrand.swift; sourceTree = "<group>"; };
 		A20021 /* AppIcon.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; name = AppIcon.icns; path = Resources/AppIcon.icns; sourceTree = "<group>"; };
 		A20022 /* ShortcutsHelpOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShortcutsHelpOverlay.swift; sourceTree = "<group>"; };
+		A20023 /* FolderSidebar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FolderSidebar.swift; sourceTree = "<group>"; };
 		A30001 /* Hayate.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Hayate.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		B20001 /* CullingSessionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CullingSessionTests.swift; sourceTree = "<group>"; };
 		B20002 /* KeybindingsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeybindingsTests.swift; sourceTree = "<group>"; };
@@ -113,6 +115,7 @@
 				A20019 /* HistogramView.swift */,
 				A20020 /* HayateBrand.swift */,
 				A20022 /* ShortcutsHelpOverlay.swift */,
+				A20023 /* FolderSidebar.swift */,
 				A20003 /* MetalImageView.swift */,
 				A20004 /* ImageDecoder.swift */,
 				A20005 /* PrefetchManager.swift */,
@@ -278,6 +281,7 @@
 				A10019 /* HistogramView.swift in Sources */,
 				A10020 /* HayateBrand.swift in Sources */,
 				A10021 /* ShortcutsHelpOverlay.swift in Sources */,
+				A10022 /* FolderSidebar.swift in Sources */,
 				A10003 /* MetalImageView.swift in Sources */,
 				A10004 /* ImageDecoder.swift in Sources */,
 				A10005 /* PrefetchManager.swift in Sources */,
