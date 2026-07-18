@@ -51,8 +51,8 @@ class CullingSession: ObservableObject {
         if let paths = defaults.stringArray(forKey: Self.recentFoldersKey) {
             recentFolders = paths.map { URL(fileURLWithPath: $0, isDirectory: true) }
         }
-        // Persist the browsing position (lastIndex) on quit — ratings are
-        // saved on every change, but plain navigation isn't.
+        // Persist the browsing position (lastFileName / lastIndex) on quit —
+        // ratings are saved on every change, but plain navigation isn't.
         terminateObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.willTerminateNotification,
             object: nil,
@@ -302,7 +302,7 @@ class CullingSession: ObservableObject {
 
         currentIndex = 0
 
-        // Load existing JSON (may restore lastIndex)
+        // Load existing JSON (may restore lastFileName / lastIndex)
         loadJSON()
         return true
     }
@@ -699,10 +699,12 @@ class CullingSession: ObservableObject {
     }
 
     /// Current on-disk format: entries plus the last browsing position.
-    /// The legacy format was a bare `[String: PhotoEntry]` dictionary.
+    /// Prefer `lastFileName` (survives inserts/deletes); `lastIndex` is a
+    /// legacy fallback. Oldest format was a bare `[String: PhotoEntry]`.
     private struct SessionData: Codable {
         var entries: [String: PhotoEntry]
         var lastIndex: Int?
+        var lastFileName: String?
     }
 
     private func loadJSON() {
@@ -715,9 +717,11 @@ class CullingSession: ObservableObject {
 
         let decoded: [String: PhotoEntry]
         var lastIndex: Int?
+        var lastFileName: String?
         if let session = try? JSONDecoder().decode(SessionData.self, from: data) {
             decoded = session.entries
             lastIndex = session.lastIndex
+            lastFileName = session.lastFileName
         } else {
             // Legacy format: bare entries dictionary
             decoded = (try? JSONDecoder().decode([String: PhotoEntry].self, from: data)) ?? [:]
@@ -731,8 +735,11 @@ class CullingSession: ObservableObject {
         entries = decoded.filter { fileNames.contains($0.key) }
         orphanedEntries = decoded.filter { !fileNames.contains($0.key) }
 
-        // Resume where the user left off
-        if let last = lastIndex, files.indices.contains(last) {
+        // Resume where the user left off — basename first, then index.
+        if let name = lastFileName,
+           let idx = files.firstIndex(where: { $0.lastPathComponent == name }) {
+            currentIndex = idx
+        } else if let last = lastIndex, files.indices.contains(last) {
             currentIndex = last
         }
     }
@@ -752,7 +759,14 @@ class CullingSession: ObservableObject {
             return
         }
 
-        let session = SessionData(entries: all, lastIndex: currentIndex)
+        let lastFileName = files.indices.contains(currentIndex)
+            ? files[currentIndex].lastPathComponent
+            : nil
+        let session = SessionData(
+            entries: all,
+            lastIndex: currentIndex,
+            lastFileName: lastFileName
+        )
         guard let data = try? JSONEncoder().encode(session) else { return }
         try? data.write(to: url, options: .atomic)
     }

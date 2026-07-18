@@ -70,17 +70,24 @@ extension ContentView {
                 }
             }
 
-            // Grid
+            // Grid — one LazyVGrid per scene so separators span the full width.
             GeometryReader { geo in
                 ScrollViewReader { proxy in
                     ScrollView {
-                        LazyVGrid(
-                            columns: [GridItem(.adaptive(minimum: Self.gridItemMinWidth, maximum: Self.gridItemMaxWidth), spacing: Self.gridSpacing)],
-                            spacing: Self.gridSpacing
-                        ) {
-                            ForEach(filteredFiles, id: \.index) { item in
-                                gridCell(for: item.url, index: item.index)
-                                    .id(item.index)
+                        LazyVStack(spacing: Self.gridSpacing) {
+                            ForEach(Array(sceneChunks.enumerated()), id: \.element.id) { chunkIndex, chunk in
+                                if chunkIndex > 0 {
+                                    sceneSeparator
+                                }
+                                LazyVGrid(
+                                    columns: [GridItem(.adaptive(minimum: Self.gridItemMinWidth, maximum: Self.gridItemMaxWidth), spacing: Self.gridSpacing)],
+                                    spacing: Self.gridSpacing
+                                ) {
+                                    ForEach(chunk.items, id: \.index) { item in
+                                        gridCell(for: item.url, index: item.index)
+                                            .id(item.index)
+                                    }
+                                }
                             }
                         }
                         .padding(Self.gridPadding)
@@ -88,6 +95,7 @@ extension ContentView {
                     .onAppear {
                         updateGridColumnCount(width: geo.size.width)
                         proxy.scrollTo(session.currentIndex, anchor: .center)
+                        refreshSceneBoundaries()
                     }
                     .onChange(of: geo.size.width) { _, width in
                         updateGridColumnCount(width: width)
@@ -95,7 +103,76 @@ extension ContentView {
                     .onChange(of: session.currentIndex) { _, newIndex in
                         proxy.scrollTo(newIndex, anchor: nil)
                     }
+                    .onChange(of: sceneGapMinutes) { _, _ in
+                        refreshSceneBoundaries()
+                    }
+                    .onChange(of: session.files) { _, _ in
+                        refreshSceneBoundaries()
+                    }
                 }
+            }
+        }
+    }
+
+    /// Filtered grid items split wherever `sceneStartIndices` marks a new scene.
+    private var sceneChunks: [(id: Int, items: [(index: Int, url: URL)])] {
+        let items = filteredFiles
+        guard !items.isEmpty else { return [] }
+        guard sceneGapMinutes > 0, !sceneStartIndices.isEmpty else {
+            return [(id: items[0].index, items: items)]
+        }
+        var chunks: [(id: Int, items: [(index: Int, url: URL)])] = []
+        var current: [(index: Int, url: URL)] = []
+        var chunkId = items[0].index
+        for item in items {
+            if !current.isEmpty && sceneStartIndices.contains(item.index) {
+                chunks.append((id: chunkId, items: current))
+                current = [item]
+                chunkId = item.index
+            } else {
+                current.append(item)
+            }
+        }
+        if !current.isEmpty {
+            chunks.append((id: chunkId, items: current))
+        }
+        return chunks
+    }
+
+    private var sceneSeparator: some View {
+        Rectangle()
+            .fill(Color.white.opacity(0.14))
+            .frame(height: 1)
+            .padding(.vertical, 6)
+            .frame(maxWidth: .infinity)
+    }
+
+    /// Scan EXIF DateTimeOriginal for the open folder and recompute scene starts.
+    func refreshSceneBoundaries() {
+        captureDateTask?.cancel()
+        guard sceneGapMinutes > 0, !session.files.isEmpty else {
+            sceneStartIndices = []
+            return
+        }
+        let files = session.files
+        let gap = sceneGapMinutes
+        captureDateTask = Task {
+            var dates: [Date?] = Array(repeating: nil, count: files.count)
+            await withTaskGroup(of: (Int, Date?).self) { group in
+                for (i, url) in files.enumerated() {
+                    group.addTask {
+                        (i, ImageDecoder.captureDate(url: url))
+                    }
+                }
+                for await (i, date) in group {
+                    guard !Task.isCancelled else { return }
+                    dates[i] = date
+                }
+            }
+            guard !Task.isCancelled else { return }
+            let starts = SceneBoundary.startIndices(dates: dates, gapMinutes: gap)
+            await MainActor.run {
+                sceneStartIndices = starts
             }
         }
     }

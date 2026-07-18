@@ -24,6 +24,7 @@ struct SettingsView: View {
     @AppStorage("cullModeDraft") private var cullModeDraft = false
     @AppStorage("colorizeKeepOnly") private var colorizeKeepOnly = true
     @AppStorage("cullingProfileTriage") private var cullingProfileTriage = true
+    @AppStorage("sceneGapMinutes") private var sceneGapMinutes = 15
 
     private var generalTab: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -70,6 +71,20 @@ struct SettingsView: View {
                 Section {
                     Toggle("Write XMP sidecar files", isOn: $writeXMPSidecars)
                     Text("Save ratings next to each RAW as a .xmp file that Lightroom and Capture One can read. Rejected photos get rating −1 (Bridge convention), favorites a red label. Sidecars created by other apps are never modified.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+
+                Section {
+                    Picker("Grid scene gap", selection: $sceneGapMinutes) {
+                        Text("Off").tag(0)
+                        Text("5 minutes").tag(5)
+                        Text("10 minutes").tag(10)
+                        Text("15 minutes").tag(15)
+                        Text("30 minutes").tag(30)
+                        Text("60 minutes").tag(60)
+                    }
+                    Text("Draw a thin separator in the grid when consecutive photos are farther apart than this (by EXIF capture time). Photos without EXIF dates never create a break.")
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
