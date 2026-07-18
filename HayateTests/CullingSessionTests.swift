@@ -530,4 +530,44 @@ final class CullingSessionTests: XCTestCase {
         XCTAssertFalse(entry.isFavorite)
         XCTAssertFalse(entry.isRejected)
     }
+
+    // MARK: - Triage (Keep / Maybe / Out)
+
+    func testTriageKeepMaybeOutExclusive() {
+        loadTestFiles(count: 1)
+
+        session.setTriage(.keep)
+        XCTAssertEqual(CullingSession.TriageState.of(session.currentEntry), .keep)
+        XCTAssertTrue(session.currentEntry?.isFavorite == true)
+        XCTAssertEqual(session.currentEntry?.rating, 0)
+
+        session.setTriage(.maybe)
+        XCTAssertEqual(CullingSession.TriageState.of(session.currentEntry), .maybe)
+        XCTAssertFalse(session.currentEntry?.isFavorite == true)
+        XCTAssertEqual(session.currentEntry?.rating, CullingSession.TriageState.maybeRating)
+
+        session.setTriage(.out)
+        XCTAssertEqual(CullingSession.TriageState.of(session.currentEntry), .out)
+        XCTAssertTrue(session.currentEntry?.isRejected == true)
+        XCTAssertFalse(session.currentEntry?.isFavorite == true)
+        XCTAssertEqual(session.currentEntry?.rating, 0)
+    }
+
+    func testTriageSameStateClearsToUndecided() {
+        loadTestFiles(count: 1)
+        session.setTriage(.keep)
+        session.setTriage(.keep)
+        XCTAssertEqual(CullingSession.TriageState.of(session.currentEntry), .undecided)
+        XCTAssertNil(session.currentEntry)
+    }
+
+    func testTriageUndoRestoresPreviousEntry() {
+        loadTestFiles(count: 1)
+        session.setTriage(.keep)
+        session.setTriage(.maybe)
+        session.undo()
+        XCTAssertEqual(CullingSession.TriageState.of(session.currentEntry), .keep)
+        session.undo()
+        XCTAssertEqual(CullingSession.TriageState.of(session.currentEntry), .undecided)
+    }
 }

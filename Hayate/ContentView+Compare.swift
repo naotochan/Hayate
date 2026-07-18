@@ -39,7 +39,14 @@ extension ContentView {
                                     Spacer()
 
                                     // Status badges (top right)
-                                    PhotoBadgeView(entry: entry, iconSize: 14, starSize: 9, spacing: 4, padding: 6)
+                                    PhotoBadgeView(
+                                        entry: entry,
+                                        iconSize: 14,
+                                        starSize: 9,
+                                        spacing: 4,
+                                        padding: 6,
+                                        triageStyle: cullingProfileTriage
+                                    )
                                         .padding(8)
                                 }
                                 Spacer()
@@ -235,7 +242,8 @@ extension ContentView {
         }
 
         guard let prefetchManager = prefetchManager else { return }
-        let result = await prefetchManager.loadTexture(for: url, displaySize: displaySize) { partial in
+        let draft = cullModeDraft
+        let result = await prefetchManager.loadTexture(for: url, displaySize: displaySize, draft: draft) { partial in
             compareTextures[fileIndex] = partial.texture
         }
         if let result = result {

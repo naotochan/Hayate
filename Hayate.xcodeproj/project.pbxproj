@@ -26,6 +26,7 @@
 		A10017 /* PhotoBadgeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20017; };
 		A10018 /* ExportSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20018; };
 		A10019 /* HistogramView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20019; };
+		A10020 /* HayateBrand.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20020; };
 		B10001 /* CullingSessionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20001; };
 		B10002 /* KeybindingsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20002; };
 /* End PBXBuildFile section */
@@ -60,6 +61,8 @@
 		A20017 /* PhotoBadgeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoBadgeView.swift; sourceTree = "<group>"; };
 		A20018 /* ExportSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExportSheet.swift; sourceTree = "<group>"; };
 		A20019 /* HistogramView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistogramView.swift; sourceTree = "<group>"; };
+		A20020 /* HayateBrand.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HayateBrand.swift; sourceTree = "<group>"; };
+		A20021 /* AppIcon.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; name = AppIcon.icns; path = Resources/AppIcon.icns; sourceTree = "<group>"; };
 		A30001 /* Hayate.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Hayate.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		B20001 /* CullingSessionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CullingSessionTests.swift; sourceTree = "<group>"; };
 		B20002 /* KeybindingsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeybindingsTests.swift; sourceTree = "<group>"; };
@@ -106,6 +109,7 @@
 				A20017 /* PhotoBadgeView.swift */,
 				A20018 /* ExportSheet.swift */,
 				A20019 /* HistogramView.swift */,
+				A20020 /* HayateBrand.swift */,
 				A20003 /* MetalImageView.swift */,
 				A20004 /* ImageDecoder.swift */,
 				A20005 /* PrefetchManager.swift */,
@@ -114,6 +118,7 @@
 				A20011 /* SettingsView.swift */,
 				A20012 /* DiskCacheManager.swift */,
 				A20007 /* Assets.xcassets */,
+				A20021 /* AppIcon.icns */,
 				A20008 /* Hayate.entitlements */,
 				A20009 /* Info.plist */,
 			);
@@ -148,6 +153,7 @@
 				A70001 /* Sources */,
 				A40001 /* Frameworks */,
 				A70002 /* Resources */,
+				A70003 /* Embed AppIcon.icns */,
 			);
 			buildRules = (
 			);
@@ -230,6 +236,29 @@
 		};
 /* End PBXResourcesBuildPhase section */
 
+/* Begin PBXShellScriptBuildPhase section */
+		A70003 /* Embed AppIcon.icns */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/Hayate/Resources/AppIcon.icns",
+			);
+			name = "Embed AppIcon.icns";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# actool on this toolchain often emits an incomplete AppIcon.icns (16/128 only),\n# which makes Dock show the generic placeholder. Overwrite with a full iconutil build.\nSRC=\"${SRCROOT}/Hayate/Resources/AppIcon.icns\"\nDST=\"${BUILT_PRODUCTS_DIR}/${WRAPPER_NAME}/Contents/Resources/AppIcon.icns\"\nif [ -f \"$SRC\" ]; then\n  mkdir -p \"$(dirname \"$DST\")\"\n  cp -f \"$SRC\" \"$DST\"\n  echo \"Embedded full AppIcon.icns ($(stat -f%z \"$DST\") bytes)\"\nfi\n";
+		};
+/* End PBXShellScriptBuildPhase section */
+
 /* Begin PBXSourcesBuildPhase section */
 		A70001 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
@@ -244,6 +273,7 @@
 				A10017 /* PhotoBadgeView.swift in Sources */,
 				A10018 /* ExportSheet.swift in Sources */,
 				A10019 /* HistogramView.swift in Sources */,
+				A10020 /* HayateBrand.swift in Sources */,
 				A10003 /* MetalImageView.swift in Sources */,
 				A10004 /* ImageDecoder.swift in Sources */,
 				A10005 /* PrefetchManager.swift in Sources */,
@@ -335,11 +365,11 @@
 				CODE_SIGN_ENTITLEMENTS = Hayate/Hayate.entitlements;
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "-";
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 35;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_HARDENED_RUNTIME = NO;
 				INFOPLIST_FILE = Hayate/Info.plist;
-				MARKETING_VERSION = 0.1.0;
+				MARKETING_VERSION = 0.2.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.hayate.app;
 				PRODUCT_MODULE_NAME = Hayate;
 				PRODUCT_NAME = Hayate;
@@ -360,11 +390,11 @@
 				CODE_SIGN_ENTITLEMENTS = Hayate/Hayate.entitlements;
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "-";
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 35;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_HARDENED_RUNTIME = NO;
 				INFOPLIST_FILE = Hayate/Info.plist;
-				MARKETING_VERSION = 0.1.0;
+				MARKETING_VERSION = 0.2.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.hayate.app;
 				PRODUCT_MODULE_NAME = Hayate;
 				PRODUCT_NAME = Hayate;

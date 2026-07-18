@@ -62,6 +62,14 @@ struct ContentView: View {
     @State var gridColumnCount = 5
     /// Advance to the next photo automatically after rating/favorite/reject.
     @AppStorage("autoAdvance") var autoAdvance = false
+    /// Draft cull mode: stop at embedded JPEG / disk cache; full RAW only for
+    /// focus peaking and zoom. Maximises navigation throughput.
+    @AppStorage("cullModeDraft") var cullModeDraft = false
+    /// Filmstrip / grid: desaturate non-favorites so Keep photos stand out.
+    /// The main Metal viewer always stays full color.
+    @AppStorage("colorizeKeepOnly") var colorizeKeepOnly = true
+    /// Keep / Maybe / Out instead of 1–5 stars (stored via favorite / rating / reject).
+    @AppStorage("cullingProfileTriage") var cullingProfileTriage = true
     @State var compareMode = false
     @State var compareIndices: [Int] = []
     @State var compareActiveSlot: Int = 0  // which photo is "active" for rating
@@ -73,6 +81,16 @@ struct ContentView: View {
         case rejected = "✗ Rejected"
         case rated = "★ Rated"
         case unrated = "Unrated"
+        case keep = "Keep"
+        case maybe = "Maybe"
+        case out = "Out"
+        case undecided = "Undecided"
+
+        static func visible(triage: Bool) -> [GridFilter] {
+            triage
+                ? [.all, .keep, .maybe, .out, .undecided]
+                : [.all, .favorites, .rejected, .rated, .unrated]
+        }
     }
 
     /// Target decode size for full previews — 4K on GPUs that report a working
@@ -90,33 +108,9 @@ struct ContentView: View {
                 .ignoresSafeArea()
 
             if ciContext == nil {
-                // Loading screen while CIContext initializes
-                VStack(spacing: 16) {
-                    Text("Hayate")
-                        .font(.system(size: 36, weight: .bold))
-                        .foregroundColor(.white)
-                    Text("RAW Photo Culling")
-                        .font(.system(size: 14))
-                        .foregroundColor(.gray)
-                    ProgressView()
-                        .controlSize(.small)
-                        .padding(.top, 8)
-                }
+                HayateBrandScreen(mode: .loading)
             } else if session.files.isEmpty {
-                // "Open Folder" prompt
-                VStack(spacing: 16) {
-                    Text("Hayate")
-                        .font(.system(size: 36, weight: .bold))
-                        .foregroundColor(.white)
-                    Text("RAW Photo Culling")
-                        .font(.system(size: 14))
-                        .foregroundColor(.gray)
-
-                    Button("Open Folder...") {
-                        session.requestOpenFolder()
-                    }
-                    .buttonStyle(.borderedProminent)
-                }
+                HayateBrandScreen(mode: .empty(onOpen: { session.requestOpenFolder() }))
             } else if showGrid {
                 gridView
             } else if compareMode {
@@ -221,6 +215,18 @@ struct ContentView: View {
                 updateHistogram()
             }
         }
+        .onChange(of: cullModeDraft) { _, draft in
+            // Switching modes mid-session: reload the current photo and
+            // restart (or quiet) the background preview builder.
+            if !session.files.isEmpty {
+                loadCurrentImage()
+                if draft {
+                    Task { await prefetchManager?.stopBackgroundBuild() }
+                } else {
+                    startBackgroundBuild()
+                }
+            }
+        }
         .sheet(isPresented: $showExportSheet) {
             ExportSheet(onBulkDelete: {
                 // The displayed photo may have been trashed; currentIndex can
@@ -301,12 +307,13 @@ struct ContentView: View {
         startBackgroundBuild()
     }
 
-    private func startBackgroundBuild() {
+    func startBackgroundBuild() {
         guard let prefetchManager = prefetchManager else { return }
         let files = session.files
         let displaySize = previewDisplaySize
+        let draft = cullModeDraft
         Task {
-            await prefetchManager.startBackgroundBuild(files: files, displaySize: displaySize)
+            await prefetchManager.startBackgroundBuild(files: files, displaySize: displaySize, draft: draft)
         }
     }
 
@@ -389,11 +396,13 @@ struct ContentView: View {
             let currentIdx = session.currentIndex
             let allFiles = session.files
             let prefetchSize = previewDisplaySize
+            let draft = cullModeDraft
             Task {
                 await prefetchManager.prefetch(
                     currentIndex: currentIdx,
                     files: allFiles,
-                    displaySize: prefetchSize
+                    displaySize: prefetchSize,
+                    draft: draft
                 )
             }
         }
@@ -405,7 +414,7 @@ struct ContentView: View {
             let displaySize = previewDisplaySize
 
             if focusPeakingEnabled {
-                // Focus peaking: decode directly to texture (not cached)
+                // Focus peaking always needs a full RAW decode (even in Draft).
                 if let sendable = await decoder.decodeRAW(url: file, displaySize: displaySize, focusPeaking: true) {
                     guard !Task.isCancelled else { return }
                     currentTexture = sendable.texture
@@ -418,9 +427,11 @@ struct ContentView: View {
                 return
             }
 
-            // Unified pipeline: memory → disk → embedded JPEG (partial) → RAW
+            // Unified pipeline: memory → disk → embedded JPEG [(partial) → RAW]
+            // Draft stops after JPEG; Full continues to RAW.
             guard let prefetchManager = prefetchManager else { return }
-            let result = await prefetchManager.loadTexture(for: file, displaySize: displaySize) { partial in
+            let draft = cullModeDraft
+            let result = await prefetchManager.loadTexture(for: file, displaySize: displaySize, draft: draft) { partial in
                 // Defensive: don't overwrite a newer photo if this task was
                 // cancelled while hopping to the main actor, and don't
                 // downgrade a full-resolution texture the user zoomed into.

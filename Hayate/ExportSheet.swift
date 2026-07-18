@@ -6,6 +6,7 @@ import AppKit
 struct ExportSheet: View {
     @EnvironmentObject var session: CullingSession
     @Environment(\.dismiss) private var dismiss
+    @AppStorage("cullingProfileTriage") private var cullingProfileTriage = true
 
     /// Called after the bulk "move rejected to Trash" action so the host
     /// view can reload the displayed photo and clear stale selections.
@@ -13,6 +14,7 @@ struct ExportSheet: View {
 
     enum Source: Hashable {
         case favorites
+        case keepOrMaybe
         case minRating(Int)
     }
 
@@ -24,6 +26,9 @@ struct ExportSheet: View {
         switch source {
         case .favorites:
             return entry?.isFavorite == true
+        case .keepOrMaybe:
+            let state = CullingSession.TriageState.of(entry)
+            return state == .keep || state == .maybe
         case .minRating(let n):
             return (entry?.rating ?? 0) >= n
         }
@@ -48,9 +53,14 @@ struct ExportSheet: View {
             Form {
                 Section {
                     Picker("Photos", selection: $source) {
-                        Text("♥ Favorites").tag(Source.favorites)
-                        ForEach(1...5, id: \.self) { n in
-                            Text("Rating ≥ \(n)").tag(Source.minRating(n))
+                        if cullingProfileTriage {
+                            Text("Keep").tag(Source.favorites)
+                            Text("Keep + Maybe").tag(Source.keepOrMaybe)
+                        } else {
+                            Text("♥ Favorites").tag(Source.favorites)
+                            ForEach(1...5, id: \.self) { n in
+                                Text("Rating ≥ \(n)").tag(Source.minRating(n))
+                            }
                         }
                     }
                     Picker("Action", selection: $move) {
@@ -74,11 +84,16 @@ struct ExportSheet: View {
 
                 Section {
                     HStack {
-                        Text("\(rejectedIndices.count) rejected photos")
+                        Text(cullingProfileTriage
+                             ? "\(rejectedIndices.count) Out photos"
+                             : "\(rejectedIndices.count) rejected photos")
                             .font(.caption)
                             .foregroundColor(.secondary)
                         Spacer()
-                        Button("Move Rejected to Trash…", role: .destructive) {
+                        Button(
+                            cullingProfileTriage ? "Move Out to Trash…" : "Move Rejected to Trash…",
+                            role: .destructive
+                        ) {
                             showTrashConfirmation = true
                         }
                         .disabled(rejectedIndices.isEmpty)
@@ -120,7 +135,9 @@ struct ExportSheet: View {
             }
         }
         .confirmationDialog(
-            "Move \(rejectedIndices.count) rejected photos to Trash?",
+            cullingProfileTriage
+                ? "Move \(rejectedIndices.count) Out photos to Trash?"
+                : "Move \(rejectedIndices.count) rejected photos to Trash?",
             isPresented: $showTrashConfirmation,
             titleVisibility: .visible
         ) {
