@@ -110,6 +110,21 @@ final class ImageDecoder: @unchecked Sendable {
         }.value
     }
 
+    /// Capture date from EXIF DateTimeOriginal only. Missing / unreadable → nil.
+    nonisolated static func captureDate(url: URL) -> Date? {
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+              let props = CGImageSourceCopyPropertiesAtIndex(
+                source, 0, [kCGImageSourceShouldCache: false] as CFDictionary
+              ) as? [CFString: Any] else {
+            return nil
+        }
+        let exif = props[kCGImagePropertyExifDictionary] as? [CFString: Any] ?? [:]
+        guard let raw = exif[kCGImagePropertyExifDateTimeOriginal] as? String else {
+            return nil
+        }
+        return exifDateParser.date(from: raw)
+    }
+
     /// Compute an RGB histogram from a displayed texture (H key overlay).
     func computeHistogram(texture: SendableTexture) async -> HistogramData? {
         await Task.detached(priority: .utility) { [self] in
@@ -405,5 +420,24 @@ final class ImageDecoder: @unchecked Sendable {
         )
 
         return texture
+    }
+}
+
+/// Scene breaks for the grid: indices that start a new shooting segment.
+enum SceneBoundary {
+    /// Returns indices (never 0) where the gap between consecutive capture
+    /// times exceeds `gapMinutes`. Missing dates never create a break.
+    /// `gapMinutes <= 0` disables detection.
+    static func startIndices(dates: [Date?], gapMinutes: Int) -> Set<Int> {
+        guard gapMinutes > 0, dates.count > 1 else { return [] }
+        let gap = TimeInterval(gapMinutes * 60)
+        var starts = Set<Int>()
+        for i in 1..<dates.count {
+            guard let prev = dates[i - 1], let cur = dates[i] else { continue }
+            if abs(cur.timeIntervalSince(prev)) > gap {
+                starts.insert(i)
+            }
+        }
+        return starts
     }
 }

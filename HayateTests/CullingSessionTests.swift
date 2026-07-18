@@ -351,6 +351,7 @@ final class CullingSessionTests: XCTestCase {
     private struct SessionData: Codable {
         var entries: [String: CullingSession.PhotoEntry]
         var lastIndex: Int?
+        var lastFileName: String?
     }
 
     func testJSONRoundTrip() {
@@ -377,6 +378,7 @@ final class CullingSessionTests: XCTestCase {
         XCTAssertTrue(decoded.entries["IMG_0002.CR3"]?.isFavorite == true)
         XCTAssertTrue(decoded.entries["IMG_0003.CR3"]?.isRejected == true)
         XCTAssertEqual(decoded.lastIndex, 2, "Position at save time should be persisted")
+        XCTAssertEqual(decoded.lastFileName, "IMG_0003.CR3", "Basename should be persisted alongside index")
     }
 
     func testJSONOnlySavesNonDefault() {
@@ -421,6 +423,40 @@ final class CullingSessionTests: XCTestCase {
         let fresh = makeSession()
         fresh.openFolder(tempDir)
         XCTAssertEqual(fresh.currentIndex, 3, "Should resume at the saved position")
+    }
+
+    func testJSONRestoresLastFileNameWhenIndexShifts() {
+        loadTestFiles(count: 5)
+        session.currentIndex = 3  // IMG_0004.CR3
+        session.setRating(2)
+
+        // Insert a file that sorts before the saved one — index 3 would now be wrong.
+        let inserted = tempDir.appendingPathComponent("IMG_0000.CR3")
+        FileManager.default.createFile(atPath: inserted.path, contents: Data())
+
+        let fresh = makeSession()
+        fresh.openFolder(tempDir)
+        XCTAssertEqual(
+            fresh.files[fresh.currentIndex].lastPathComponent,
+            "IMG_0004.CR3",
+            "Should find the saved basename even when indices shift"
+        )
+    }
+
+    func testJSONFallsBackToLastIndexWithoutFileName() {
+        loadTestFiles(count: 5)
+        // Pre-lastFileName format: entries + lastIndex only.
+        let legacy = SessionData(
+            entries: ["IMG_0002.CR3": CullingSession.PhotoEntry(fileName: "IMG_0002.CR3", rating: 3)],
+            lastIndex: 2,
+            lastFileName: nil
+        )
+        let jsonURL = tempDir.appendingPathComponent(".hayate.json")
+        try? JSONEncoder().encode(legacy).write(to: jsonURL)
+
+        let fresh = makeSession()
+        fresh.openFolder(tempDir)
+        XCTAssertEqual(fresh.currentIndex, 2, "lastIndex remains the fallback when lastFileName is absent")
     }
 
     // MARK: - RAW+JPEG pairing
@@ -569,5 +605,36 @@ final class CullingSessionTests: XCTestCase {
         XCTAssertEqual(CullingSession.TriageState.of(session.currentEntry), .keep)
         session.undo()
         XCTAssertEqual(CullingSession.TriageState.of(session.currentEntry), .undecided)
+    }
+
+    // MARK: - Scene boundaries
+
+    func testSceneBoundaryDetectsGap() {
+        let t0 = Date(timeIntervalSince1970: 1_000_000)
+        let dates: [Date?] = [
+            t0,
+            t0.addingTimeInterval(60),       // +1 min
+            t0.addingTimeInterval(20 * 60),  // +20 min → break
+            t0.addingTimeInterval(21 * 60),
+        ]
+        let starts = SceneBoundary.startIndices(dates: dates, gapMinutes: 15)
+        XCTAssertEqual(starts, [2])
+    }
+
+    func testSceneBoundarySkipsMissingDates() {
+        let t0 = Date(timeIntervalSince1970: 1_000_000)
+        let dates: [Date?] = [
+            t0,
+            nil,
+            t0.addingTimeInterval(60 * 60),
+        ]
+        let starts = SceneBoundary.startIndices(dates: dates, gapMinutes: 15)
+        XCTAssertTrue(starts.isEmpty, "Missing EXIF must not create a break with either neighbor")
+    }
+
+    func testSceneBoundaryDisabledWhenGapZero() {
+        let t0 = Date(timeIntervalSince1970: 1_000_000)
+        let dates: [Date?] = [t0, t0.addingTimeInterval(3600)]
+        XCTAssertTrue(SceneBoundary.startIndices(dates: dates, gapMinutes: 0).isEmpty)
     }
 }

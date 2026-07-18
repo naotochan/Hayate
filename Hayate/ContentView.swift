@@ -60,6 +60,11 @@ struct ContentView: View {
     @State var gridFilter: GridFilter = .all
     /// Approximate column count of the adaptive grid, for ↑↓ row navigation.
     @State var gridColumnCount = 5
+    /// File indices that start a new scene (EXIF time gap). Empty when off / loading.
+    @State var sceneStartIndices: Set<Int> = []
+    @State var captureDateTask: Task<Void, Never>?
+    /// Gap (minutes) between shots that draws a scene separator in the grid. 0 = off.
+    @AppStorage("sceneGapMinutes") var sceneGapMinutes = 15
     /// Advance to the next photo automatically after rating/favorite/reject.
     @AppStorage("autoAdvance") var autoAdvance = false
     /// Draft cull mode: stop at embedded JPEG / disk cache; full RAW only for
@@ -328,6 +333,9 @@ struct ContentView: View {
         cancelFullResolutionLoad()
         thumbnailLoadTask?.cancel()
         thumbnailLoadTask = nil
+        captureDateTask?.cancel()
+        captureDateTask = nil
+        sceneStartIndices = []
 
         // Textures / decode results
         currentTexture = nil
