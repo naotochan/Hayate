@@ -98,10 +98,12 @@ enum ActionID: String, Codable, CaseIterable, Identifiable {
     case navigateForward
     case toggleFavorite
     case toggleRejected
+    case setTriageMaybe
     case toggleGrid
     case toggleCompare
     case toggleFitZoom
     case toggleFocusPeaking
+    case toggleCullModeDraft
     case toggleInfo
     case toggleHistogram
     case deletePhoto
@@ -117,12 +119,14 @@ enum ActionID: String, Codable, CaseIterable, Identifiable {
         switch self {
         case .navigateBack: return "Previous photo"
         case .navigateForward: return "Next photo"
-        case .toggleFavorite: return "Toggle favorite"
-        case .toggleRejected: return "Toggle rejected"
+        case .toggleFavorite: return "Toggle favorite / Keep"
+        case .toggleRejected: return "Toggle rejected / Out"
+        case .setTriageMaybe: return "Maybe (triage)"
         case .toggleGrid: return "Toggle grid view"
         case .toggleCompare: return "Toggle compare mode"
         case .toggleFitZoom: return "Toggle fit / 2× zoom"
         case .toggleFocusPeaking: return "Toggle focus peaking"
+        case .toggleCullModeDraft: return "Toggle draft cull mode"
         case .toggleInfo: return "Toggle info overlay (EXIF)"
         case .toggleHistogram: return "Toggle histogram"
         case .deletePhoto: return "Move photo to Trash"
@@ -148,8 +152,8 @@ enum ActionID: String, Codable, CaseIterable, Identifiable {
     var category: Category {
         switch self {
         case .navigateBack, .navigateForward: return .navigation
-        case .toggleFavorite, .toggleRejected: return .rating
-        case .toggleGrid, .toggleCompare, .toggleFitZoom, .toggleFocusPeaking, .toggleInfo, .toggleHistogram: return .view
+        case .toggleFavorite, .toggleRejected, .setTriageMaybe: return .rating
+        case .toggleGrid, .toggleCompare, .toggleFitZoom, .toggleFocusPeaking, .toggleCullModeDraft, .toggleInfo, .toggleHistogram: return .view
         case .deletePhoto, .undo, .selectAllGrid: return .editing
         case .openFolder: return .file
         case .pickCompare, .skipNextBaseline: return .compareMode
@@ -171,12 +175,14 @@ final class KeybindingStore: ObservableObject {
     static let defaults: [ActionID: Shortcut] = [
         .navigateBack: Shortcut(keyCode: 38),                           // J
         .navigateForward: Shortcut(keyCode: 37),                        // L
-        .toggleFavorite: Shortcut(keyCode: 35),                         // P
-        .toggleRejected: Shortcut(keyCode: 7),                          // X
+        .toggleFavorite: Shortcut(keyCode: 40),                         // K (Keep)
+        .toggleRejected: Shortcut(keyCode: 31),                         // O (Out) — plain O; ⌘O stays Open Folder
+        .setTriageMaybe: Shortcut(keyCode: 46),                         // M (Maybe)
         .toggleGrid: Shortcut(keyCode: 5),                              // G
         .toggleCompare: Shortcut(keyCode: 8),                           // C
         .toggleFitZoom: Shortcut(keyCode: 49),                          // Space
         .toggleFocusPeaking: Shortcut(keyCode: 3),                      // F
+        .toggleCullModeDraft: Shortcut(keyCode: 2),                     // D
         .toggleInfo: Shortcut(keyCode: 34),                             // I
         .toggleHistogram: Shortcut(keyCode: 4),                         // H
         .deletePhoto: Shortcut(keyCode: 51),                            // ⌫
@@ -239,10 +245,43 @@ final class KeybindingStore: ObservableObject {
                 merged[action] = shortcut
             }
             bindings = merged
+            rebuildReverseMap()
+            migrateTriageKeysPXtoKMOIfNeeded()
+            return
         } else {
             bindings = Self.defaults
         }
         rebuildReverseMap()
+    }
+
+    /// One-shot: old defaults used P/X for Keep/Out; move to K/M/O for
+    /// right-hand triage. Skips if the user rebound those actions.
+    private func migrateTriageKeysPXtoKMOIfNeeded() {
+        let flag = "keybindings.triageKMO.migrated"
+        let ud = UserDefaults.standard
+        guard !ud.bool(forKey: flag) else { return }
+
+        let oldP = Shortcut(keyCode: 35) // P
+        let oldX = Shortcut(keyCode: 7)  // X
+        let newK = Shortcut(keyCode: 40) // K
+        let newO = Shortcut(keyCode: 31) // O
+        let taken = Set(bindings.values)
+        var changed = false
+
+        if bindings[.toggleFavorite] == oldP, !taken.contains(newK) {
+            bindings[.toggleFavorite] = newK
+            changed = true
+        }
+        if bindings[.toggleRejected] == oldX, !taken.contains(newO) {
+            bindings[.toggleRejected] = newO
+            changed = true
+        }
+
+        ud.set(true, forKey: flag)
+        if changed {
+            rebuildReverseMap()
+            save()
+        }
     }
 
     private func save() {

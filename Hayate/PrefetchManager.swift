@@ -87,24 +87,31 @@ actor PrefetchManager {
 
     // MARK: - Unified load pipeline
 
-    /// Load a texture for `url` through the full fallback chain:
+    /// Load a texture for `url` through the fallback chain:
     /// memory cache → disk cache → embedded JPEG → full RAW decode.
+    ///
+    /// When `draft` is true, stop after a usable preview (memory, disk, or
+    /// embedded JPEG) and never kick off a full RAW decode — peaking/zoom
+    /// callers bypass this path entirely.
+    ///
     /// Each stage's result is stored in the memory cache; RAW decodes are also
     /// persisted to the disk cache. `onPartial` fires with the embedded-JPEG
-    /// texture so callers can display it while the RAW decode finishes.
-    /// Returns nil if every stage fails or the surrounding task is cancelled.
+    /// texture so callers can display it while the RAW decode finishes (Full
+    /// mode only). Returns nil if every stage fails or the task is cancelled.
     func loadTexture(
         for url: URL,
         displaySize: CGSize,
+        draft: Bool = false,
         onPartial: (@MainActor @Sendable (SendableTexture) -> Void)? = nil
     ) async -> SendableTexture? {
-        // L1: memory cache (instant). A JPEG-only entry is shown immediately
-        // but still falls through to L2/L3b for the full-quality upgrade.
+        // L1: memory cache (instant). In Full mode a JPEG-only entry is shown
+        // immediately but still falls through for the RAW upgrade. In Draft
+        // any cached texture is final.
         var partialShown = false
         if let entry = cache[url] {
             touchAccess(url)
             let sendable = SendableTexture(texture: entry.texture)
-            if entry.isRAW { return sendable }
+            if entry.isRAW || draft { return sendable }
             guard !Task.isCancelled else { return nil }
             if let onPartial { await onPartial(sendable) }
             partialShown = true
@@ -118,13 +125,19 @@ actor PrefetchManager {
             if let entry = cache[url] {
                 touchAccess(url)
                 let sendable = SendableTexture(texture: entry.texture)
-                if entry.isRAW { return sendable }
+                if entry.isRAW || draft { return sendable }
                 if !partialShown, let onPartial { await onPartial(sendable) }
                 partialShown = true
             }
         }
 
-        return await performLoad(for: url, displaySize: displaySize, onPartial: onPartial, partialShown: partialShown)
+        return await performLoad(
+            for: url,
+            displaySize: displaySize,
+            draft: draft,
+            onPartial: onPartial,
+            partialShown: partialShown
+        )
     }
 
     /// Slow path of the pipeline: disk cache → embedded JPEG → full RAW.
@@ -133,6 +146,7 @@ actor PrefetchManager {
     private func performLoad(
         for url: URL,
         displaySize: CGSize,
+        draft: Bool = false,
         onPartial: (@MainActor @Sendable (SendableTexture) -> Void)? = nil,
         partialShown: Bool = false
     ) async -> SendableTexture? {
@@ -153,11 +167,19 @@ actor PrefetchManager {
             guard !Task.isCancelled else { return nil }
             store(texture: sendable.texture, for: url, isRAW: false)
             if let onPartial { await onPartial(sendable) }
+            if draft { return sendable }
+        } else if draft {
+            // L1 already showed a JPEG, or JPEG extract failed — stop here.
+            if let entry = cache[url] {
+                touchAccess(url)
+                return SendableTexture(texture: entry.texture)
+            }
+            return nil
         }
 
         guard !Task.isCancelled else { return nil }
 
-        // L3b: full RAW decode, persisted to the disk cache
+        // L3b: full RAW decode, persisted to the disk cache (Full mode only)
         guard let cgImage = await decoder.decodeRAWToCGImage(url: url, displaySize: displaySize),
               let sendable = await decoder.cgImageToTexture(cgImage) else { return nil }
         guard !Task.isCancelled else { return nil }
@@ -168,10 +190,12 @@ actor PrefetchManager {
     // MARK: - Prefetch
 
     /// Trigger prefetch for N±prefetchRadius around currentIndex.
+    /// In Draft mode neighbours stop at embedded JPEG / disk cache.
     func prefetch(
         currentIndex: Int,
         files: [URL],
-        displaySize: CGSize
+        displaySize: CGSize,
+        draft: Bool = false
     ) {
         guard !files.isEmpty else { return }
 
@@ -197,7 +221,9 @@ actor PrefetchManager {
         }
 
         for url in targetURLs {
-            if cache[url]?.isRAW == true || activeTasks[url] != nil {
+            // Draft: any cached preview is enough. Full: wait for RAW upgrade.
+            let warmEnough = draft ? cache[url] != nil : cache[url]?.isRAW == true
+            if warmEnough || activeTasks[url] != nil {
                 continue
             }
 
@@ -207,7 +233,12 @@ actor PrefetchManager {
             let hasJPEGEntry = cache[url] != nil
 
             activeTasks[url] = Task {
-                _ = await self.performLoad(for: url, displaySize: size, partialShown: hasJPEGEntry)
+                _ = await self.performLoad(
+                    for: url,
+                    displaySize: size,
+                    draft: draft,
+                    partialShown: hasJPEGEntry
+                )
                 await self.removeActiveTask(for: url)
             }
         }
@@ -217,7 +248,9 @@ actor PrefetchManager {
 
     /// Start building disk cache previews for all files in the background.
     /// Cancels any previous background build. Skips files already cached on disk.
-    func startBackgroundBuild(files: [URL], displaySize: CGSize) {
+    /// When `draft` is true, skip RAW preview generation (thumbnails only) so
+    /// culling isn't competing with background CIRAWFilter work.
+    func startBackgroundBuild(files: [URL], displaySize: CGSize, draft: Bool = false) {
         backgroundBuildTask?.cancel()
 
         guard let diskCache = diskCache else { return }
@@ -226,7 +259,7 @@ actor PrefetchManager {
         let progress = self.buildProgress
 
         backgroundBuildTask = Task.detached(priority: .background) {
-            let missingPreviews = await diskCache.uncachedURLs(from: files)
+            let missingPreviews = draft ? [] : await diskCache.uncachedURLs(from: files)
             let missingThumbs = await diskCache.uncachedThumbnailURLs(from: files)
 
             let totalWork = missingPreviews.count + missingThumbs.count

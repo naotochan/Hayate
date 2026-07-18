@@ -21,6 +21,9 @@ struct SettingsView: View {
 
     @AppStorage("autoAdvance") private var autoAdvance = false
     @AppStorage("writeXMPSidecars") private var writeXMPSidecars = false
+    @AppStorage("cullModeDraft") private var cullModeDraft = false
+    @AppStorage("colorizeKeepOnly") private var colorizeKeepOnly = true
+    @AppStorage("cullingProfileTriage") private var cullingProfileTriage = true
 
     private var generalTab: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -32,8 +35,34 @@ struct SettingsView: View {
 
             Form {
                 Section {
+                    Toggle("Draft cull mode", isOn: $cullModeDraft)
+                    Text("Navigate using embedded JPEG (and disk cache) only. Full RAW decode runs when you enable focus peaking (F) or zoom in. Fastest path for large shoots.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+
+                Section {
+                    Picker("Culling profile", selection: $cullingProfileTriage) {
+                        Text("Keep / Maybe / Out").tag(true)
+                        Text("Stars (1–5)").tag(false)
+                    }
+                    Text(cullingProfileTriage
+                         ? "K = Keep, M = Maybe, O = Out. Same key again clears. Stored as favorite / rating 3 / reject so existing files stay compatible."
+                         : "Number keys 1–5 set stars; K favorites; O rejects.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+
+                Section {
+                    Toggle("Colorize Keep only", isOn: $colorizeKeepOnly)
+                    Text("In the filmstrip and grid, Keep stays full color; other thumbnails go nearly grayscale. The main viewer is always full color. Badges still show state.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+
+                Section {
                     Toggle("Auto-advance after rating", isOn: $autoAdvance)
-                    Text("Jump to the next photo after rating (1–5, 0), favoriting (P), or rejecting (X) in the single-photo view.")
+                    Text("Jump to the next photo after Keep / Maybe / Out (or stars / favorite / reject) in the single-photo view.")
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }

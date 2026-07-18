@@ -132,10 +132,32 @@ class CullingSession: ObservableObject {
         }
     }
 
+    /// Three-value culling profile (Keep / Maybe / Out), stored on top of the
+    /// existing favorite / rating / reject fields so `.hayate.json` stays compatible.
+    enum TriageState: Equatable {
+        case undecided
+        case keep
+        case maybe
+        case out
+
+        /// Rating written for Maybe (stars profile still uses the full 1–5 range).
+        static let maybeRating = 3
+
+        static func of(_ entry: PhotoEntry?) -> TriageState {
+            guard let entry else { return .undecided }
+            if entry.isRejected { return .out }
+            if entry.isFavorite { return .keep }
+            if entry.rating > 0 { return .maybe }
+            return .undecided
+        }
+    }
+
     enum UndoAction {
         case ratingChange(fileName: String, oldRating: Int)
         case favoriteChange(fileName: String, oldValue: Bool)
         case rejectedChange(fileName: String, oldValue: Bool)
+        /// Compound restore for triage (Keep/Maybe/Out) so ⌘Z undoes in one step.
+        case entrySnapshot(fileName: String, oldEntry: PhotoEntry?)
         case deletion(url: URL, index: Int, entry: PhotoEntry?)
     }
 
@@ -344,6 +366,13 @@ class CullingSession: ObservableObject {
         saveJSON()
     }
 
+    /// Set triage state for the current photo. Tapping the same state again clears to undecided.
+    func setTriage(_ state: TriageState) {
+        guard let file = currentFile else { return }
+        applyTriage(state, toFileNamed: file.lastPathComponent)
+        saveJSON()
+    }
+
     // MARK: - Batch Operations
 
     func setRatingForIndices(_ indices: Set<Int>, rating: Int) {
@@ -358,6 +387,11 @@ class CullingSession: ObservableObject {
 
     func toggleRejectedForIndices(_ indices: Set<Int>) {
         forEachFileName(in: indices) { applyToggleRejected(toFileNamed: $0) }
+        saveJSON()
+    }
+
+    func setTriageForIndices(_ indices: Set<Int>, _ state: TriageState) {
+        forEachFileName(in: indices) { applyTriage(state, toFileNamed: $0) }
         saveJSON()
     }
 
@@ -409,6 +443,43 @@ class CullingSession: ObservableObject {
             entry.isFavorite = false
         }
         entries[fileName] = entry
+        writeXMPSidecar(forFileNamed: fileName)
+    }
+
+    /// Apply an exclusive triage state. Same state again → undecided.
+    /// Mapping: Keep→favorite, Out→reject, Maybe→rating 3 (clears the other two).
+    private func applyTriage(_ state: TriageState, toFileNamed fileName: String) {
+        let previous = entries[fileName]
+        let current = TriageState.of(previous)
+        let target: TriageState = (current == state && state != .undecided) ? .undecided : state
+
+        undoStack.append(.entrySnapshot(fileName: fileName, oldEntry: previous))
+
+        var entry = previous ?? PhotoEntry(fileName: fileName)
+        switch target {
+        case .undecided:
+            entry.isFavorite = false
+            entry.isRejected = false
+            entry.rating = 0
+        case .keep:
+            entry.isFavorite = true
+            entry.isRejected = false
+            entry.rating = 0
+        case .maybe:
+            entry.isFavorite = false
+            entry.isRejected = false
+            entry.rating = TriageState.maybeRating
+        case .out:
+            entry.isFavorite = false
+            entry.isRejected = true
+            entry.rating = 0
+        }
+
+        if entry.isFavorite || entry.isRejected || entry.rating > 0 {
+            entries[fileName] = entry
+        } else {
+            entries[fileName] = nil
+        }
         writeXMPSidecar(forFileNamed: fileName)
     }
 
@@ -522,6 +593,9 @@ class CullingSession: ObservableObject {
                 entries[fileName] = entry
             }
 
+        case .entrySnapshot(let fileName, let oldEntry):
+            entries[fileName] = oldEntry
+
         case .deletion:
             // File deletion undo is not supported (trashed items can be recovered via Finder)
             break
@@ -531,7 +605,8 @@ class CullingSession: ObservableObject {
         switch action {
         case .ratingChange(let fileName, _),
              .favoriteChange(let fileName, _),
-             .rejectedChange(let fileName, _):
+             .rejectedChange(let fileName, _),
+             .entrySnapshot(let fileName, _):
             writeXMPSidecar(forFileNamed: fileName)
         case .deletion:
             break
@@ -574,6 +649,9 @@ class CullingSession: ObservableObject {
         var attributes = "xmp:Rating=\"\(isRejected ? -1 : rating)\""
         if isFavorite {
             attributes += "\n   xmp:Label=\"Red\""
+        } else if rating > 0 {
+            // Maybe (triage) — Bridge yellow label so it survives into other apps.
+            attributes += "\n   xmp:Label=\"Yellow\""
         }
 
         let xmp = """

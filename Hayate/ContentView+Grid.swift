@@ -13,12 +13,15 @@ extension ContentView {
     var filteredFiles: [(index: Int, url: URL)] {
         session.files.enumerated().compactMap { index, url in
             let entry = session.entries[url.lastPathComponent]
+            let triage = CullingSession.TriageState.of(entry)
             switch gridFilter {
             case .all: return (index, url)
-            case .favorites: return entry?.isFavorite == true ? (index, url) : nil
-            case .rejected: return entry?.isRejected == true ? (index, url) : nil
+            case .favorites, .keep: return entry?.isFavorite == true ? (index, url) : nil
+            case .rejected, .out: return entry?.isRejected == true ? (index, url) : nil
             case .rated: return (entry?.rating ?? 0) > 0 ? (index, url) : nil
+            case .maybe: return triage == .maybe ? (index, url) : nil
             case .unrated: return (entry?.rating ?? 0) == 0 ? (index, url) : nil
+            case .undecided: return triage == .undecided ? (index, url) : nil
             }
         }
     }
@@ -27,7 +30,7 @@ extension ContentView {
         VStack(spacing: 0) {
             // Filter bar
             HStack(spacing: 8) {
-                ForEach(GridFilter.allCases, id: \.self) { filter in
+                ForEach(GridFilter.visible(triage: cullingProfileTriage), id: \.self) { filter in
                     Button {
                         gridFilter = filter
                     } label: {
@@ -61,6 +64,11 @@ extension ContentView {
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
             .background(.ultraThinMaterial)
+            .onChange(of: cullingProfileTriage) { _, _ in
+                if !GridFilter.visible(triage: cullingProfileTriage).contains(gridFilter) {
+                    gridFilter = .all
+                }
+            }
 
             // Grid
             GeometryReader { geo in
@@ -137,6 +145,7 @@ extension ContentView {
                         .frame(maxWidth: .infinity)
                         .frame(height: 140)
                         .background(Color.black)
+                        .saturation(CullThumbnailStyle.saturation(for: entry, enabled: colorizeKeepOnly))
                 } else {
                     Rectangle()
                         .fill(Color.gray.opacity(0.2))
@@ -159,7 +168,7 @@ extension ContentView {
                         }
                         Spacer()
                         // Badges (top right)
-                        PhotoBadgeView(entry: entry)
+                        PhotoBadgeView(entry: entry, triageStyle: cullingProfileTriage)
                             .padding(4)
                     }
                     Spacer()

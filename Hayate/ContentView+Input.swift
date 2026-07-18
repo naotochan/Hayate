@@ -75,7 +75,9 @@ extension ContentView {
         }
 
         // Rating digits 0–5 (fixed — rating keys don't go through the store).
-        if !event.modifierFlags.contains(.command),
+        // Ignored in triage profile (use P / M / X instead).
+        if !cullingProfileTriage,
+           !event.modifierFlags.contains(.command),
            let chars = event.charactersIgnoringModifiers,
            chars.count == 1,
            let rating = Int(chars),
@@ -128,7 +130,9 @@ extension ContentView {
             return true
 
         case .toggleFavorite:
-            if compareActive {
+            if cullingProfileTriage {
+                applyTriage(.keep, batch: batch, compareActive: compareActive)
+            } else if compareActive {
                 session.currentIndex = compareIndices[compareActiveSlot]
                 session.toggleFavorite()
             } else if batch {
@@ -140,7 +144,9 @@ extension ContentView {
             return true
 
         case .toggleRejected:
-            if compareActive {
+            if cullingProfileTriage {
+                applyTriage(.out, batch: batch, compareActive: compareActive)
+            } else if compareActive {
                 session.currentIndex = compareIndices[compareActiveSlot]
                 session.toggleRejected()
             } else if batch {
@@ -149,6 +155,11 @@ extension ContentView {
                 session.toggleRejected()
                 autoAdvanceIfEnabled()
             }
+            return true
+
+        case .setTriageMaybe:
+            guard cullingProfileTriage else { return false }
+            applyTriage(.maybe, batch: batch, compareActive: compareActive)
             return true
 
         case .toggleGrid:
@@ -180,6 +191,10 @@ extension ContentView {
             if compareMode { return false }
             focusPeakingEnabled.toggle()
             loadCurrentImage()
+            return true
+
+        case .toggleCullModeDraft:
+            cullModeDraft.toggle()
             return true
 
         case .toggleInfo:
@@ -255,6 +270,22 @@ extension ContentView {
     private func autoAdvanceIfEnabled() {
         guard autoAdvance, !showGrid, !compareMode else { return }
         navigateForward()
+    }
+
+    private func applyTriage(
+        _ state: CullingSession.TriageState,
+        batch: Bool,
+        compareActive: Bool
+    ) {
+        if compareActive {
+            session.currentIndex = compareIndices[compareActiveSlot]
+            session.setTriage(state)
+        } else if batch {
+            session.setTriageForIndices(selectedIndices, state)
+        } else {
+            session.setTriage(state)
+            autoAdvanceIfEnabled()
+        }
     }
 
     // MARK: - Scroll & drag (zoom / pan)
