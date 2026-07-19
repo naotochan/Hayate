@@ -412,14 +412,53 @@ class CullingSession: ObservableObject {
         return entries[file.lastPathComponent]
     }
 
-    func navigateForward() {
-        guard currentIndex < files.count - 1 else { return }
-        currentIndex += 1
+    func navigateForward(undecidedOnly: Bool = false, triageMode: Bool = true) {
+        guard let next = nextIndex(
+            from: currentIndex,
+            step: 1,
+            undecidedOnly: undecidedOnly,
+            triageMode: triageMode
+        ) else { return }
+        currentIndex = next
     }
 
-    func navigateBack() {
-        guard currentIndex > 0 else { return }
-        currentIndex -= 1
+    func navigateBack(undecidedOnly: Bool = false, triageMode: Bool = true) {
+        guard let prev = nextIndex(
+            from: currentIndex,
+            step: -1,
+            undecidedOnly: undecidedOnly,
+            triageMode: triageMode
+        ) else { return }
+        currentIndex = prev
+    }
+
+    /// Walk `step` (±1) from `from`, optionally skipping photos that already
+    /// have a culling decision. Returns nil when nothing in that direction qualifies.
+    func nextIndex(
+        from: Int,
+        step: Int,
+        undecidedOnly: Bool,
+        triageMode: Bool
+    ) -> Int? {
+        guard step == 1 || step == -1 else { return nil }
+        var i = from + step
+        while files.indices.contains(i) {
+            if !undecidedOnly || !isDecided(fileNamed: files[i].lastPathComponent, triageMode: triageMode) {
+                return i
+            }
+            i += step
+        }
+        return nil
+    }
+
+    /// Whether the photo already has a decision worth skipping in survey mode.
+    func isDecided(fileNamed name: String, triageMode: Bool) -> Bool {
+        let entry = entries[name]
+        if triageMode {
+            return TriageState.of(entry) != .undecided
+        }
+        guard let entry else { return false }
+        return entry.rating > 0 || entry.isFavorite || entry.isRejected
     }
 
     // MARK: - Rating & Favorite (single)

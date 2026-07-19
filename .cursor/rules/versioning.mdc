@@ -19,7 +19,7 @@ alwaysApply: true
 
 ## いつ上げるか（エージェントは聞かない）
 
-**Applications へ入れるとき・リリース準備のとき**は、ユーザーに確認せずよしなに上げる。
+**Applications へ入れるとき・リリース準備のとき・commit+push するとき**は、ユーザーに確認せずよしなに上げる。
 
 1. **ビルド番号** — 毎回 `+1`（必須）
 2. **表示バージョン**
@@ -30,9 +30,30 @@ alwaysApply: true
 
 通常の WIP コミットや、インストールしない調査だけの変更では上げない。
 
-## 手順
+## commit + push 時の標準フロー
 
-ローカルで `/Applications` に入れるとき:
+ユーザーが **commit と push を同時に頼んだ**（または diff-tab の commit-and-push）ときは、次を **この順で** まとめてやる。聞かない。
+
+1. **インストール（バージョン込み）**
+   ```bash
+   ./scripts/dev-install.sh --run
+   ```
+   - ビルド番号は自動 `+1`
+   - 表示バージョンも上げるなら `--bump-patch` / `--bump-minor` を付ける
+   - `/Applications/Hayate.app` へコピーして起動する
+2. **ステージ** — 機能差分に加え、更新された `Hayate.xcodeproj/project.pbxproj` も同じコミットに含める
+3. **コミット** → **push**
+
+順序の理由: 先に `dev-install` すると pbxproj のバンプがワーキングツリーに乗るので、**1 コミットにコード差分とバージョンが揃う**。push 後に別コミットでバージョンだけ載せるのは避ける。
+
+例外（インストールしない）:
+- ドキュメント・ルール・スクリプトのみの変更
+- ユーザーが明示的に「コミットだけ」「インストール不要」と言ったとき
+- まだ動かしたくない WIP
+
+## 手順（単体）
+
+ローカルで `/Applications` に入れるだけ（commit なし）:
 
 ```bash
 ./scripts/dev-install.sh --run
@@ -51,6 +72,7 @@ alwaysApply: true
 
 ## やらないこと
 
-- ユーザーに「バージョン上げますか？」と毎回聞かない（インストール / リリース文脈では自動）
+- ユーザーに「バージョン上げますか？」「Applications に入れますか？」と毎回聞かない（commit+push / インストール / リリース文脈では自動）
 - テストターゲットのバージョンをいじらない
 - appcast / GitHub Release を `dev-install` で触らない（ローカル反復用）
+- commit+push のあとでバージョンだけ別コミットにする（先に `dev-install` する）

@@ -123,7 +123,20 @@ extension ContentView {
 
                 Spacer()
 
-                // Cull mode / focus peaking indicators
+                // Cull mode / survey / focus peaking indicators
+                if navigateUndecidedOnly {
+                    Text("SURVEY")
+                        .font(.system(size: 10, weight: .bold, design: .monospaced))
+                        .foregroundColor(.mint)
+                        .padding(.horizontal, 4)
+                        .padding(.vertical, 1)
+                        .background(Color.mint.opacity(0.2))
+                        .cornerRadius(3)
+                        .help(L.t(
+                            "Skipping decided photos — jump to undecided only.",
+                            ja: "決定済みをスキップして、未決定だけへ進みます。"
+                        ))
+                }
                 if cullModeDraft {
                     Text("DRAFT")
                         .font(.system(size: 10, weight: .bold, design: .monospaced))

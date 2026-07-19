@@ -5,7 +5,13 @@ import SwiftUI
 struct HayateBrandScreen: View {
     enum Mode {
         case loading
-        case empty(onOpen: () -> Void, recentFolders: [URL], onOpenRecent: (URL) -> Void)
+        case empty(
+            onOpen: () -> Void,
+            recentFolders: [URL],
+            onOpenRecent: (URL) -> Void,
+            /// When set (e.g. folder opened but no photos), replaces the default subtitle.
+            message: String? = nil
+        )
     }
 
     let mode: Mode
@@ -24,6 +30,15 @@ struct HayateBrandScreen: View {
     private var isLoading: Bool {
         if case .loading = mode { return true }
         return false
+    }
+
+    private var subtitle: String {
+        if isLoading { return "Preparing…" }
+        if dropTargeted { return "Release to open this folder" }
+        if case .empty(_, _, _, let message) = mode, let message {
+            return message
+        }
+        return "Drop a folder or open one to begin"
     }
 
     private var drawDuration: Double {
@@ -50,17 +65,15 @@ struct HayateBrandScreen: View {
                         .tracking(1.2)
                         .foregroundColor(HayateTheme.fg(0.92))
 
-                    Text(isLoading
-                         ? "Preparing…"
-                         : dropTargeted
-                         ? "Release to open this folder"
-                         : "Drop a folder or open one to begin")
+                    Text(subtitle)
                         .font(.system(size: 13))
                         .foregroundColor(HayateTheme.fg(dropTargeted ? 0.85 : 0.4))
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 24)
                 }
                 .opacity(textOpacity)
 
-                if case .empty(let onOpen, let recent, let onOpenRecent) = mode {
+                if case .empty(let onOpen, let recent, let onOpenRecent, _) = mode {
                     Button("Open Folder…", action: onOpen)
                         .buttonStyle(.borderedProminent)
                         .tint(HayateTheme.wash(0.18))
