@@ -51,9 +51,9 @@ extension ContentView {
                                 }
                                 Spacer()
 
-                                // "PICK" hint on active slot
+                                // Keep / Pick hint on active slot
                                 if isActive {
-                                    Text("⏎ Pick")
+                                    Text(cullingProfileTriage ? "⏎ Keep" : "⏎ Pick")
                                         .font(.system(size: 13, weight: .semibold))
                                         .foregroundColor(.white)
                                         .padding(.horizontal, 12)
@@ -94,7 +94,9 @@ extension ContentView {
                     .font(.system(size: 11, weight: .bold, design: .monospaced))
                     .foregroundColor(.accentColor)
 
-                Text("←→ select  |  ⏎ pick  |  Tab skip  |  Esc exit")
+                Text(cullingProfileTriage
+                      ? "←→ select  |  ⏎ keep  |  Tab skip  |  Esc exit"
+                      : "←→ select  |  ⏎ pick  |  Tab skip  |  Esc exit")
                     .font(.system(size: 11))
                     .foregroundColor(.gray)
 
@@ -134,8 +136,8 @@ extension ContentView {
         loadCompareTextures()
     }
 
-    /// Enter: "Pick" the active photo. Keep it on the left, reject the other,
-    /// load the next photo on the right for continued comparison.
+    /// Enter: mark the active photo Keep (or favorite), Out/reject the other,
+    /// keep the winner on the left, and load the next challenger on the right.
     func pickActivePhoto() {
         guard compareIndices.count == 2 else { return }
 
@@ -143,18 +145,29 @@ extension ContentView {
         let otherSlot = compareActiveSlot == 0 ? 1 : 0
         let rejectedIndex = compareIndices[otherSlot]
 
-        // Favorite the picked one
         let pickedFileName = session.files[pickedIndex].lastPathComponent
-        if session.entries[pickedFileName]?.isFavorite != true {
-            session.currentIndex = pickedIndex
-            session.toggleFavorite()
-        }
-
-        // Reject the other
         let rejectedFileName = session.files[rejectedIndex].lastPathComponent
-        if session.entries[rejectedFileName]?.isRejected != true {
-            session.currentIndex = rejectedIndex
-            session.toggleRejected()
+
+        if cullingProfileTriage {
+            // Keep the picked one (setTriage toggles off if already Keep — skip then)
+            if CullingSession.TriageState.of(session.entries[pickedFileName]) != .keep {
+                session.currentIndex = pickedIndex
+                session.setTriage(.keep)
+            }
+            // Out the other
+            if CullingSession.TriageState.of(session.entries[rejectedFileName]) != .out {
+                session.currentIndex = rejectedIndex
+                session.setTriage(.out)
+            }
+        } else {
+            if session.entries[pickedFileName]?.isFavorite != true {
+                session.currentIndex = pickedIndex
+                session.toggleFavorite()
+            }
+            if session.entries[rejectedFileName]?.isRejected != true {
+                session.currentIndex = rejectedIndex
+                session.toggleRejected()
+            }
         }
 
         // Next photo = one after the rightmost in the current pair
