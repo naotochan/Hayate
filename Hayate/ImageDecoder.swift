@@ -33,13 +33,46 @@ struct EXIFInfo: Sendable {
     }
 }
 
+/// Caps concurrent CIRAWFilter / full-res work so a large folder's prefetch +
+/// background build cannot flood Metal/ImageIO and starve the visible photo.
+actor DecodeLimiter {
+    private let maxConcurrent: Int
+    private var inFlight = 0
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    init(maxConcurrent: Int) {
+        self.maxConcurrent = max(1, maxConcurrent)
+    }
+
+    func withPermit<T: Sendable>(_ operation: @Sendable () async -> T) async -> T {
+        await acquire()
+        let result = await operation()
+        release()
+        return result
+    }
+
+    private func acquire() async {
+        while inFlight >= maxConcurrent {
+            await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+                waiters.append(cont)
+            }
+        }
+        inFlight += 1
+    }
+
+    private func release() {
+        inFlight -= 1
+        if !waiters.isEmpty {
+            waiters.removeFirst().resume()
+        }
+    }
+}
+
 /// Handles RAW and JPEG decoding.
 ///
-/// Unlike an actor, this class lets multiple decodes run in parallel: each public
-/// async method dispatches to `Task.detached`, so the work executes on the global
-/// concurrent pool rather than on a single serial executor. That matters during
-/// rapid culling — without parallelism, prefetching N±5 would serialize into one
-/// long queue and stall the user.
+/// Lightweight paths (embedded JPEG / filmstrip thumbs) run freely on the
+/// concurrent pool. Heavy CIRAWFilter work is gated by `DecodeLimiter` so
+/// opening a 200+ file folder cannot launch dozens of full RAW decodes at once.
 ///
 /// Thread safety:
 /// - `CIContext` is documented thread-safe and is shared.
@@ -49,6 +82,9 @@ final class ImageDecoder: @unchecked Sendable {
     private let ciContext: CIContext
     private let device: MTLDevice
     private let signpostLog = OSLog(subsystem: "com.hayate", category: "Decode")
+    /// Two concurrent full RAW decodes: enough for current + one neighbor,
+    /// without thrashing on large folders.
+    private let rawLimiter = DecodeLimiter(maxConcurrent: 2)
 
     init(ciContext: CIContext, device: MTLDevice) {
         self.ciContext = ciContext
@@ -57,7 +93,8 @@ final class ImageDecoder: @unchecked Sendable {
 
     // MARK: - Public async API (dispatches to background)
 
-    /// Extract embedded JPEG thumbnail from a RAW file. Typically ~5-16ms.
+    /// Extract embedded JPEG preview from a RAW file. Typically ~5-16ms.
+    /// Uses ImageIO's embedded thumbnail only — never forces a full-image decode.
     func extractJPEG(url: URL) async -> CGImage? {
         await Task.detached(priority: .userInitiated) { [self] in
             extractJPEGSync(url: url)
@@ -67,9 +104,11 @@ final class ImageDecoder: @unchecked Sendable {
     /// Decode a RAW file to MTLTexture at the specified display size.
     /// Typically ~200-500ms depending on format and resolution.
     func decodeRAW(url: URL, displaySize: CGSize, focusPeaking: Bool = false) async -> SendableTexture? {
-        await Task.detached(priority: .userInitiated) { [self] in
-            decodeRAWSync(url: url, displaySize: displaySize, focusPeaking: focusPeaking)
-        }.value
+        await rawLimiter.withPermit {
+            await Task.detached(priority: .userInitiated) { [self] in
+                decodeRAWSync(url: url, displaySize: displaySize, focusPeaking: focusPeaking)
+            }.value
+        }
     }
 
     /// Decode a RAW file to CGImage at the specified display size.
@@ -77,16 +116,20 @@ final class ImageDecoder: @unchecked Sendable {
     /// converted to MTLTexture (for memory cache) and written as HEIF (for disk cache)
     /// with only a single RAW decode pass.
     func decodeRAWToCGImage(url: URL, displaySize: CGSize, priority: TaskPriority = .userInitiated) async -> CGImage? {
-        await Task.detached(priority: priority) { [self] in
-            decodeRAWToCGImageSync(url: url, displaySize: displaySize)
-        }.value
+        await rawLimiter.withPermit {
+            await Task.detached(priority: priority) { [self] in
+                decodeRAWToCGImageSync(url: url, displaySize: displaySize)
+            }.value
+        }
     }
 
     /// Decode a RAW file at full resolution (for zoom).
     func decodeRAWFullResolution(url: URL) async -> SendableTexture? {
-        await Task.detached(priority: .userInitiated) { [self] in
-            decodeRAWFullResolutionSync(url: url)
-        }.value
+        await rawLimiter.withPermit {
+            await Task.detached(priority: .userInitiated) { [self] in
+                decodeRAWFullResolutionSync(url: url)
+            }.value
+        }
     }
 
     /// Convert a CGImage (e.g. extracted JPEG) to MTLTexture.
@@ -143,8 +186,10 @@ final class ImageDecoder: @unchecked Sendable {
             return nil
         }
 
+        // No Always/IfAbsent flags: return the embedded preview only. Forcing
+        // ImageIO to synthesize a thumb from the full RAW starves the UI when
+        // many files load at once; L3b CIRAWFilter handles the full decode.
         let options: [CFString: Any] = [
-            kCGImageSourceCreateThumbnailFromImageAlways: true,
             kCGImageSourceCreateThumbnailWithTransform: true,
             kCGImageSourceThumbnailMaxPixelSize: 3840,
             kCGImageSourceShouldCache: false
@@ -232,8 +277,8 @@ final class ImageDecoder: @unchecked Sendable {
         guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else {
             return nil
         }
+        // Embedded thumb only — never synthesize from the full RAW.
         let options: [CFString: Any] = [
-            kCGImageSourceCreateThumbnailFromImageAlways: true,
             kCGImageSourceCreateThumbnailWithTransform: true,
             kCGImageSourceThumbnailMaxPixelSize: maxSize,
             kCGImageSourceShouldCache: false

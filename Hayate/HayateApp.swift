@@ -19,8 +19,39 @@ final class CIContextHolder: ObservableObject {
     }
 }
 
+/// Opens folders dropped on the Dock icon or passed via `open -a Hayate <folder>`.
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    /// Set from SwiftUI once the session is ready. Flushes any folder that
+    /// arrived earlier (launch-with-folder race).
+    var onOpenFolder: ((URL) -> Void)? {
+        didSet {
+            if let url = pendingFolder, let handler = onOpenFolder {
+                pendingFolder = nil
+                handler(url)
+            }
+        }
+    }
+
+    private var pendingFolder: URL?
+
+    func application(_ application: NSApplication, open urls: [URL]) {
+        for url in urls {
+            var isDir: ObjCBool = false
+            if FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir), isDir.boolValue {
+                if let handler = onOpenFolder {
+                    handler(url)
+                } else {
+                    pendingFolder = url
+                }
+                return
+            }
+        }
+    }
+}
+
 @main
 struct HayateApp: App {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var session = CullingSession()
     @StateObject private var ciContextHolder = CIContextHolder()
     @StateObject private var keybindings = KeybindingStore()
@@ -59,7 +90,22 @@ struct HayateApp: App {
                 .environment(\.metalDevice, device)
                 .preferredColorScheme(appAppearance.preferredColorScheme)
                 .id(localization.language)
-                .onAppear { appAppearance.applyToApp() }
+                .onAppear {
+                    appAppearance.applyToApp()
+                    appDelegate.onOpenFolder = { [session] url in
+                        session.requestOpen(folder: url)
+                    }
+                    // `Hayate.app -- /path/to/folder` for demos / scripting.
+                    for arg in CommandLine.arguments.dropFirst() where !arg.hasPrefix("-") {
+                        let url = URL(fileURLWithPath: arg)
+                        var isDir: ObjCBool = false
+                        if FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir),
+                           isDir.boolValue {
+                            session.requestOpen(folder: url)
+                            break
+                        }
+                    }
+                }
                 .onChange(of: appAppearance) { _, newValue in
                     newValue.applyToApp()
                 }

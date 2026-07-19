@@ -23,7 +23,6 @@ struct SettingsView: View {
     @AppStorage("autoAdvance") private var autoAdvance = false
     @AppStorage("navigateUndecidedOnly") private var navigateUndecidedOnly = false
     @AppStorage("writeXMPSidecars") private var writeXMPSidecars = false
-    @AppStorage("cullModeDraft") private var cullModeDraft = false
     @AppStorage("colorizeKeepOnly") private var colorizeKeepOnly = true
     @AppStorage("cullingProfileTriage") private var cullingProfileTriage = true
     @AppStorage("sceneGapMinutes") private var sceneGapMinutes = 15
@@ -65,16 +64,6 @@ struct SettingsView: View {
                     ))
                     .font(.caption)
                     .foregroundColor(.secondary)
-                }
-
-                Section {
-                    Toggle(L.t("Draft cull mode", ja: "下書き選別モード"), isOn: $cullModeDraft)
-                    Text(L.t(
-                        "Navigate using embedded JPEG (and disk cache) only. Full RAW decode runs when you enable focus peaking (F) or zoom in. Fastest path for large shoots.",
-                        ja: "埋め込みJPEG（とディスクキャッシュ）だけでナビゲートします。フォーカスピーキング（F）やズーム時だけフルRAWをデコード。大量撮影向きの最速パスです。"
-                    ))
-                        .font(.caption)
-                        .foregroundColor(.secondary)
                 }
 
                 Section {
@@ -352,7 +341,7 @@ struct SettingsView: View {
 
             List {
                 ForEach(ActionID.Category.allCases) { category in
-                    Section(category.title) {
+                    Section(category.title(lang: L.resolved)) {
                         ForEach(actions(in: category)) { action in
                             row(for: action)
                         }
@@ -368,7 +357,7 @@ struct SettingsView: View {
 
     private func row(for action: ActionID) -> some View {
         HStack {
-            Text(action.title)
+            Text(action.title(lang: L.resolved))
             Spacer()
             if recordingAction == action {
                 ShortcutRecorder(

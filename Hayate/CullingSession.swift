@@ -217,22 +217,51 @@ class CullingSession: ObservableObject {
     /// the folder through the UI on completion (moved files leave the
     /// session; their entries survive as orphans in .hayate.json).
     func exportPicks(where predicate: (PhotoEntry?) -> Bool, to destination: URL, move: Bool) {
+        let jobs = files.compactMap { src -> (URL, URL)? in
+            guard predicate(entries[src.lastPathComponent]) else { return nil }
+            return (src, destination)
+        }
+        startExport(jobs: jobs, move: move)
+    }
+
+    /// Place each Keep / Maybe / Out photo into sibling folders of that name
+    /// under the current shoot (`…/Keep`, `…/Maybe`, `…/Out`). Undecided
+    /// photos stay put. Creates the folders as needed.
+    func organizeIntoTriageFolders(move: Bool) {
+        guard let root = folderURL else { return }
+        let jobs = files.compactMap { src -> (URL, URL)? in
+            switch TriageState.of(entries[src.lastPathComponent]) {
+            case .keep:
+                return (src, root.appendingPathComponent("Keep", isDirectory: true))
+            case .maybe:
+                return (src, root.appendingPathComponent("Maybe", isDirectory: true))
+            case .out:
+                return (src, root.appendingPathComponent("Out", isDirectory: true))
+            case .undecided:
+                return nil
+            }
+        }
+        startExport(jobs: jobs, move: move)
+    }
+
+    /// `(source file, destination directory)` pairs.
+    private func startExport(jobs: [(URL, URL)], move: Bool) {
         // One export at a time.
         if let progress = exportProgress, !progress.finished { return }
+        guard !jobs.isEmpty else { return }
 
-        let targets = files.filter { predicate(entries[$0.lastPathComponent]) }
-        guard !targets.isEmpty else { return }
-        exportProgress = ExportProgress(completed: 0, total: targets.count, failed: 0, finished: false)
+        exportProgress = ExportProgress(completed: 0, total: jobs.count, failed: 0, finished: false)
         let sourceFolder = folderURL
 
         exportTask = Task.detached(priority: .userInitiated) { [weak self] in
             let fm = FileManager.default
             var completed = 0
             var failed = 0
-            for src in targets {
+            for (src, destination) in jobs {
                 guard !Task.isCancelled else { break }
-                let dst = destination.appendingPathComponent(src.lastPathComponent)
                 do {
+                    try fm.createDirectory(at: destination, withIntermediateDirectories: true)
+                    let dst = destination.appendingPathComponent(src.lastPathComponent)
                     // Never overwrite an existing file at the destination.
                     if fm.fileExists(atPath: dst.path) { throw CocoaError(.fileWriteFileExists) }
                     if move {
@@ -267,11 +296,21 @@ class CullingSession: ObservableObject {
                     failed += 1
                 }
                 completed += 1
-                let progress = ExportProgress(completed: completed, total: targets.count, failed: failed, finished: false)
+                let progress = ExportProgress(
+                    completed: completed,
+                    total: jobs.count,
+                    failed: failed,
+                    finished: false
+                )
                 await MainActor.run { [weak self] in self?.exportProgress = progress }
             }
 
-            let final = ExportProgress(completed: completed, total: targets.count, failed: failed, finished: true)
+            let final = ExportProgress(
+                completed: completed,
+                total: jobs.count,
+                failed: failed,
+                finished: true
+            )
             await MainActor.run { [weak self] in
                 guard let self = self else { return }
                 self.exportProgress = final

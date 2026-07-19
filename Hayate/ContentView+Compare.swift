@@ -260,8 +260,7 @@ extension ContentView {
         }
 
         guard let prefetchManager = prefetchManager else { return }
-        let draft = cullModeDraft
-        let result = await prefetchManager.loadTexture(for: url, displaySize: displaySize, draft: draft) { partial in
+        let result = await prefetchManager.loadTexture(for: url, displaySize: displaySize) { partial in
             compareTextures[fileIndex] = partial.texture
         }
         if let result = result {
