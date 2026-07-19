@@ -137,6 +137,8 @@ extension ActionID {
             return triageMode ? "Out" : "Toggle rejected"
         case .setTriageMaybe:
             return triageMode ? "Maybe" : "Maybe (triage)"
+        case .pickCompare:
+            return triageMode ? "Keep active (compare)" : title
         case .toggleShortcutsHelp:
             return "Show / hide this cheat sheet"
         default:
