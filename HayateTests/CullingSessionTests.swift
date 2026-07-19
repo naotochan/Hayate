@@ -84,6 +84,42 @@ final class CullingSessionTests: XCTestCase {
         XCTAssertEqual(session.currentIndex, 0, "Should not go below 0")
     }
 
+    func testNavigateForwardSkipsDecidedInTriage() {
+        loadTestFiles(count: 5)
+        session.currentIndex = 0
+        session.setTriage(.keep) // index 0
+        session.currentIndex = 1
+        session.setTriage(.out)  // index 1
+        // index 2 stays undecided
+        session.currentIndex = 0
+
+        session.navigateForward(undecidedOnly: true, triageMode: true)
+        XCTAssertEqual(session.currentIndex, 2)
+    }
+
+    func testNavigateBackSkipsDecidedInTriage() {
+        loadTestFiles(count: 4)
+        session.currentIndex = 1
+        session.setTriage(.maybe)
+        session.currentIndex = 2
+        session.setTriage(.keep)
+        session.currentIndex = 3
+
+        session.navigateBack(undecidedOnly: true, triageMode: true)
+        XCTAssertEqual(session.currentIndex, 0)
+    }
+
+    func testNavigateUndecidedOnlyStopsWhenNoneLeft() {
+        loadTestFiles(count: 3)
+        for i in 0..<3 {
+            session.currentIndex = i
+            session.setTriage(.keep)
+        }
+        session.currentIndex = 0
+        session.navigateForward(undecidedOnly: true, triageMode: true)
+        XCTAssertEqual(session.currentIndex, 0, "No undecided ahead — stay put")
+    }
+
     func testCurrentFile() {
         loadTestFiles(count: 3)
         XCTAssertEqual(session.currentFile?.lastPathComponent, "IMG_0001.CR3")

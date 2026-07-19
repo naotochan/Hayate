@@ -21,6 +21,7 @@ struct SettingsView: View {
     // MARK: - General tab
 
     @AppStorage("autoAdvance") private var autoAdvance = false
+    @AppStorage("navigateUndecidedOnly") private var navigateUndecidedOnly = false
     @AppStorage("writeXMPSidecars") private var writeXMPSidecars = false
     @AppStorage("cullModeDraft") private var cullModeDraft = false
     @AppStorage("colorizeKeepOnly") private var colorizeKeepOnly = true
@@ -109,6 +110,14 @@ struct SettingsView: View {
                     Text(L.t(
                         "Jump to the next photo after Keep / Maybe / Out (or stars / favorite / reject) in the single-photo view.",
                         ja: "1枚表示で Keep / Maybe / Out（または星 / favorite / reject）のあと、次の写真へ進みます。"
+                    ))
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+
+                    Toggle(L.t("Skip decided photos", ja: "決定済みをスキップ"), isOn: $navigateUndecidedOnly)
+                    Text(L.t(
+                        "J / L and arrow keys jump to the next undecided photo. Already Keep / Maybe / Out (or rated / favorite / reject) are skipped. Use this for a second pass over leftovers.",
+                        ja: "J / L と矢印キーで未決定の写真だけへ進みます。Keep / Maybe / Out（または星 / favorite / reject）済みは飛ばします。残りの再周回向けです。"
                     ))
                         .font(.caption)
                         .foregroundColor(.secondary)

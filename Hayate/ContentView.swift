@@ -19,6 +19,11 @@ struct ContentView: View {
     @State var diskCache: DiskCacheManager?
     @StateObject var buildProgress = PreviewBuildProgress()
     @State var isLoading = false
+    /// True when the current photo's decode pipeline returned nil (corrupt / unsupported).
+    @State var imageLoadFailed = false
+    /// Short-lived toast for folder open failures etc.
+    @State var statusBanner: String?
+    @State var statusBannerTask: Task<Void, Never>?
     @State var showDeleteConfirmation = false
     /// Indices to delete when the confirmation dialog is accepted.
     /// `nil` means "delete the current photo only" (legacy single-file path).
@@ -77,6 +82,8 @@ struct ContentView: View {
     @AppStorage("sceneGapMinutes") var sceneGapMinutes = 15
     /// Advance to the next photo automatically after rating/favorite/reject.
     @AppStorage("autoAdvance") var autoAdvance = false
+    /// J/L (and arrows) skip photos that already have a decision.
+    @AppStorage("navigateUndecidedOnly") var navigateUndecidedOnly = false
     /// Draft cull mode: stop at embedded JPEG / disk cache; full RAW only for
     /// focus peaking and zoom. Maximises navigation throughput.
     @AppStorage("cullModeDraft") var cullModeDraft = false
@@ -154,8 +161,11 @@ struct ContentView: View {
                     HayateBrandScreen(
                         mode: .empty(
                             onOpen: { session.requestOpenFolder() },
-                            recentFolders: [],
-                            onOpenRecent: { session.requestOpen(folder: $0) }
+                            recentFolders: session.recentFolders,
+                            onOpenRecent: { session.requestOpen(folder: $0) },
+                            message: session.folderURL.map { url in
+                                "No photos in “\(url.lastPathComponent)”"
+                            }
                         ),
                         dropTargeted: isDropTargeted
                     )
@@ -167,6 +177,25 @@ struct ContentView: View {
                     // Single photo view
                     if let device = metalDevice {
                         MetalImageView(texture: currentTexture, device: device, zoomScale: zoomScale, panOffset: panOffset)
+                    }
+
+                    if imageLoadFailed, currentTexture == nil, !isLoading {
+                        VStack(spacing: 8) {
+                            Image(systemName: "exclamationmark.triangle")
+                                .font(.system(size: 28, weight: .medium))
+                                .foregroundColor(HayateTheme.fg(0.55))
+                            Text("Couldn't load this photo")
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundColor(HayateTheme.fg(0.75))
+                            if let name = session.currentFile?.lastPathComponent {
+                                Text(name)
+                                    .font(.system(size: 11, design: .monospaced))
+                                    .foregroundColor(HayateTheme.fg(0.4))
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                            }
+                        }
+                        .padding(24)
                     }
 
                     // Top-left overlay: EXIF info (I key)
@@ -206,6 +235,22 @@ struct ContentView: View {
                             triageMode: cullingProfileTriage,
                             onDismiss: { showShortcutsHelp = false }
                         )
+                    }
+
+                    if let statusBanner {
+                        VStack {
+                            Text(statusBanner)
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundColor(HayateTheme.fg(0.92))
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 8)
+                                .background(HayateTheme.wash(0.22))
+                                .cornerRadius(8)
+                                .padding(.top, 12)
+                            Spacer()
+                        }
+                        .transition(.opacity)
+                        .allowsHitTesting(false)
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -394,11 +439,26 @@ struct ContentView: View {
             if FileManager.default.fileExists(atPath: parent.path) {
                 session.removeFromRecents(url)
             }
+            flashStatusBanner("Couldn't open “\(url.lastPathComponent)”")
             return
         }
         resetViewState()
+        if session.files.isEmpty {
+            // Brand screen shows the empty-folder message; nothing to decode.
+            return
+        }
         loadCurrentImage()
         startBackgroundBuild()
+    }
+
+    func flashStatusBanner(_ message: String) {
+        statusBannerTask?.cancel()
+        statusBanner = message
+        statusBannerTask = Task {
+            try? await Task.sleep(nanoseconds: 2_500_000_000)
+            guard !Task.isCancelled else { return }
+            statusBanner = nil
+        }
     }
 
     func startBackgroundBuild() {
@@ -432,6 +492,10 @@ struct ContentView: View {
         thumbnailOrder.removeAll()
         decodeTimeMs = 0
         isLoading = false
+        imageLoadFailed = false
+        statusBannerTask?.cancel()
+        statusBannerTask = nil
+        statusBanner = nil
 
         // Drop cached decodes from the previous folder. Cache keys are absolute URLs,
         // so a not-yet-completed clear() can't cause stale hits in the new folder.
@@ -461,11 +525,17 @@ struct ContentView: View {
     // MARK: - Navigation
 
     func navigateForward() {
-        session.navigateForward()
+        session.navigateForward(
+            undecidedOnly: navigateUndecidedOnly,
+            triageMode: cullingProfileTriage
+        )
     }
 
     func navigateBack() {
-        session.navigateBack()
+        session.navigateBack(
+            undecidedOnly: navigateUndecidedOnly,
+            triageMode: cullingProfileTriage
+        )
     }
 
     // MARK: - Image loading
@@ -507,6 +577,7 @@ struct ContentView: View {
         }
 
         isLoading = true
+        imageLoadFailed = false
         let start = CFAbsoluteTimeGetCurrent()
 
         currentDecodeTask = Task {
@@ -519,16 +590,23 @@ struct ContentView: View {
                     currentTexture = sendable.texture
                     decodeTimeMs = (CFAbsoluteTimeGetCurrent() - start) * 1000
                     isLoading = false
+                    imageLoadFailed = false
                 } else if !Task.isCancelled {
                     // Decode failed — don't leave the spinner on.
+                    currentTexture = nil
                     isLoading = false
+                    imageLoadFailed = true
                 }
                 return
             }
 
             // Unified pipeline: memory → disk → embedded JPEG [(partial) → RAW]
             // Draft stops after JPEG; Full continues to RAW.
-            guard let prefetchManager = prefetchManager else { return }
+            guard let prefetchManager = prefetchManager else {
+                isLoading = false
+                imageLoadFailed = true
+                return
+            }
             let draft = cullModeDraft
             let result = await prefetchManager.loadTexture(for: file, displaySize: displaySize, draft: draft) { partial in
                 // Defensive: don't overwrite a newer photo if this task was
@@ -537,12 +615,16 @@ struct ContentView: View {
                 guard !Task.isCancelled, fullResDisplayedURL != file else { return }
                 currentTexture = partial.texture
                 decodeTimeMs = (CFAbsoluteTimeGetCurrent() - start) * 1000
+                imageLoadFailed = false
             }
             guard !Task.isCancelled else { return }
             guard let result = result else {
                 // Every stage failed (corrupt file etc.) — don't leave the
                 // spinner on forever. Cancelled tasks return above; a newer
                 // load owns the UI state in that case.
+                if currentTexture == nil {
+                    imageLoadFailed = true
+                }
                 isLoading = false
                 return
             }
@@ -551,6 +633,7 @@ struct ContentView: View {
             }
             decodeTimeMs = (CFAbsoluteTimeGetCurrent() - start) * 1000
             isLoading = false
+            imageLoadFailed = false
         }
     }
 

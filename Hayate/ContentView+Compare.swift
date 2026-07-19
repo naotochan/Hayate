@@ -111,10 +111,10 @@ extension ContentView {
     func enterCompareMode() {
         guard decoder != nil else { return }
 
-        // Determine which photos to compare
+        // Determine which photos to compare. Pick/Skip is a 2-photo tournament —
+        // keep the UI matched to that (extra grid selection is ignored).
         if showGrid && selectedIndices.count >= 2 {
-            // From grid: use selected indices (up to 4)
-            compareIndices = Array(selectedIndices.sorted().prefix(4))
+            compareIndices = Array(selectedIndices.sorted().prefix(2))
         } else {
             // From single view: current + next (or previous if at end)
             var indices = [session.currentIndex]
