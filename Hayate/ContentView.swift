@@ -486,8 +486,13 @@ struct ContentView: View {
         guard let prefetchManager = prefetchManager else { return }
         let files = session.files
         let displaySize = previewDisplaySize
+        let focusIndex = session.currentIndex
         Task {
-            await prefetchManager.startBackgroundBuild(files: files, displaySize: displaySize)
+            await prefetchManager.startBackgroundBuild(
+                files: files,
+                displaySize: displaySize,
+                focusIndex: focusIndex
+            )
         }
     }
 
