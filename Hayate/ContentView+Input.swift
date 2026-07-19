@@ -218,10 +218,6 @@ extension ContentView {
             loadCurrentImage()
             return true
 
-        case .toggleCullModeDraft:
-            cullModeDraft.toggle()
-            return true
-
         case .toggleInfo:
             if compareMode || showGrid { return false }
             showInfo.toggle()

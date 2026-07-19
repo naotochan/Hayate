@@ -137,19 +137,6 @@ extension ContentView {
                             ja: "決定済みをスキップして、未決定だけへ進みます。"
                         ))
                 }
-                if cullModeDraft {
-                    Text("DRAFT")
-                        .font(.system(size: 10, weight: .bold, design: .monospaced))
-                        .foregroundColor(.cyan)
-                        .padding(.horizontal, 4)
-                        .padding(.vertical, 1)
-                        .background(Color.cyan.opacity(0.2))
-                        .cornerRadius(3)
-                        .help(L.t(
-                            "Draft mode: embedded JPEG previews. Press F or zoom for full RAW.",
-                            ja: "Draft モード: 埋め込みJPEGプレビュー。F またはズームでフルRAW。"
-                        ))
-                }
                 if focusPeakingEnabled {
                     Text("PEAK")
                         .font(.system(size: 10, weight: .bold, design: .monospaced))

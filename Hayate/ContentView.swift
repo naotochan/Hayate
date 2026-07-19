@@ -49,6 +49,12 @@ struct ContentView: View {
     @AppStorage("sidebarVisible") var sidebarVisible = true
     /// Export sheet (File > Export Picks…).
     @State var showExportSheet = false
+    /// True while switching folders so `onChange(of: currentIndex)` doesn't
+    /// race a second decode against the intentional post-clear load.
+    @State var isOpeningFolder = false
+    /// Generation token so a delayed background build from folder A can't
+    /// start after the user has already opened folder B.
+    @State var folderOpenGeneration = 0
     @State var thumbnails: [URL: NSImage] = [:]
     /// Insertion order of `thumbnails` keys, oldest first, for capped eviction.
     @State var thumbnailOrder: [URL] = []
@@ -84,9 +90,6 @@ struct ContentView: View {
     @AppStorage("autoAdvance") var autoAdvance = false
     /// J/L (and arrows) skip photos that already have a decision.
     @AppStorage("navigateUndecidedOnly") var navigateUndecidedOnly = false
-    /// Draft cull mode: stop at embedded JPEG / disk cache; full RAW only for
-    /// focus peaking and zoom. Maximises navigation throughput.
-    @AppStorage("cullModeDraft") var cullModeDraft = false
     /// Filmstrip / grid: desaturate non-favorites so Keep photos stand out.
     /// The main Metal viewer always stays full color.
     @AppStorage("colorizeKeepOnly") var colorizeKeepOnly = true
@@ -147,7 +150,16 @@ struct ContentView: View {
                         isOpen: sidebarVisible,
                         onToggle: { sidebarVisible.toggle() },
                         onOpenFolder: { session.requestOpenFolder() },
-                        onSelect: { session.requestOpen(folder: $0) }
+                        onSelect: { session.requestOpen(folder: $0) },
+                        onExport: { session.requestExport() },
+                        onAfterTrashOut: {
+                            selectedIndices.removeAll()
+                            loadCurrentImage()
+                        },
+                        onShowShortcuts: {
+                            showOnboarding = false
+                            showShortcutsHelp = true
+                        }
                     )
                 }
 
@@ -319,6 +331,7 @@ struct ContentView: View {
             Text(deletionDialogMessage)
         }
         .onChange(of: session.currentIndex) { _, _ in
+            guard !isOpeningFolder else { return }
             loadCurrentImage()
         }
         .onChange(of: session.openFolderRequest) { _, _ in
@@ -342,18 +355,6 @@ struct ContentView: View {
             // cheap signal to keep the histogram in sync with the display.
             if showHistogram {
                 updateHistogram()
-            }
-        }
-        .onChange(of: cullModeDraft) { _, draft in
-            // Switching modes mid-session: reload the current photo and
-            // restart (or quiet) the background preview builder.
-            if !session.files.isEmpty {
-                loadCurrentImage()
-                if draft {
-                    Task { await prefetchManager?.stopBackgroundBuild() }
-                } else {
-                    startBackgroundBuild()
-                }
             }
         }
         .sheet(isPresented: $showExportSheet) {
@@ -442,13 +443,33 @@ struct ContentView: View {
             flashStatusBanner("Couldn't open “\(url.lastPathComponent)”")
             return
         }
+
+        // Suppress index onChange while we reset + await cache clear, otherwise
+        // loadJSON's restored index fires a decode that clear() immediately cancels.
+        isOpeningFolder = true
+        folderOpenGeneration += 1
+        let generation = folderOpenGeneration
         resetViewState()
-        if session.files.isEmpty {
-            // Brand screen shows the empty-folder message; nothing to decode.
-            return
+
+        let filesEmpty = session.files.isEmpty
+        let pm = prefetchManager
+        Task {
+            // Finish cancelling the previous folder before any new decode/build.
+            await pm?.clear()
+            await MainActor.run {
+                guard generation == folderOpenGeneration else { return }
+                isOpeningFolder = false
+                guard !filesEmpty else { return }
+                loadCurrentImage()
+            }
+            // Let the current photo (and filmstrip thumbs) claim decode slots
+            // before the whole-folder background builder starts.
+            try? await Task.sleep(nanoseconds: 400_000_000)
+            await MainActor.run {
+                guard generation == folderOpenGeneration, !session.files.isEmpty else { return }
+                startBackgroundBuild()
+            }
         }
-        loadCurrentImage()
-        startBackgroundBuild()
     }
 
     func flashStatusBanner(_ message: String) {
@@ -465,9 +486,8 @@ struct ContentView: View {
         guard let prefetchManager = prefetchManager else { return }
         let files = session.files
         let displaySize = previewDisplaySize
-        let draft = cullModeDraft
         Task {
-            await prefetchManager.startBackgroundBuild(files: files, displaySize: displaySize, draft: draft)
+            await prefetchManager.startBackgroundBuild(files: files, displaySize: displaySize)
         }
     }
 
@@ -475,6 +495,9 @@ struct ContentView: View {
     /// Session-level state (files, entries, undoStack) is reset by `CullingSession.openFolder`.
     /// The `decoder` and `prefetchManager` instances are kept — they're bound to CIContext/device,
     /// not to a specific folder.
+    ///
+    /// Prefetch/disk memory clear is awaited by `openFolderAndReload` — do not
+    /// fire it here as a fire-and-forget Task (that raced the new folder's load).
     private func resetViewState() {
         // Cancel in-flight work
         currentDecodeTask?.cancel()
@@ -496,12 +519,6 @@ struct ContentView: View {
         statusBannerTask?.cancel()
         statusBannerTask = nil
         statusBanner = nil
-
-        // Drop cached decodes from the previous folder. Cache keys are absolute URLs,
-        // so a not-yet-completed clear() can't cause stale hits in the new folder.
-        if let pm = prefetchManager {
-            Task { await pm.clear() }
-        }
 
         // Grid / Compare / selection
         showGrid = false
@@ -557,34 +574,16 @@ struct ContentView: View {
             loadEXIF()
         }
 
-        // Fire the neighbor prefetch in its own Task so rapid navigation can't
-        // cancel it. (Previously this lived at the tail of the decode Task and
-        // got wiped on every keystroke during fast culling — neighbors never
-        // actually warmed up.)
-        if let prefetchManager = prefetchManager {
-            let currentIdx = session.currentIndex
-            let allFiles = session.files
-            let prefetchSize = previewDisplaySize
-            let draft = cullModeDraft
-            Task {
-                await prefetchManager.prefetch(
-                    currentIndex: currentIdx,
-                    files: allFiles,
-                    displaySize: prefetchSize,
-                    draft: draft
-                )
-            }
-        }
-
         isLoading = true
         imageLoadFailed = false
         let start = CFAbsoluteTimeGetCurrent()
 
+        // Start the visible photo before neighbor prefetch so it wins the
+        // limited CIRAWFilter slots on large folders.
         currentDecodeTask = Task {
             let displaySize = previewDisplaySize
 
             if focusPeakingEnabled {
-                // Focus peaking always needs a full RAW decode (even in Draft).
                 if let sendable = await decoder.decodeRAW(url: file, displaySize: displaySize, focusPeaking: true) {
                     guard !Task.isCancelled else { return }
                     currentTexture = sendable.texture
@@ -600,15 +599,13 @@ struct ContentView: View {
                 return
             }
 
-            // Unified pipeline: memory → disk → embedded JPEG [(partial) → RAW]
-            // Draft stops after JPEG; Full continues to RAW.
+            // Unified pipeline: memory → disk → embedded JPEG (partial) → RAW
             guard let prefetchManager = prefetchManager else {
                 isLoading = false
                 imageLoadFailed = true
                 return
             }
-            let draft = cullModeDraft
-            let result = await prefetchManager.loadTexture(for: file, displaySize: displaySize, draft: draft) { partial in
+            let result = await prefetchManager.loadTexture(for: file, displaySize: displaySize) { partial in
                 // Defensive: don't overwrite a newer photo if this task was
                 // cancelled while hopping to the main actor, and don't
                 // downgrade a full-resolution texture the user zoomed into.
@@ -634,6 +631,22 @@ struct ContentView: View {
             decodeTimeMs = (CFAbsoluteTimeGetCurrent() - start) * 1000
             isLoading = false
             imageLoadFailed = false
+        }
+
+        // Fire neighbor prefetch in its own Task so rapid navigation can't
+        // cancel it with the decode Task — but only after the current load
+        // has been scheduled.
+        if let prefetchManager = prefetchManager {
+            let currentIdx = session.currentIndex
+            let allFiles = session.files
+            let prefetchSize = previewDisplaySize
+            Task {
+                await prefetchManager.prefetch(
+                    currentIndex: currentIdx,
+                    files: allFiles,
+                    displaySize: prefetchSize
+                )
+            }
         }
     }
 

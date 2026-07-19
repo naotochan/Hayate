@@ -108,7 +108,6 @@ enum ActionID: String, Codable, CaseIterable, Identifiable {
     case toggleCompare
     case toggleFitZoom
     case toggleFocusPeaking
-    case toggleCullModeDraft
     case toggleInfo
     case toggleHistogram
     case toggleShortcutsHelp
@@ -122,29 +121,69 @@ enum ActionID: String, Codable, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
-    /// Action titles stay English — short product chrome, not prose.
-    var title: String {
+    /// English title (tests / fallback). Prefer `title(lang:)` in UI.
+    var title: String { title(lang: .english) }
+
+    func title(lang: ResolvedLanguage) -> String {
         switch self {
-        case .navigateBack: return "Previous photo"
-        case .navigateForward: return "Next photo"
-        case .toggleFavorite: return "Toggle favorite / Keep"
-        case .toggleRejected: return "Toggle rejected / Out"
-        case .setTriageMaybe: return "Maybe (triage)"
-        case .toggleGrid: return "Toggle grid view"
-        case .toggleCompare: return "Toggle compare mode"
-        case .toggleFitZoom: return "Toggle fit / 2× zoom"
-        case .toggleFocusPeaking: return "Toggle focus peaking"
-        case .toggleCullModeDraft: return "Toggle draft cull mode"
-        case .toggleInfo: return "Toggle info overlay (EXIF)"
-        case .toggleHistogram: return "Toggle histogram"
-        case .toggleShortcutsHelp: return "Show keyboard shortcuts"
-        case .toggleSidebar: return "Toggle folder sidebar"
-        case .deletePhoto: return "Move photo to Trash"
-        case .undo: return "Undo"
-        case .selectAllGrid: return "Select all (grid)"
-        case .openFolder: return "Open folder…"
-        case .pickCompare: return "Pick active (compare)"
-        case .skipNextBaseline: return "Skip to next baseline (compare)"
+        case .navigateBack:
+            return lang.t("Previous photo", ja: "前の写真")
+        case .navigateForward:
+            return lang.t("Next photo", ja: "次の写真")
+        case .toggleFavorite:
+            return lang.t("Toggle favorite / Keep", ja: "お気に入り / Keep")
+        case .toggleRejected:
+            return lang.t("Toggle rejected / Out", ja: "リジェクト / Out")
+        case .setTriageMaybe:
+            return lang.t("Maybe (triage)", ja: "Maybe（トリアージ）")
+        case .toggleGrid:
+            return lang.t("Toggle grid view", ja: "グリッド表示")
+        case .toggleCompare:
+            return lang.t("Toggle compare mode", ja: "比較モード")
+        case .toggleFitZoom:
+            return lang.t("Toggle fit / 2× zoom", ja: "フィット / 2× ズーム")
+        case .toggleFocusPeaking:
+            return lang.t("Toggle focus peaking", ja: "フォーカスピーキング")
+        case .toggleInfo:
+            return lang.t("Toggle info overlay (EXIF)", ja: "EXIF 情報")
+        case .toggleHistogram:
+            return lang.t("Toggle histogram", ja: "ヒストグラム")
+        case .toggleShortcutsHelp:
+            return lang.t("Show keyboard shortcuts", ja: "ショートカット一覧")
+        case .toggleSidebar:
+            return lang.t("Toggle folder sidebar", ja: "フォルダサイドバー")
+        case .deletePhoto:
+            return lang.t("Move photo to Trash", ja: "ゴミ箱へ移す")
+        case .undo:
+            return lang.t("Undo", ja: "取り消す")
+        case .selectAllGrid:
+            return lang.t("Select all (grid)", ja: "すべて選択（グリッド）")
+        case .openFolder:
+            return lang.t("Open folder…", ja: "フォルダを開く…")
+        case .pickCompare:
+            return lang.t("Pick active (compare)", ja: "アクティブを選ぶ（比較）")
+        case .skipNextBaseline:
+            return lang.t("Skip to next baseline (compare)", ja: "次のベースラインへ（比較）")
+        }
+    }
+
+    /// Overlay-friendly titles that reflect Keep/Maybe/Out vs stars.
+    func helpTitle(triageMode: Bool, lang: ResolvedLanguage) -> String {
+        switch self {
+        case .toggleFavorite:
+            return triageMode ? "Keep" : lang.t("Toggle favorite", ja: "お気に入り")
+        case .toggleRejected:
+            return triageMode ? "Out" : lang.t("Toggle rejected", ja: "リジェクト")
+        case .setTriageMaybe:
+            return triageMode ? "Maybe" : lang.t("Maybe (triage)", ja: "Maybe（トリアージ）")
+        case .pickCompare:
+            return triageMode
+                ? lang.t("Keep active (compare)", ja: "アクティブを Keep（比較）")
+                : title(lang: lang)
+        case .toggleShortcutsHelp:
+            return lang.t("Show / hide this cheat sheet", ja: "この早見表の表示 / 非表示")
+        default:
+            return title(lang: lang)
         }
     }
 
@@ -158,14 +197,25 @@ enum ActionID: String, Codable, CaseIterable, Identifiable {
 
         var id: String { rawValue }
 
-        var title: String { rawValue }
+        var title: String { title(lang: .english) }
+
+        func title(lang: ResolvedLanguage) -> String {
+            switch self {
+            case .navigation: return lang.t("Navigation", ja: "ナビゲーション")
+            case .rating: return lang.t("Rating", ja: "評価")
+            case .view: return lang.t("View", ja: "表示")
+            case .editing: return lang.t("Editing", ja: "編集")
+            case .file: return lang.t("File", ja: "ファイル")
+            case .compareMode: return lang.t("Compare", ja: "比較")
+            }
+        }
     }
 
     var category: Category {
         switch self {
         case .navigateBack, .navigateForward: return .navigation
         case .toggleFavorite, .toggleRejected, .setTriageMaybe: return .rating
-        case .toggleGrid, .toggleCompare, .toggleFitZoom, .toggleFocusPeaking, .toggleCullModeDraft, .toggleInfo, .toggleHistogram, .toggleShortcutsHelp, .toggleSidebar: return .view
+        case .toggleGrid, .toggleCompare, .toggleFitZoom, .toggleFocusPeaking, .toggleInfo, .toggleHistogram, .toggleShortcutsHelp, .toggleSidebar: return .view
         case .deletePhoto, .undo, .selectAllGrid: return .editing
         case .openFolder: return .file
         case .pickCompare, .skipNextBaseline: return .compareMode
@@ -194,7 +244,6 @@ final class KeybindingStore: ObservableObject {
         .toggleCompare: Shortcut(keyCode: 8),                           // C
         .toggleFitZoom: Shortcut(keyCode: 49),                          // Space
         .toggleFocusPeaking: Shortcut(keyCode: 3),                      // F
-        .toggleCullModeDraft: Shortcut(keyCode: 2),                     // D
         .toggleInfo: Shortcut(keyCode: 34),                             // I
         .toggleHistogram: Shortcut(keyCode: 4),                         // H
         // Display-only default — actual help trigger is character-based ("?" / "/")
@@ -248,8 +297,16 @@ final class KeybindingStore: ObservableObject {
 
     private func load() {
         let defaults = UserDefaults.standard
+        // Decode as [String: Shortcut] so removed ActionIDs (e.g. old Draft)
+        // don't invalidate the whole save.
         if let data = defaults.data(forKey: Self.storageKey),
-           let decoded = try? JSONDecoder().decode([ActionID: Shortcut].self, from: data) {
+           let raw = try? JSONDecoder().decode([String: Shortcut].self, from: data) {
+            var decoded: [ActionID: Shortcut] = [:]
+            for (key, shortcut) in raw {
+                if let action = ActionID(rawValue: key) {
+                    decoded[action] = shortcut
+                }
+            }
             // Saved bindings win. Defaults only fill actions introduced after
             // the user's last save — and never with a shortcut the user has
             // assigned elsewhere, otherwise two actions would share one key
