@@ -210,6 +210,7 @@ extension ContentView {
                 panOffset = .zero
                 loadFullResolutionIfNeeded()
             }
+            updatePanCursor(dragging: false)
             return true
 
         case .toggleFocusPeaking:
@@ -325,6 +326,7 @@ extension ContentView {
             let delta = event.magnification
             zoomScale = max(1.0, min(zoomScale * (1.0 + delta), 10.0))
             if zoomScale <= 1.01 { panOffset = .zero }
+            updatePanCursor(dragging: false)
             loadFullResolutionIfNeeded()
         } else if event.type == .scrollWheel {
             if event.modifierFlags.contains(.option) || zoomScale <= 1.01 {
@@ -332,6 +334,7 @@ extension ContentView {
                 let delta = event.scrollingDeltaY * 0.01
                 zoomScale = max(1.0, min(zoomScale * (1.0 + delta), 10.0))
                 if zoomScale <= 1.01 { panOffset = .zero }
+                updatePanCursor(dragging: false)
                 loadFullResolutionIfNeeded()
             } else {
                 // Zoomed in: pan
@@ -345,15 +348,20 @@ extension ContentView {
     }
 
     private func handleDragEvent(_ event: NSEvent) {
-        guard zoomScale > 1.01 else {
+        guard zoomScale > 1.01, !showGrid else {
             lastDragPoint = nil
+            if event.type == .leftMouseUp || event.type == .leftMouseDown {
+                updatePanCursor(dragging: false)
+            }
             return
         }
 
         switch event.type {
         case .leftMouseDown:
             lastDragPoint = event.locationInWindow
+            updatePanCursor(dragging: true)
         case .leftMouseDragged:
+            updatePanCursor(dragging: true)
             guard let last = lastDragPoint else {
                 lastDragPoint = event.locationInWindow
                 return
@@ -374,13 +382,24 @@ extension ContentView {
             lastDragPoint = current
         case .leftMouseUp:
             lastDragPoint = nil
+            updatePanCursor(dragging: false)
         default:
             break
+        }
+    }
+
+    /// Open hand while zoomed (pannable); closed hand while dragging; arrow otherwise.
+    func updatePanCursor(dragging: Bool) {
+        if zoomScale > 1.01, !showGrid {
+            (dragging ? NSCursor.closedHand : NSCursor.openHand).set()
+        } else {
+            NSCursor.arrow.set()
         }
     }
 
     func resetZoom() {
         zoomScale = 1.0
         panOffset = .zero
+        updatePanCursor(dragging: false)
     }
 }

@@ -146,6 +146,19 @@ final class ImageDecoder: @unchecked Sendable {
         }.value
     }
 
+    /// Downscale an already-decoded image for filmstrip/cache use without
+    /// touching the source file again.
+    func downscaledCGImage(_ image: CGImage, maxPixelSize: Int) -> CGImage? {
+        let w = image.width
+        let h = image.height
+        let longest = max(w, h)
+        guard longest > maxPixelSize, maxPixelSize > 0 else { return image }
+        let scale = CGFloat(maxPixelSize) / CGFloat(longest)
+        let ciImage = CIImage(cgImage: image)
+            .transformed(by: CGAffineTransform(scaleX: scale, y: scale))
+        return ciContext.createCGImage(ciImage, from: ciImage.extent)
+    }
+
     /// Read shooting metadata (shutter, aperture, ISO, …) for the info overlay.
     func extractEXIF(url: URL) async -> EXIFInfo? {
         await Task.detached(priority: .utility) { [self] in

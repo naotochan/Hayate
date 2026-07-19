@@ -74,13 +74,13 @@ actor PrefetchManager {
         evictIfNeeded()
     }
 
-    /// Store a texture in memory and persist to disk cache as HEIF.
+    /// Store a texture in memory and persist to disk cache as full-quality HEIF.
     private func storeAndPersist(texture: MTLTexture, cgImage: CGImage, for url: URL) {
         store(texture: texture, for: url, isRAW: true)
         if let diskCache = diskCache {
             let urlCopy = url
             Task.detached(priority: .utility) {
-                await diskCache.store(cgImage: cgImage, for: urlCopy)
+                await diskCache.store(cgImage: cgImage, for: urlCopy, isFullQuality: true)
             }
         }
     }
@@ -142,17 +142,25 @@ actor PrefetchManager {
         onPartial: (@MainActor @Sendable (SendableTexture) -> Void)? = nil,
         partialShown: Bool = false
     ) async -> SendableTexture? {
-        // L2: disk cache (~20-50ms) — also upgrades a JPEG-only memory entry
+        var partialShown = partialShown
+
+        // L2: disk cache (~20-50ms). Full-quality entries are final; draft
+        // (embedded JPEG) entries are shown immediately then upgraded via L3b.
         if let diskCache = diskCache,
-           let cgImage = await diskCache.loadPreview(for: url),
-           let sendable = await decoder.cgImageToTexture(cgImage) {
+           let cached = await diskCache.loadPreview(for: url),
+           let sendable = await decoder.cgImageToTexture(cached.image) {
             guard !Task.isCancelled else { return nil }
-            store(texture: sendable.texture, for: url, isRAW: true)
-            return sendable
+            if cached.isFullQuality {
+                store(texture: sendable.texture, for: url, isRAW: true)
+                return sendable
+            }
+            store(texture: sendable.texture, for: url, isRAW: false)
+            if let onPartial { await onPartial(sendable) }
+            partialShown = true
         }
         guard !Task.isCancelled else { return nil }
 
-        // L3a: embedded JPEG for instant feedback (skip if L1 already showed one)
+        // L3a: embedded JPEG for instant feedback (skip if L1/L2 already showed one)
         if !partialShown,
            let jpeg = await decoder.extractJPEG(url: url),
            let sendable = await decoder.cgImageToTexture(jpeg) {
@@ -163,9 +171,15 @@ actor PrefetchManager {
 
         guard !Task.isCancelled else { return nil }
 
-        // L3b: full RAW decode, persisted to the disk cache
+        // L3b: full RAW decode, persisted to the disk cache (upgrades any draft)
         guard let cgImage = await decoder.decodeRAWToCGImage(url: url, displaySize: displaySize),
-              let sendable = await decoder.cgImageToTexture(cgImage) else { return nil }
+              let sendable = await decoder.cgImageToTexture(cgImage) else {
+            // RAW failed — keep a draft texture if we already have one.
+            if let entry = cache[url] {
+                return SendableTexture(texture: entry.texture)
+            }
+            return nil
+        }
         guard !Task.isCancelled else { return nil }
         storeAndPersist(texture: sendable.texture, cgImage: cgImage, for: url)
         return sendable
@@ -234,50 +248,74 @@ actor PrefetchManager {
 
     /// Start building disk cache previews for all files in the background.
     /// Cancels any previous background build. Skips files already cached on disk.
-    func startBackgroundBuild(files: [URL], displaySize: CGSize) {
+    ///
+    /// Software fast path: uses embedded JPEG only (no CIRAWFilter). Full RAW
+    /// still runs on demand for the current photo and prefetch neighbours.
+    /// Work is ordered outward from `focusIndex` so the filmstrip near the
+    /// cursor fills first.
+    func startBackgroundBuild(files: [URL], displaySize: CGSize, focusIndex: Int = 0) {
         backgroundBuildTask?.cancel()
 
         guard let diskCache = diskCache else { return }
 
         let decoder = self.decoder
         let progress = self.buildProgress
+        // displaySize kept in the signature for call-site stability; draft
+        // extracts ignore it (embedded preview size is file-defined).
+        _ = displaySize
 
-        backgroundBuildTask = Task.detached(priority: .background) {
-            let missingThumbs = await diskCache.uncachedThumbnailURLs(from: files)
-            let missingPreviews = await diskCache.uncachedURLs(from: files)
-
-            let totalWork = missingThumbs.count + missingPreviews.count
-            guard totalWork > 0 else { return }
+        backgroundBuildTask = Task.detached(priority: .utility) {
+            let missingPreviewSet = Set(await diskCache.uncachedURLs(from: files))
+            let missingThumbSet = Set(await diskCache.uncachedThumbnailURLs(from: files))
+            let ordered = Self.radialOrder(files: files, focusIndex: focusIndex)
+                .filter { missingPreviewSet.contains($0) || missingThumbSet.contains($0) }
+            guard !ordered.isEmpty else { return }
 
             await MainActor.run {
-                progress.total = totalWork
+                progress.total = ordered.count
                 progress.completed = 0
                 progress.isBuilding = true
             }
 
-            // Thumbnails first — cheap embedded extracts that fill the filmstrip
-            // before any heavy CIRAWFilter work starts.
-            for url in missingThumbs {
+            // Modest parallelism: embedded JPEG extract is cheap and ImageIO
+            // scales well; the actor-serialized disk writes keep IO calm.
+            let parallel = 4
+            var next = 0
+            while next < ordered.count {
                 guard !Task.isCancelled else { break }
+                let end = min(next + parallel, ordered.count)
+                let batch = Array(ordered[next..<end])
+                next = end
 
-                if let cgImage = await decoder.extractThumbnail(url: url) {
-                    await diskCache.storeThumbnail(cgImage: cgImage, for: url)
+                await withTaskGroup(of: Void.self) { group in
+                    for url in batch {
+                        let needPreview = missingPreviewSet.contains(url)
+                        let needThumb = missingThumbSet.contains(url)
+                        group.addTask {
+                            guard !Task.isCancelled else { return }
+
+                            if let jpeg = await decoder.extractJPEG(url: url) {
+                                if needPreview {
+                                    await diskCache.store(cgImage: jpeg, for: url, isFullQuality: false)
+                                }
+                                if needThumb {
+                                    let thumb = decoder.downscaledCGImage(jpeg, maxPixelSize: 400) ?? jpeg
+                                    await diskCache.storeThumbnail(cgImage: thumb, for: url)
+                                }
+                                return
+                            }
+
+                            // No embedded preview — fall back to a cheap thumb extract only.
+                            if needThumb, let thumb = await decoder.extractThumbnail(url: url) {
+                                await diskCache.storeThumbnail(cgImage: thumb, for: url)
+                            }
+                        }
+                    }
                 }
 
+                let completed = next
                 await MainActor.run {
-                    progress.completed += 1
-                }
-            }
-
-            for url in missingPreviews {
-                guard !Task.isCancelled else { break }
-
-                if let cgImage = await decoder.decodeRAWToCGImage(url: url, displaySize: displaySize, priority: .background) {
-                    await diskCache.store(cgImage: cgImage, for: url)
-                }
-
-                await MainActor.run {
-                    progress.completed += 1
+                    progress.completed = completed
                 }
             }
 
@@ -285,6 +323,25 @@ actor PrefetchManager {
                 progress.isBuilding = false
             }
         }
+    }
+
+    /// Current file first, then ±1, ±2, … so visible neighbours warm earliest.
+    nonisolated static func radialOrder(files: [URL], focusIndex: Int) -> [URL] {
+        let count = files.count
+        guard count > 0 else { return [] }
+        let focus = min(max(0, focusIndex), count - 1)
+        var ordered: [URL] = []
+        ordered.reserveCapacity(count)
+        ordered.append(files[focus])
+        var distance = 1
+        while ordered.count < count {
+            let right = focus + distance
+            let left = focus - distance
+            if right < count { ordered.append(files[right]) }
+            if left >= 0 { ordered.append(files[left]) }
+            distance += 1
+        }
+        return ordered
     }
 
     /// Cancel any in-progress background build.

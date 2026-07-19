@@ -82,6 +82,9 @@ actor DiskCacheManager {
             """
             sqlite3_exec(dbHandle, String(format: tableSQL, "previews"), nil, nil, nil)
             sqlite3_exec(dbHandle, String(format: tableSQL, "thumbnails"), nil, nil, nil)
+            // Draft (embedded JPEG) vs full-quality (CIRAW) preview. Existing
+            // rows default to full so older caches keep their previous meaning.
+            sqlite3_exec(dbHandle, "ALTER TABLE previews ADD COLUMN is_full_quality INTEGER NOT NULL DEFAULT 1", nil, nil, nil)
             sqlite3_exec(dbHandle, "PRAGMA journal_mode=WAL", nil, nil, nil)
         }
         self.dbHandle = SQLiteHandle(dbHandle)
@@ -89,9 +92,17 @@ actor DiskCacheManager {
 
     // MARK: - Public API
 
+    /// Disk preview plus whether it came from a full RAW decode (`true`) or a
+    /// fast embedded-JPEG draft (`false`). Drafts are shown immediately but
+    /// the load pipeline still upgrades to CIRAWFilter when the user views them.
+    struct CachedPreview {
+        let image: CGImage
+        let isFullQuality: Bool
+    }
+
     /// Load a cached preview HEIF from disk. Returns nil on miss.
     /// Updates `last_access_at` on hit for LRU tracking.
-    func loadPreview(for url: URL) -> CGImage? {
+    func loadPreview(for url: URL) -> CachedPreview? {
         let signpostID = OSSignpostID(log: signpostLog)
         os_signpost(.begin, log: signpostLog, name: "loadPreview", signpostID: signpostID)
         defer { os_signpost(.end, log: signpostLog, name: "loadPreview", signpostID: signpostID) }
@@ -110,26 +121,36 @@ actor DiskCacheManager {
               let image = CGImageSourceCreateImageAtIndex(source, 0, nil) else {
             return nil
         }
-        return image
+        return CachedPreview(image: image, isFullQuality: previewIsFullQuality(key: key))
     }
 
-    /// Store a CGImage as HEIF on disk. Skips if already cached.
-    func store(cgImage: CGImage, for url: URL) {
+    /// Store a CGImage as HEIF on disk.
+    /// - Draft (`isFullQuality: false`) is skipped when any preview already exists.
+    /// - Full quality replaces a draft, and is a no-op when a full preview exists.
+    func store(cgImage: CGImage, for url: URL, isFullQuality: Bool = true) {
         let signpostID = OSSignpostID(log: signpostLog)
         os_signpost(.begin, log: signpostLog, name: "storePreview", signpostID: signpostID)
         defer { os_signpost(.end, log: signpostLog, name: "storePreview", signpostID: signpostID) }
 
         guard let key = cacheKey(for: url) else { return }
-        guard !entryExists(key: key, table: "previews") else { return }
+        if let existingFull = previewIsFullQualityIfPresent(key: key) {
+            if existingFull { return }
+            if !isFullQuality { return }
+            // Upgrade draft → full: replace the HEIF on disk.
+            let filePath = heifPath(for: key, dir: displayDir)
+            try? FileManager.default.removeItem(at: filePath)
+            deleteEntry(key: key, table: "previews")
+        }
 
         let filePath = heifPath(for: key, dir: displayDir)
         let shardDir = filePath.deletingLastPathComponent()
         try? FileManager.default.createDirectory(at: shardDir, withIntermediateDirectories: true)
 
-        guard writeHEIF(cgImage: cgImage, to: filePath) else { return }
+        let quality = isFullQuality ? 0.85 : 0.80
+        guard writeHEIF(cgImage: cgImage, to: filePath, quality: quality) else { return }
 
         let fileSize = (try? FileManager.default.attributesOfItem(atPath: filePath.path)[.size] as? Int64) ?? 0
-        insertEntry(key: key, url: url, fileSize: fileSize, table: "previews")
+        insertPreviewEntry(key: key, url: url, fileSize: fileSize, isFullQuality: isFullQuality)
 
         let limit = Self.userConfiguredSizeLimit
         if limit > 0 {
@@ -327,6 +348,49 @@ actor DiskCacheManager {
         sqlite3_bind_double(stmt, 6, now)
         sqlite3_bind_double(stmt, 7, now)
         sqlite3_step(stmt)
+    }
+
+    private func insertPreviewEntry(key: String, url: URL, fileSize: Int64, isFullQuality: Bool) {
+        guard let db = db else { return }
+        let attrs = try? FileManager.default.attributesOfItem(atPath: url.path)
+        let mtime = (attrs?[.modificationDate] as? Date)?.timeIntervalSince1970 ?? 0
+        let size = (attrs?[.size] as? Int64) ?? 0
+        let now = Date().timeIntervalSince1970
+
+        var stmt: OpaquePointer?
+        defer { sqlite3_finalize(stmt) }
+        let sql = """
+        INSERT OR REPLACE INTO previews
+        (key, source_path, source_mtime, source_size, file_size, last_access_at, created_at, is_full_quality)
+        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+        """
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return }
+        let transient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+        sqlite3_bind_text(stmt, 1, key, -1, transient)
+        sqlite3_bind_text(stmt, 2, url.path, -1, transient)
+        sqlite3_bind_double(stmt, 3, mtime)
+        sqlite3_bind_int64(stmt, 4, size)
+        sqlite3_bind_int64(stmt, 5, fileSize)
+        sqlite3_bind_double(stmt, 6, now)
+        sqlite3_bind_double(stmt, 7, now)
+        sqlite3_bind_int(stmt, 8, isFullQuality ? 1 : 0)
+        sqlite3_step(stmt)
+    }
+
+    /// `nil` = no row; otherwise the stored `is_full_quality` flag.
+    private func previewIsFullQualityIfPresent(key: String) -> Bool? {
+        guard let db = db else { return nil }
+        var stmt: OpaquePointer?
+        defer { sqlite3_finalize(stmt) }
+        let sql = "SELECT is_full_quality FROM previews WHERE key = ?1"
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return nil }
+        sqlite3_bind_text(stmt, 1, key, -1, Self.sqliteTransient)
+        guard sqlite3_step(stmt) == SQLITE_ROW else { return nil }
+        return sqlite3_column_int(stmt, 0) != 0
+    }
+
+    private func previewIsFullQuality(key: String) -> Bool {
+        previewIsFullQualityIfPresent(key: key) ?? true
     }
 
     private func touchEntry(key: String, table: String) {
