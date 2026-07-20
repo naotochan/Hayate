@@ -76,7 +76,7 @@ struct ExportSheet: View {
         VStack(alignment: .leading, spacing: HayateChrome.groupSpacing) {
             HayateChrome.PageTitle(title: L.t("Export Picks", ja: "選別結果を書き出す"))
 
-            HayateChrome.Group(title: L.t("Action", ja: "操作")) {
+            HayateChrome.Panel(title: L.t("Action", ja: "操作")) {
                 HayateChrome.Row(
                     title: L.t("Copy or move", ja: "コピーまたは移動"),
                     subtitle: L.t(
@@ -95,7 +95,7 @@ struct ExportSheet: View {
             }
 
             if cullingProfileTriage {
-                HayateChrome.Group(title: L.t("Quick organize", ja: "かんたん整理")) {
+                HayateChrome.Panel(title: L.t("Quick organize", ja: "かんたん整理")) {
                     HayateChrome.Row(
                         title: L.t("Keep / Maybe / Out", ja: "Keep / Maybe / Out"),
                         subtitle: L.t(
@@ -112,7 +112,7 @@ struct ExportSheet: View {
                 }
             }
 
-            HayateChrome.Group(title: L.t("Custom export", ja: "保存先を指定")) {
+            HayateChrome.Panel(title: L.t("Custom export", ja: "保存先を指定")) {
                 HayateChrome.Row(
                     title: L.t("Photos", ja: "写真"),
                     subtitle: L.t("\(matchCount) photos match", ja: "\(matchCount) 枚が一致")
@@ -135,12 +135,12 @@ struct ExportSheet: View {
                     .frame(maxWidth: 160)
                 }
 
-                HayateChrome.Divider()
+                HayateChrome.RowSeparator()
 
                 HayateChrome.Row(
                     title: L.t("Destination", ja: "保存先"),
                     subtitle: siblingFolderName.map {
-                        L.t("Sibling folder “\($0)” or choose another.", ja: "隣の「\($0)」フォルダ、または別の場所を選択。")
+                        L.t("Sibling folder '\($0)' or choose another.", ja: "隣の「\($0)」フォルダ、または別の場所を選択。")
                     } ?? L.t("Choose a folder to export into.", ja: "書き出し先フォルダを選びます。")
                 ) {
                     HStack(spacing: 8) {
@@ -161,7 +161,7 @@ struct ExportSheet: View {
             }
 
             if let progress = session.exportProgress {
-                HayateChrome.Group(title: L.t("Progress", ja: "進捗")) {
+                HayateChrome.Panel(title: L.t("Progress", ja: "進捗")) {
                     HayateChrome.Row(
                         title: progressText(progress),
                         subtitle: nil
@@ -172,7 +172,7 @@ struct ExportSheet: View {
                 }
             }
 
-            HayateChrome.Group(title: L.t("Cleanup", ja: "クリーンアップ")) {
+            HayateChrome.Panel(title: L.t("Cleanup", ja: "クリーンアップ")) {
                 HayateChrome.Row(
                     title: cullingProfileTriage
                         ? L.t("Out photos", ja: "Out の写真")
