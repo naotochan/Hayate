@@ -120,8 +120,9 @@ struct SettingsView: View {
         case .general:
             return [
                 "appearance", "language", "culling", "keep", "maybe", "out", "stars",
-                "auto-advance", "skip", "xmp", "grid", "welcome", "外観", "言語", "選別",
-                "自動", "スキップ", "グリッド", "ようこそ",
+                "auto-advance", "skip", "xmp", "grid", "welcome", "coffee", "support",
+                "buy me a coffee", "外観", "言語", "選別", "自動", "スキップ", "グリッド",
+                "ようこそ", "コーヒー", "支援",
             ].joined(separator: " ")
         case .shortcuts:
             return "keyboard shortcuts ショートカット キー"
@@ -308,6 +309,29 @@ struct SettingsView: View {
                 ) {
                     Button(L.t("Show…", ja: "表示…")) {
                         NotificationCenter.default.post(name: .showOnboarding, object: nil)
+                    }
+                    .controlSize(.small)
+                }
+
+                HayateChrome.RowSeparator()
+
+                HayateChrome.Row(
+                    title: L.t("Buy me a coffee", ja: "コーヒーをおごる"),
+                    subtitle: L.t(
+                        "Optional — Hayate stays free.",
+                        ja: "任意です。Hayate 自体は無料のままです。"
+                    )
+                ) {
+                    Button {
+                        if let url = URL(string: "https://buymeacoffee.com/naotok705") {
+                            NSWorkspace.shared.open(url)
+                        }
+                    } label: {
+                        HStack(spacing: 4) {
+                            Text(L.t("Open", ja: "開く"))
+                            Image(systemName: "arrow.up.right")
+                                .font(.system(size: 9, weight: .semibold))
+                        }
                     }
                     .controlSize(.small)
                 }
