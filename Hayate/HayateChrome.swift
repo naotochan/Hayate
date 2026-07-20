@@ -1,8 +1,8 @@
 import SwiftUI
 
-/// Shared panel chrome used by Settings and other preference-style surfaces.
-/// Canonical layout reference: `SettingsView` (sidebar + content). Tokens live
-/// in `HayateTheme`. See `.cursor/rules/ui-design.mdc`.
+/// Shared panel chrome for preference-style surfaces (Cursor-inspired).
+/// Canonical layout: `SettingsView`. Tokens: `HayateTheme`.
+/// App-wide rule: `.cursor/rules/ui-design.mdc` (alwaysApply).
 ///
 /// Nested types avoid SwiftUI names (`Group`, `Divider`, `Section`) so Swift 6
 /// type-checking does not collide with the framework.
