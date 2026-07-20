@@ -14,6 +14,7 @@ private enum SettingsCategory: String, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
+    @MainActor
     func title(_ L: LocalizationStore) -> String {
         switch self {
         case .general: return L.t("General", ja: "一般")
