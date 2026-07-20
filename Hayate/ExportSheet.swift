@@ -212,7 +212,7 @@ struct ExportSheet: View {
         .padding(.horizontal, HayateChrome.pageHorizontalPadding)
         .padding(.vertical, HayateChrome.pageVerticalPadding)
         .frame(width: 520)
-        .background(HayateTheme.canvas)
+        .background(HayateTheme.settingsCanvas)
         .onAppear {
             // A previous export may have finished after the sheet was closed.
             if session.exportProgress?.finished == true {
