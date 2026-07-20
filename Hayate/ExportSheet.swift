@@ -73,42 +73,51 @@ struct ExportSheet: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text(L.t("Export Picks", ja: "選別結果を書き出す"))
-                .font(.title2)
-                .fontWeight(.semibold)
+        VStack(alignment: .leading, spacing: HayateChrome.groupSpacing) {
+            HayateChrome.PageTitle(title: L.t("Export Picks", ja: "選別結果を書き出す"))
 
-            Form {
-                Section {
-                    Picker(L.t("Action", ja: "操作"), selection: $move) {
+            HayateChrome.Panel(title: L.t("Action", ja: "操作")) {
+                HayateChrome.Row(
+                    title: L.t("Copy or move", ja: "コピーまたは移動"),
+                    subtitle: L.t(
+                        "Applies to quick organize and custom export.",
+                        ja: "かんたん整理と保存先指定の両方に適用されます。"
+                    )
+                ) {
+                    Picker("", selection: $move) {
                         Text(L.t("Copy", ja: "コピー")).tag(false)
                         Text(L.t("Move", ja: "移動")).tag(true)
                     }
+                    .labelsHidden()
                     .pickerStyle(.segmented)
+                    .frame(maxWidth: 160)
                 }
+            }
 
-                if cullingProfileTriage {
-                    Section {
-                        Text(L.t(
-                            "Creates Keep / Maybe / Out next to the shoot and places each decided photo. Undecided stay put.",
-                            ja: "撮影フォルダの隣に Keep / Maybe / Out を作り、決定済みを振り分けます。未決定はそのままです。"
-                        ))
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        Text(L.t("\(decidedCount) decided photos", ja: "決定済み \(decidedCount) 枚"))
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                        Button(L.t("Sort into Keep / Maybe / Out", ja: "Keep / Maybe / Out に振り分け")) {
+            if cullingProfileTriage {
+                HayateChrome.Panel(title: L.t("Quick organize", ja: "かんたん整理")) {
+                    HayateChrome.Row(
+                        title: L.t("Keep / Maybe / Out", ja: "Keep / Maybe / Out"),
+                        subtitle: L.t(
+                            "Creates Keep / Maybe / Out next to the shoot and places each decided photo. Undecided stay put. \(decidedCount) decided photos.",
+                            ja: "撮影フォルダの隣に Keep / Maybe / Out を作り、決定済みを振り分けます。未決定はそのままです。決定済み \(decidedCount) 枚。"
+                        )
+                    ) {
+                        Button(L.t("Sort…", ja: "振り分け…")) {
                             session.organizeIntoTriageFolders(move: move)
                         }
+                        .controlSize(.small)
                         .disabled(decidedCount == 0 || exportBusy || session.folderURL == nil)
-                    } header: {
-                        Text(L.t("Quick organize", ja: "かんたん整理"))
                     }
                 }
+            }
 
-                Section {
-                    Picker(L.t("Photos", ja: "写真"), selection: $source) {
+            HayateChrome.Panel(title: L.t("Custom export", ja: "保存先を指定")) {
+                HayateChrome.Row(
+                    title: L.t("Photos", ja: "写真"),
+                    subtitle: L.t("\(matchCount) photos match", ja: "\(matchCount) 枚が一致")
+                ) {
+                    Picker("", selection: $source) {
                         if cullingProfileTriage {
                             Text("Keep").tag(Source.favorites)
                             Text("Maybe").tag(Source.maybe)
@@ -121,55 +130,69 @@ struct ExportSheet: View {
                             }
                         }
                     }
-                    Text(L.t("\(matchCount) photos match", ja: "\(matchCount) 枚が一致"))
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+                    .labelsHidden()
+                    .pickerStyle(.menu)
+                    .frame(maxWidth: 160)
+                }
 
-                    if let name = siblingFolderName, session.folderURL != nil {
-                        Button(L.t("Export to \(name)", ja: "\(name) へ書き出す")) {
-                            exportToSibling(named: name)
+                HayateChrome.RowSeparator()
+
+                HayateChrome.Row(
+                    title: L.t("Destination", ja: "保存先"),
+                    subtitle: siblingFolderName.map {
+                        L.t("Sibling folder '\($0)' or choose another.", ja: "隣の「\($0)」フォルダ、または別の場所を選択。")
+                    } ?? L.t("Choose a folder to export into.", ja: "書き出し先フォルダを選びます。")
+                ) {
+                    HStack(spacing: 8) {
+                        if let name = siblingFolderName, session.folderURL != nil {
+                            Button(L.t("Export to \(name)", ja: "\(name) へ")) {
+                                exportToSibling(named: name)
+                            }
+                            .controlSize(.small)
+                            .disabled(matchCount == 0 || exportBusy)
                         }
+                        Button(L.t("Choose…", ja: "選択…")) {
+                            chooseDestinationAndExport()
+                        }
+                        .controlSize(.small)
                         .disabled(matchCount == 0 || exportBusy)
-                    }
-
-                    Button(L.t("Choose destination…", ja: "保存先を選ぶ…")) {
-                        chooseDestinationAndExport()
-                    }
-                    .disabled(matchCount == 0 || exportBusy)
-                } header: {
-                    Text(L.t("Custom export", ja: "保存先を指定"))
-                }
-
-                if let progress = session.exportProgress {
-                    Section {
-                        ProgressView(value: Double(progress.completed), total: Double(max(progress.total, 1)))
-                        Text(progressText(progress))
-                            .font(.caption)
-                            .foregroundColor(progress.failed > 0 ? .orange : .secondary)
-                    }
-                }
-
-                Section {
-                    HStack {
-                        Text(cullingProfileTriage
-                             ? L.t("\(rejectedIndices.count) Out photos", ja: "Out \(rejectedIndices.count) 枚")
-                             : L.t("\(rejectedIndices.count) rejected photos", ja: "Rejected \(rejectedIndices.count) 枚"))
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                        Spacer()
-                        Button(
-                            cullingProfileTriage
-                                ? L.t("Move Out to Trash…", ja: "Out をゴミ箱へ…")
-                                : L.t("Move Rejected to Trash…", ja: "Rejected をゴミ箱へ…"),
-                            role: .destructive
-                        ) {
-                            showTrashConfirmation = true
-                        }
-                        .disabled(rejectedIndices.isEmpty)
                     }
                 }
             }
-            .formStyle(.grouped)
+
+            if let progress = session.exportProgress {
+                HayateChrome.Panel(title: L.t("Progress", ja: "進捗")) {
+                    HayateChrome.Row(
+                        title: progressText(progress),
+                        subtitle: nil
+                    ) {
+                        ProgressView(value: Double(progress.completed), total: Double(max(progress.total, 1)))
+                            .frame(width: 120)
+                    }
+                }
+            }
+
+            HayateChrome.Panel(title: L.t("Cleanup", ja: "クリーンアップ")) {
+                HayateChrome.Row(
+                    title: cullingProfileTriage
+                        ? L.t("Out photos", ja: "Out の写真")
+                        : L.t("Rejected photos", ja: "Rejected の写真"),
+                    subtitle: cullingProfileTriage
+                        ? L.t("\(rejectedIndices.count) Out photos", ja: "Out \(rejectedIndices.count) 枚")
+                        : L.t("\(rejectedIndices.count) rejected photos", ja: "Rejected \(rejectedIndices.count) 枚")
+                ) {
+                    Button(
+                        cullingProfileTriage
+                            ? L.t("Move to Trash…", ja: "ゴミ箱へ…")
+                            : L.t("Move to Trash…", ja: "ゴミ箱へ…"),
+                        role: .destructive
+                    ) {
+                        showTrashConfirmation = true
+                    }
+                    .controlSize(.small)
+                    .disabled(rejectedIndices.isEmpty)
+                }
+            }
 
             HStack {
                 Spacer()
@@ -186,8 +209,10 @@ struct ExportSheet: View {
                 .keyboardShortcut(.cancelAction)
             }
         }
-        .padding(20)
-        .frame(width: 440)
+        .padding(.horizontal, HayateChrome.pageHorizontalPadding)
+        .padding(.vertical, HayateChrome.pageVerticalPadding)
+        .frame(width: 520)
+        .background(HayateTheme.canvas)
         .onAppear {
             // A previous export may have finished after the sheet was closed.
             if session.exportProgress?.finished == true {

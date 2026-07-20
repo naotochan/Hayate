@@ -1,0 +1,73 @@
+---
+description: Hayate UI の共通デザイン（設定画面を正とする）。パネル・サイドバー・色トークンの書き方
+alwaysApply: true
+---
+
+# UI Design (Hayate)
+
+設定画面（`SettingsView`）の見た目と構造が **アプリ全体のデザイン正**。新しいパネル・シート・設定風 UI はここに合わせる。独自の Form 見た目や別トーンを増やさない。
+
+## ソース・オブ・トゥルース
+
+| 役割 | 場所 |
+|---|---|
+| レイアウト見本 | `Hayate/SettingsView.swift`（左サイドバー + 右コンテンツ） |
+| 再利用クロム | `Hayate/HayateChrome.swift`（`Panel` / `Row` / `ToggleRow` / `RowSeparator` / sidebar） |
+| 色・面 | `Hayate/HayateTheme.swift`（`canvas` / `sidebar` / `separator` / `fg` / `wash`） |
+
+設定以外（Export シートなど）も `HayateChrome` + `HayateTheme` を使う。`Form` + `.formStyle(.grouped)` の新規追加は避ける。
+
+## レイアウト
+
+### 設定ウィンドウ型（カテゴリが 2 つ以上）
+
+```
+[ Sidebar ~220pt | Content ]
+  search           PageTitle
+  nav items        HayateChrome.Panel × N
+                   (Row / ToggleRow / RowSeparator)
+```
+
+- 背景: サイドバー = `HayateTheme.sidebar`、本文 = `HayateTheme.canvas`
+- 境界: 1pt `HayateTheme.separator`
+- 本文パディング: 水平 28 / 垂直 24（`HayateChrome.page*Padding`）
+- グループ間: 約 20pt（`HayateChrome.groupSpacing`）
+
+### 単一シート型（Export など）
+
+サイドバーなし。`PageTitle`（または同等の大タイトル）+ `HayateChrome.Panel` の縦積み。背景は `HayateTheme.canvas`。
+
+## 行の型
+
+各行は **左: タイトル（+ 短い説明） / 右: コントロール**。
+
+- トグル → `HayateChrome.ToggleRow`
+- メニュー / ボタン / カスタム → `HayateChrome.Row { … }`
+- グループ内の区切り → `HayateChrome.RowSeparator`（左インセット付き）
+
+説明文はキャプション色（`fg(0.42)`）。コントロール側に長い説明を置かない。
+
+## サイドバー
+
+- 上部に `HayateChrome.SearchField`（カテゴリ検索）
+- 項目は `HayateChrome.SidebarItem`（SF Symbol + ラベル、選択時 wash ハイライト）
+- フォルダサイドバー（`FolderSidebar`）は別用途だが、同じ `HayateTheme` トークンを使う
+
+## やってよいこと / やらないこと
+
+**する**
+- 新規 UI は `HayateChrome` を先に使う。足りなければ `HayateChrome` に足してから画面側で使う
+- Light / Dark / System は `HayateTheme` の adaptive トークンに任せる（ハードコード色を増やさない）
+- EN/JA は `LocalizationStore.t(_:ja:)`
+
+**しない**
+- 設定だけ別デザイン・別コーナー半径・別行密度にする
+- システム grouped `Form` を新しい画面のデフォルトにする
+- 紫グラデ / カード過多 / ヒーロー風オーバーレイなど、写真カリング UI と無関係な装飾を足す
+- 写真本体のビューア面を「設定パネル風」に侵食する（ビューアは canvas、操作パネルだけ chrome）
+
+## 変更時の手順
+
+1. 見た目・トークンを変えるなら **まず** `HayateChrome` / `HayateTheme` を直す
+2. `SettingsView` で破綻がないか確認する（正の見本）
+3. 同じパターンの他画面（Export など）も追従させる
