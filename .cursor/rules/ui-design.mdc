@@ -1,73 +1,116 @@
 ---
-description: Hayate UI の共通デザイン（設定画面を正とする）。パネル・サイドバー・色トークンの書き方
+description: Hayate 共通 UI ガイドライン（Cursor 風設定画面を正とする）。新規パネル・シート・設定 UI は必ず従う
 alwaysApply: true
 ---
 
-# UI Design (Hayate)
+# UI Design Guideline (Hayate)
 
-設定画面（`SettingsView`）の見た目と構造が **アプリ全体のデザイン正**。新しいパネル・シート・設定風 UI はここに合わせる。独自の Form 見た目や別トーンを増やさない。
+**正の見本は設定画面。** Cursor の Settings に近い「左サイドバー + 右パネル行」を、Hayate 全体のパネル／シート UI の共通言語にする。
+
+見た目・間隔・部品を画面ごとに独自実装しない。足りない部品はまず `HayateChrome` / `HayateTheme` に足す。
 
 ## ソース・オブ・トゥルース
 
-| 役割 | 場所 |
+| 役割 | 場所 | メモ |
+|---|---|---|
+| レイアウト見本 | `Hayate/SettingsView.swift` | サイドバー付きの完成形 |
+| 単一シート見本 | `Hayate/ExportSheet.swift` | サイドバーなしの同クロム |
+| 再利用部品 | `Hayate/HayateChrome.swift` | `Panel` / `Row` / `ToggleRow` / `RowSeparator` / `SearchField` / `SidebarItem` / `PageTitle` |
+| 色・面トークン | `Hayate/HayateTheme.swift` | `settingsCanvas` / `settingsSidebar` / `panel` / `fg` / `wash` / `separator` |
+| ビューア面 | 同上の `canvas` / `sidebar` / `bar` | 写真まわり。設定カードに流用しない |
+
+エージェント・人間とも、UI 変更前にこの表を開いてから書く。
+
+## ビジュアル言語（Cursor 風）
+
+目指す印象:
+
+- 暗い（または薄い）キャンバスの上に、**角丸の設定カード**が乗る
+- 各行は **左にタイトル＋短い説明、右にコントロール**
+- サイドバーは本文より一段暗く、選択行だけ wash で浮く
+- 装飾は最小。グラデ・ネオン・絵文字・多層シャドウは使わない
+
+### トークン対応
+
+| 面 | トークン |
 |---|---|
-| レイアウト見本 | `Hayate/SettingsView.swift`（左サイドバー + 右コンテンツ） |
-| 再利用クロム | `Hayate/HayateChrome.swift`（`Panel` / `Row` / `ToggleRow` / `RowSeparator` / sidebar） |
-| 色・面 | `Hayate/HayateTheme.swift`（`settingsCanvas` / `settingsSidebar` / `panel` / `fg` / `wash`） |
+| 設定ウィンドウ本文 | `HayateTheme.settingsCanvas` |
+| 設定サイドバー | `HayateTheme.settingsSidebar` |
+| 設定カード | `HayateTheme.panel` |
+| 区切り線 | `HayateTheme.separator` |
+| 文字 | `HayateTheme.fg(_:)` |
+| 選択・検索欄など | `HayateTheme.wash(_:)` |
+| 写真ビューア周り | `canvas` / `sidebar` / `bar`（設定用トークンと混ぜない） |
 
-設定以外（Export シートなど）も `HayateChrome` + `HayateTheme` を使う。`Form` + `.formStyle(.grouped)` の新規追加は避ける。
+ハードコードの `Color(white:)` / `NSColor` を画面側に増やさない。
 
-## レイアウト
+### 寸法（`HayateChrome` 定数）
 
-### 設定ウィンドウ型（カテゴリが 2 つ以上）
+| 定数 | 用途 | 目安 |
+|---|---|---|
+| `sidebarWidth` | 設定サイドバー | 228 |
+| `windowMinWidth` / `windowMinHeight` | Settings ウィンドウ | 820 × 600 |
+| `pageHorizontalPadding` / `pageVerticalPadding` | 本文余白 | 28 / 24 |
+| `groupSpacing` | パネル間 | 22 |
+| `cornerRadius` | カード角丸 | 10 |
+| `rowHorizontalPadding` / `rowVerticalPadding` | 行パディング | 14 / 13 |
+
+数値を画面で直書きせず、定数を参照する。変えるときは `HayateChrome` だけ。
+
+## レイアウト型
+
+### A. 設定ウィンドウ型（カテゴリが 2 つ以上）
 
 ```
-[ Sidebar ~220pt | Content ]
-  search           PageTitle
-  nav items        HayateChrome.Panel × N
-                   (Row / ToggleRow / RowSeparator)
+┌──────────────┬─────────────────────────────┐
+│ SearchField  │  PageTitle                  │
+│ SidebarItem… │  Panel                      │
+│              │    Row / ToggleRow / …       │
+│              │  Panel …                    │
+└──────────────┴─────────────────────────────┘
 ```
 
-- 背景: サイドバー = `HayateTheme.settingsSidebar`、本文 = `HayateTheme.settingsCanvas`、カード = `HayateTheme.panel`
-- 境界: 1pt `HayateTheme.separator`
-- 本文パディング: 水平 28 / 垂直 24（`HayateChrome.page*Padding`）
-- グループ間: 約 20pt（`HayateChrome.groupSpacing`）
+- 左: `settingsSidebar` + 検索 + ナビ
+- 右: `settingsCanvas` + 大タイトル + `Panel` の縦積み
+- Settings シーンには `.defaultSize(width:height:)` を付け、サイドバーが潰れて見えない状態を防ぐ
 
-### 単一シート型（Export など）
+### B. 単一シート型（Export など）
 
-サイドバーなし。`PageTitle`（または同等の大タイトル）+ `HayateChrome.Panel` の縦積み。背景は `HayateTheme.settingsCanvas`。
+サイドバーなし。`PageTitle` + `Panel` 縦積み。背景は `settingsCanvas`。
 
-## 行の型
+## 行とパネルの型
 
-各行は **左: タイトル（+ 短い説明） / 右: コントロール**。
-
-- トグル → `HayateChrome.ToggleRow`
-- メニュー / ボタン / カスタム → `HayateChrome.Row { … }`
-- グループ内の区切り → `HayateChrome.RowSeparator`（左インセット付き）
-
-説明文はキャプション色（`fg(0.42)`）。コントロール側に長い説明を置かない。
+- **セクション見出し**: 大文字・小さめ・`fg(~0.45)`（`Panel` が担当）
+- **トグル行**: `HayateChrome.ToggleRow`
+- **メニュー／ボタン／その他**: `HayateChrome.Row { … }`
+- **行区切り**: `HayateChrome.RowSeparator`（左インセット付き）
+- 説明文は左カラムだけ。右に長文を置かない
+- SwiftUI の `Group` / `Divider` / `Section` と同名の型を `HayateChrome` に作らない（Swift 6 衝突回避）。既存名 `Panel` / `RowSeparator` を使う
 
 ## サイドバー
 
-- 上部に `HayateChrome.SearchField`（カテゴリ検索）
-- 項目は `HayateChrome.SidebarItem`（SF Symbol + ラベル、選択時 wash ハイライト）
-- フォルダサイドバー（`FolderSidebar`）は別用途だが、同じ `HayateTheme` トークンを使う
+- `HayateChrome.SearchField` → カテゴリ絞り込み
+- `HayateChrome.SidebarItem` → SF Symbol + ラベル、選択時 `wash` ハイライト
+- フォルダ用 `FolderSidebar` は別用途。面のトーンは `HayateTheme.sidebar` 系を使い、設定カード部品は流用しない
 
-## やってよいこと / やらないこと
+## 必須 / 禁止
 
-**する**
-- 新規 UI は `HayateChrome` を先に使う。足りなければ `HayateChrome` に足してから画面側で使う
-- Light / Dark / System は `HayateTheme` の adaptive トークンに任せる（ハードコード色を増やさない）
-- EN/JA は `LocalizationStore.t(_:ja:)`
+**必須**
+- 新規の設定・シート・環境パネルは `HayateChrome` + 設定用 `HayateTheme` トークン
+- Light / Dark / System は adaptive トークンに任せる
+- 文言は `LocalizationStore.t(_:ja:)`
 
-**しない**
-- 設定だけ別デザイン・別コーナー半径・別行密度にする
-- システム grouped `Form` を新しい画面のデフォルトにする
-- 紫グラデ / カード過多 / ヒーロー風オーバーレイなど、写真カリング UI と無関係な装飾を足す
-- 写真本体のビューア面を「設定パネル風」に侵食する（ビューアは canvas、操作パネルだけ chrome）
+**禁止**
+- 新しい画面のデフォルトを `Form` + `.formStyle(.grouped)` にする
+- 設定だけ別コーナー半径・別行密度・別背景色にする
+- 紫グラデ、ヒーロー風オーバーレイ、カードの過剰な重ね
+- 写真ビューア面を設定パネル風に侵食する（ビューアは `canvas`、操作パネルだけ chrome）
 
-## 変更時の手順
+## 変更手順（エージェントは聞かない）
 
-1. 見た目・トークンを変えるなら **まず** `HayateChrome` / `HayateTheme` を直す
-2. `SettingsView` で破綻がないか確認する（正の見本）
-3. 同じパターンの他画面（Export など）も追従させる
+1. 見た目・寸法・色を変える → **先に** `HayateChrome` / `HayateTheme` を直す
+2. `SettingsView` で正の見本が崩れていないか確認する
+3. 同パターンの他画面（少なくとも `ExportSheet`）を追従させる
+4. このガイドライン（`.cursor/rules/ui-design.mdc`）の表・寸法がずれたら同じコミットで更新する
+
+ドキュメントだけの変更ならアプリバージョンは上げない（versioning ルールの例外）。
