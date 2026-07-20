@@ -1,6 +1,9 @@
 import SwiftUI
 import AppKit
 
+/// Preference window — canonical layout for Hayate panel UI.
+/// Shared chrome: `HayateChrome` + `HayateTheme`. Guideline: `.cursor/rules/ui-design.mdc`.
+
 // MARK: - Category
 
 private enum SettingsCategory: String, CaseIterable, Identifiable {
@@ -50,8 +53,6 @@ struct SettingsView: View {
     @State private var cacheFileCount: Int = 0
     @State private var showClearConfirmation = false
 
-    private let sidebarWidth: CGFloat = 220
-
     var body: some View {
         HStack(spacing: 0) {
             sidebar
@@ -65,23 +66,9 @@ struct SettingsView: View {
 
     private var sidebar: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 8) {
-                Image(systemName: "magnifyingglass")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(HayateTheme.fg(0.35))
-                TextField(L.t("Search Settings", ja: "設定を検索"), text: $searchText)
-                    .textFieldStyle(.plain)
-                    .font(.system(size: 13))
-            }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 7)
-            .background(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(HayateTheme.wash(0.06))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .strokeBorder(HayateTheme.wash(0.08), lineWidth: 1)
+            HayateChrome.SearchField(
+                placeholder: L.t("Search Settings", ja: "設定を検索"),
+                text: $searchText
             )
             .padding(.horizontal, 12)
             .padding(.top, 14)
@@ -89,34 +76,20 @@ struct SettingsView: View {
 
             VStack(spacing: 2) {
                 ForEach(filteredCategories) { item in
-                    Button {
+                    HayateChrome.SidebarItem(
+                        title: item.title(L),
+                        systemImage: item.systemImage,
+                        isSelected: category == item
+                    ) {
                         category = item
-                    } label: {
-                        HStack(spacing: 10) {
-                            Image(systemName: item.systemImage)
-                                .font(.system(size: 13, weight: .medium))
-                                .frame(width: 18)
-                            Text(item.title(L))
-                                .font(.system(size: 13, weight: category == item ? .semibold : .regular))
-                            Spacer(minLength: 0)
-                        }
-                        .foregroundColor(category == item ? HayateTheme.fg(0.95) : HayateTheme.fg(0.62))
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 7)
-                        .background(
-                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .fill(category == item ? HayateTheme.wash(0.10) : Color.clear)
-                        )
-                        .contentShape(Rectangle())
                     }
-                    .buttonStyle(.plain)
                 }
             }
             .padding(.horizontal, 8)
 
             Spacer(minLength: 0)
         }
-        .frame(width: sidebarWidth)
+        .frame(width: HayateChrome.sidebarWidth)
         .frame(maxHeight: .infinity)
         .background(HayateTheme.sidebar)
         .overlay(alignment: .trailing) {
@@ -155,9 +128,7 @@ struct SettingsView: View {
     private var contentPane: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
-                Text(category.title(L))
-                    .font(.system(size: 26, weight: .bold))
-                    .foregroundColor(HayateTheme.fg(0.95))
+                HayateChrome.PageTitle(title: category.title(L))
                     .padding(.bottom, 2)
 
                 switch category {
@@ -169,8 +140,8 @@ struct SettingsView: View {
                     cacheContent
                 }
             }
-            .padding(.horizontal, 28)
-            .padding(.vertical, 24)
+            .padding(.horizontal, HayateChrome.pageHorizontalPadding)
+            .padding(.vertical, HayateChrome.pageVerticalPadding)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -192,9 +163,9 @@ struct SettingsView: View {
     // MARK: - General
 
     private var generalContent: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            SettingsGroup(title: L.t("Appearance", ja: "外観")) {
-                SettingsRow(
+        VStack(alignment: .leading, spacing: HayateChrome.groupSpacing) {
+            HayateChrome.Group(title: L.t("Appearance", ja: "外観")) {
+                HayateChrome.Row(
                     title: L.t("Theme", ja: "テーマ"),
                     subtitle: L.t(
                         "Applies immediately to the whole window — sidebar, empty screen, and chrome.",
@@ -211,9 +182,9 @@ struct SettingsView: View {
                     .frame(maxWidth: 140)
                 }
 
-                SettingsDivider()
+                HayateChrome.Divider()
 
-                SettingsRow(
+                HayateChrome.Row(
                     title: L.t("Language", ja: "言語"),
                     subtitle: L.t(
                         "Applies immediately to menus and on-screen text.",
@@ -231,8 +202,8 @@ struct SettingsView: View {
                 }
             }
 
-            SettingsGroup(title: L.t("Culling", ja: "選別")) {
-                SettingsRow(
+            HayateChrome.Group(title: L.t("Culling", ja: "選別")) {
+                HayateChrome.Row(
                     title: L.t("Culling profile", ja: "選別プロファイル"),
                     subtitle: cullingProfileTriage
                         ? L.t(
@@ -253,9 +224,9 @@ struct SettingsView: View {
                     .frame(maxWidth: 170)
                 }
 
-                SettingsDivider()
+                HayateChrome.Divider()
 
-                SettingsToggleRow(
+                HayateChrome.ToggleRow(
                     title: L.t("Colorize Keep only", ja: "Keep だけカラー表示"),
                     subtitle: L.t(
                         "In the filmstrip and grid, Keep stays full color; other thumbnails go nearly grayscale. The main viewer is always full color. Badges still show state.",
@@ -265,8 +236,8 @@ struct SettingsView: View {
                 )
             }
 
-            SettingsGroup(title: L.t("Navigation", ja: "ナビゲーション")) {
-                SettingsToggleRow(
+            HayateChrome.Group(title: L.t("Navigation", ja: "ナビゲーション")) {
+                HayateChrome.ToggleRow(
                     title: L.t("Auto-advance after rating", ja: "評価後に自動で次へ"),
                     subtitle: L.t(
                         "Jump to the next photo after Keep / Maybe / Out (or stars / favorite / reject) in the single-photo view.",
@@ -275,9 +246,9 @@ struct SettingsView: View {
                     isOn: $autoAdvance
                 )
 
-                SettingsDivider()
+                HayateChrome.Divider()
 
-                SettingsToggleRow(
+                HayateChrome.ToggleRow(
                     title: L.t("Skip decided photos", ja: "決定済みをスキップ"),
                     subtitle: L.t(
                         "J / L and arrow keys jump to the next undecided photo. Already Keep / Maybe / Out (or rated / favorite / reject) are skipped. Use this for a second pass over leftovers.",
@@ -287,8 +258,8 @@ struct SettingsView: View {
                 )
             }
 
-            SettingsGroup(title: L.t("Sidecars", ja: "サイドカー")) {
-                SettingsToggleRow(
+            HayateChrome.Group(title: L.t("Sidecars", ja: "サイドカー")) {
+                HayateChrome.ToggleRow(
                     title: L.t("Write XMP sidecar files", ja: "XMPサイドカーを書き出す"),
                     subtitle: L.t(
                         "Save ratings next to each RAW as a .xmp file that Lightroom and Capture One can read. Rejected photos get rating −1 (Bridge convention), favorites a red label. Sidecars created by other apps are never modified.",
@@ -298,8 +269,8 @@ struct SettingsView: View {
                 )
             }
 
-            SettingsGroup(title: L.t("Grid", ja: "グリッド")) {
-                SettingsRow(
+            HayateChrome.Group(title: L.t("Grid", ja: "グリッド")) {
+                HayateChrome.Row(
                     title: L.t("Grid scene gap", ja: "グリッドのシーン区切り"),
                     subtitle: L.t(
                         "Draw a thin separator in the grid when consecutive photos are farther apart than this (by EXIF capture time). Photos without EXIF dates never create a break.",
@@ -320,8 +291,8 @@ struct SettingsView: View {
                 }
             }
 
-            SettingsGroup(title: L.t("Help", ja: "ヘルプ")) {
-                SettingsRow(
+            HayateChrome.Group(title: L.t("Help", ja: "ヘルプ")) {
+                HayateChrome.Row(
                     title: L.t("Welcome Guide", ja: "ようこそガイド"),
                     subtitle: L.t(
                         "Reopen the 3-step intro (open folder, cull keys, sidebar / shortcuts).",
@@ -360,12 +331,12 @@ struct SettingsView: View {
             }
 
             ForEach(ActionID.Category.allCases) { cat in
-                SettingsGroup(title: cat.title(lang: L.resolved)) {
+                HayateChrome.Group(title: cat.title(lang: L.resolved)) {
                     let items = actions(in: cat)
                     ForEach(Array(items.enumerated()), id: \.element.id) { index, action in
                         shortcutRow(for: action)
                         if index < items.count - 1 {
-                            SettingsDivider()
+                            HayateChrome.Divider()
                         }
                     }
                 }
@@ -378,7 +349,7 @@ struct SettingsView: View {
     }
 
     private func shortcutRow(for action: ActionID) -> some View {
-        SettingsRow(title: action.title(lang: L.resolved), subtitle: nil) {
+        HayateChrome.Row(title: action.title(lang: L.resolved), subtitle: nil) {
             if recordingAction == action {
                 ShortcutRecorder(
                     prompt: L.t("Press a key…", ja: "キーを押してください…"),
@@ -425,9 +396,9 @@ struct SettingsView: View {
     }
 
     private var cacheContent: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            SettingsGroup(title: L.t("Location & Size", ja: "場所と容量")) {
-                SettingsRow(
+        VStack(alignment: .leading, spacing: HayateChrome.groupSpacing) {
+            HayateChrome.Group(title: L.t("Location & Size", ja: "場所と容量")) {
+                HayateChrome.Row(
                     title: L.t("Cache Location", ja: "キャッシュの場所"),
                     subtitle: effectiveCacheRoot.path
                 ) {
@@ -445,9 +416,9 @@ struct SettingsView: View {
                     }
                 }
 
-                SettingsDivider()
+                HayateChrome.Divider()
 
-                SettingsRow(
+                HayateChrome.Row(
                     title: L.t("Maximum Cache Size", ja: "キャッシュ上限"),
                     subtitle: L.t(
                         "Cache location changes take effect on next app launch.",
@@ -468,8 +439,8 @@ struct SettingsView: View {
                 }
             }
 
-            SettingsGroup(title: L.t("Usage", ja: "使用量")) {
-                SettingsRow(
+            HayateChrome.Group(title: L.t("Usage", ja: "使用量")) {
+                HayateChrome.Row(
                     title: L.t("Current Usage", ja: "現在の使用量"),
                     subtitle: L.t(
                         "\(formattedSize(cacheUsageBytes)) — \(cacheFileCount) files",
@@ -548,87 +519,6 @@ struct SettingsView: View {
         let formatter = ByteCountFormatter()
         formatter.countStyle = .file
         return formatter.string(fromByteCount: bytes)
-    }
-}
-
-// MARK: - Shared chrome
-
-private struct SettingsGroup<Content: View>: View {
-    let title: String
-    @ViewBuilder var content: Content
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(title)
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundColor(HayateTheme.fg(0.42))
-                .textCase(.uppercase)
-                .tracking(0.4)
-                .padding(.leading, 4)
-
-            VStack(spacing: 0) {
-                content
-            }
-            .background(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(HayateTheme.wash(0.055))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .strokeBorder(HayateTheme.wash(0.06), lineWidth: 1)
-            )
-        }
-    }
-}
-
-private struct SettingsRow<Trailing: View>: View {
-    let title: String
-    let subtitle: String?
-    @ViewBuilder var trailing: Trailing
-
-    var body: some View {
-        HStack(alignment: .center, spacing: 16) {
-            VStack(alignment: .leading, spacing: 3) {
-                Text(title)
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundColor(HayateTheme.fg(0.92))
-                if let subtitle, !subtitle.isEmpty {
-                    Text(subtitle)
-                        .font(.system(size: 11.5))
-                        .foregroundColor(HayateTheme.fg(0.42))
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-
-            trailing
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
-    }
-}
-
-private struct SettingsToggleRow: View {
-    let title: String
-    let subtitle: String
-    @Binding var isOn: Bool
-
-    var body: some View {
-        SettingsRow(title: title, subtitle: subtitle) {
-            Toggle("", isOn: $isOn)
-                .labelsHidden()
-                .toggleStyle(.switch)
-                .controlSize(.small)
-        }
-    }
-}
-
-private struct SettingsDivider: View {
-    var body: some View {
-        Rectangle()
-            .fill(HayateTheme.separator)
-            .frame(height: 1)
-            .padding(.leading, 14)
     }
 }
 
