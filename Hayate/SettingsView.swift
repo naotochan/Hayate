@@ -1,8 +1,9 @@
 import SwiftUI
 import AppKit
 
-/// Preference window — canonical layout for Hayate panel UI.
-/// Shared chrome: `HayateChrome` + `HayateTheme`. Guideline: `.cursor/rules/ui-design.mdc`.
+/// Preference window — canonical layout for Hayate panel UI (Cursor-style).
+/// Shared chrome: `HayateChrome` + `HayateTheme`.
+/// App-wide guideline: `.cursor/rules/ui-design.mdc` (alwaysApply).
 
 // MARK: - Category
 
