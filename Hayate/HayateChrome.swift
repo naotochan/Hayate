@@ -9,11 +9,13 @@ import SwiftUI
 enum HayateChrome {
     static let cornerRadius: CGFloat = 10
     static let rowHorizontalPadding: CGFloat = 14
-    static let rowVerticalPadding: CGFloat = 12
-    static let groupSpacing: CGFloat = 20
+    static let rowVerticalPadding: CGFloat = 13
+    static let groupSpacing: CGFloat = 22
     static let pageHorizontalPadding: CGFloat = 28
     static let pageVerticalPadding: CGFloat = 24
-    static let sidebarWidth: CGFloat = 220
+    static let sidebarWidth: CGFloat = 228
+    static let windowMinWidth: CGFloat = 820
+    static let windowMinHeight: CGFloat = 600
 
     // MARK: - Page title
 
@@ -22,14 +24,14 @@ enum HayateChrome {
 
         var body: some View {
             Text(title)
-                .font(.system(size: 26, weight: .bold))
-                .foregroundColor(HayateTheme.fg(0.95))
+                .font(.system(size: 28, weight: .bold))
+                .foregroundColor(HayateTheme.fg(0.96))
         }
     }
 
     // MARK: - Panel
 
-    /// Uppercase section label + rounded wash container for rows.
+    /// Uppercase section label + rounded card container for rows.
     struct Panel<Content: View>: View {
         let title: String
         let content: Content
@@ -42,10 +44,10 @@ enum HayateChrome {
         var body: some View {
             VStack(alignment: .leading, spacing: 8) {
                 Text(title)
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundColor(HayateTheme.fg(0.42))
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(HayateTheme.fg(0.45))
                     .textCase(.uppercase)
-                    .tracking(0.4)
+                    .tracking(0.5)
                     .padding(.leading, 4)
 
                 VStack(spacing: 0) {
@@ -53,11 +55,11 @@ enum HayateChrome {
                 }
                 .background(
                     RoundedRectangle(cornerRadius: HayateChrome.cornerRadius, style: .continuous)
-                        .fill(HayateTheme.wash(0.055))
+                        .fill(HayateTheme.panel)
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: HayateChrome.cornerRadius, style: .continuous)
-                        .strokeBorder(HayateTheme.wash(0.06), lineWidth: 1)
+                        .strokeBorder(HayateTheme.wash(0.08), lineWidth: 1)
                 )
             }
         }
@@ -82,11 +84,11 @@ enum HayateChrome {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(title)
                         .font(.system(size: 13, weight: .medium))
-                        .foregroundColor(HayateTheme.fg(0.92))
+                        .foregroundColor(HayateTheme.fg(0.94))
                     if let subtitle, !subtitle.isEmpty {
                         Text(subtitle)
                             .font(.system(size: 11.5))
-                            .foregroundColor(HayateTheme.fg(0.42))
+                            .foregroundColor(HayateTheme.fg(0.44))
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
@@ -133,20 +135,20 @@ enum HayateChrome {
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass")
                     .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(HayateTheme.fg(0.35))
+                    .foregroundColor(HayateTheme.fg(0.38))
                 TextField(placeholder, text: $text)
                     .textFieldStyle(.plain)
                     .font(.system(size: 13))
             }
             .padding(.horizontal, 10)
-            .padding(.vertical, 7)
+            .padding(.vertical, 8)
             .background(
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(HayateTheme.wash(0.06))
+                    .fill(HayateTheme.wash(0.08))
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .strokeBorder(HayateTheme.wash(0.08), lineWidth: 1)
+                    .strokeBorder(HayateTheme.wash(0.10), lineWidth: 1)
             )
         }
     }
@@ -161,18 +163,18 @@ enum HayateChrome {
             Button(action: action) {
                 HStack(spacing: 10) {
                     Image(systemName: systemImage)
-                        .font(.system(size: 13, weight: .medium))
+                        .font(.system(size: 13, weight: .semibold))
                         .frame(width: 18)
                     Text(title)
                         .font(.system(size: 13, weight: isSelected ? .semibold : .regular))
                     Spacer(minLength: 0)
                 }
-                .foregroundColor(isSelected ? HayateTheme.fg(0.95) : HayateTheme.fg(0.62))
+                .foregroundColor(isSelected ? HayateTheme.fg(0.96) : HayateTheme.fg(0.58))
                 .padding(.horizontal, 10)
-                .padding(.vertical, 7)
+                .padding(.vertical, 8)
                 .background(
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(isSelected ? HayateTheme.wash(0.10) : Color.clear)
+                        .fill(isSelected ? HayateTheme.wash(0.14) : Color.clear)
                 )
                 .contentShape(Rectangle())
             }

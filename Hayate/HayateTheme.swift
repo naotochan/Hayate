@@ -36,6 +36,24 @@ enum HayateTheme {
         light: NSColor(white: 1, alpha: 0.72)
     )
 
+    /// Preference / sheet card fill (Cursor-style grouped rows).
+    static let panel = adaptive(
+        dark: NSColor(red: 0.16, green: 0.16, blue: 0.17, alpha: 1),
+        light: NSColor(red: 1, green: 1, blue: 1, alpha: 1)
+    )
+
+    /// Preference window content surround (slightly above canvas in dark).
+    static let settingsCanvas = adaptive(
+        dark: NSColor(red: 0.12, green: 0.12, blue: 0.12, alpha: 1),
+        light: NSColor(red: 0.95, green: 0.95, blue: 0.96, alpha: 1)
+    )
+
+    /// Preference sidebar (darker than settings canvas).
+    static let settingsSidebar = adaptive(
+        dark: NSColor(red: 0.09, green: 0.09, blue: 0.09, alpha: 1),
+        light: NSColor(red: 0.93, green: 0.93, blue: 0.94, alpha: 1)
+    )
+
     /// Primary ink: white in dark mode, black in light mode.
     static func fg(_ opacity: Double) -> Color {
         adaptive(

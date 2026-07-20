@@ -165,6 +165,7 @@ struct HayateApp: App {
                     newValue.applyToApp()
                 }
         }
+        .defaultSize(width: HayateChrome.windowMinWidth, height: HayateChrome.windowMinHeight)
     }
 }
 
