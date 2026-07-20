@@ -32,6 +32,7 @@
 		A10023 /* OnboardingOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20024; };
 		A10024 /* Localization.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20025; };
 		A10025 /* HayateTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20026; };
+		A10026 /* HayateChrome.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20027; };
 		B10001 /* CullingSessionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20001; };
 		B10002 /* KeybindingsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20002; };
 /* End PBXBuildFile section */
@@ -73,6 +74,7 @@
 		A20024 /* OnboardingOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingOverlay.swift; sourceTree = "<group>"; };
 		A20025 /* Localization.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Localization.swift; sourceTree = "<group>"; };
 		A20026 /* HayateTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HayateTheme.swift; sourceTree = "<group>"; };
+		A20027 /* HayateChrome.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HayateChrome.swift; sourceTree = "<group>"; };
 		A30001 /* Hayate.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Hayate.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		B20001 /* CullingSessionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CullingSessionTests.swift; sourceTree = "<group>"; };
 		B20002 /* KeybindingsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeybindingsTests.swift; sourceTree = "<group>"; };
@@ -125,6 +127,7 @@
 				A20024 /* OnboardingOverlay.swift */,
 				A20025 /* Localization.swift */,
 				A20026 /* HayateTheme.swift */,
+				A20027 /* HayateChrome.swift */,
 				A20003 /* MetalImageView.swift */,
 				A20004 /* ImageDecoder.swift */,
 				A20005 /* PrefetchManager.swift */,
@@ -294,6 +297,7 @@
 				A10023 /* OnboardingOverlay.swift in Sources */,
 				A10024 /* Localization.swift in Sources */,
 				A10025 /* HayateTheme.swift in Sources */,
+				A10026 /* HayateChrome.swift in Sources */,
 				A10003 /* MetalImageView.swift in Sources */,
 				A10004 /* ImageDecoder.swift in Sources */,
 				A10005 /* PrefetchManager.swift in Sources */,
