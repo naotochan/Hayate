@@ -58,8 +58,13 @@ struct SettingsView: View {
             sidebar
             contentPane
         }
-        .frame(width: 760, height: 580)
-        .background(HayateTheme.canvas)
+        .frame(
+            minWidth: HayateChrome.windowMinWidth,
+            idealWidth: HayateChrome.windowMinWidth,
+            minHeight: HayateChrome.windowMinHeight,
+            idealHeight: HayateChrome.windowMinHeight
+        )
+        .background(HayateTheme.settingsCanvas)
     }
 
     // MARK: - Sidebar
@@ -91,7 +96,7 @@ struct SettingsView: View {
         }
         .frame(width: HayateChrome.sidebarWidth)
         .frame(maxHeight: .infinity)
-        .background(HayateTheme.sidebar)
+        .background(HayateTheme.settingsSidebar)
         .overlay(alignment: .trailing) {
             Rectangle()
                 .fill(HayateTheme.separator)
@@ -145,7 +150,7 @@ struct SettingsView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(HayateTheme.canvas)
+        .background(HayateTheme.settingsCanvas)
         .onAppear {
             if category == .cache { refreshCacheUsage() }
         }

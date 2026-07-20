@@ -13,7 +13,7 @@ alwaysApply: true
 |---|---|
 | レイアウト見本 | `Hayate/SettingsView.swift`（左サイドバー + 右コンテンツ） |
 | 再利用クロム | `Hayate/HayateChrome.swift`（`Panel` / `Row` / `ToggleRow` / `RowSeparator` / sidebar） |
-| 色・面 | `Hayate/HayateTheme.swift`（`canvas` / `sidebar` / `separator` / `fg` / `wash`） |
+| 色・面 | `Hayate/HayateTheme.swift`（`settingsCanvas` / `settingsSidebar` / `panel` / `fg` / `wash`） |
 
 設定以外（Export シートなど）も `HayateChrome` + `HayateTheme` を使う。`Form` + `.formStyle(.grouped)` の新規追加は避ける。
 
@@ -28,14 +28,14 @@ alwaysApply: true
                    (Row / ToggleRow / RowSeparator)
 ```
 
-- 背景: サイドバー = `HayateTheme.sidebar`、本文 = `HayateTheme.canvas`
+- 背景: サイドバー = `HayateTheme.settingsSidebar`、本文 = `HayateTheme.settingsCanvas`、カード = `HayateTheme.panel`
 - 境界: 1pt `HayateTheme.separator`
 - 本文パディング: 水平 28 / 垂直 24（`HayateChrome.page*Padding`）
 - グループ間: 約 20pt（`HayateChrome.groupSpacing`）
 
 ### 単一シート型（Export など）
 
-サイドバーなし。`PageTitle`（または同等の大タイトル）+ `HayateChrome.Panel` の縦積み。背景は `HayateTheme.canvas`。
+サイドバーなし。`PageTitle`（または同等の大タイトル）+ `HayateChrome.Panel` の縦積み。背景は `HayateTheme.settingsCanvas`。
 
 ## 行の型
 
