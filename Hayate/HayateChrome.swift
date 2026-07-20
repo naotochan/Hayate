@@ -3,6 +3,9 @@ import SwiftUI
 /// Shared panel chrome used by Settings and other preference-style surfaces.
 /// Canonical layout reference: `SettingsView` (sidebar + content). Tokens live
 /// in `HayateTheme`. See `.cursor/rules/ui-design.mdc`.
+///
+/// Nested types avoid SwiftUI names (`Group`, `Divider`, `Section`) so Swift 6
+/// type-checking does not collide with the framework.
 enum HayateChrome {
     static let cornerRadius: CGFloat = 10
     static let rowHorizontalPadding: CGFloat = 14
@@ -24,12 +27,17 @@ enum HayateChrome {
         }
     }
 
-    // MARK: - Group
+    // MARK: - Panel
 
     /// Uppercase section label + rounded wash container for rows.
-    struct Group<Content: View>: View {
+    struct Panel<Content: View>: View {
         let title: String
-        @ViewBuilder var content: Content
+        let content: Content
+
+        init(title: String, @ViewBuilder content: () -> Content) {
+            self.title = title
+            self.content = content()
+        }
 
         var body: some View {
             VStack(alignment: .leading, spacing: 8) {
@@ -61,7 +69,7 @@ enum HayateChrome {
     struct Row<Trailing: View>: View {
         let title: String
         let subtitle: String?
-        @ViewBuilder var trailing: Trailing
+        let trailing: Trailing
 
         init(title: String, subtitle: String? = nil, @ViewBuilder trailing: () -> Trailing) {
             self.title = title
@@ -106,7 +114,7 @@ enum HayateChrome {
         }
     }
 
-    struct Divider: View {
+    struct RowSeparator: View {
         var body: some View {
             Rectangle()
                 .fill(HayateTheme.separator)

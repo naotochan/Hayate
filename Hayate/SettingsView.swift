@@ -164,7 +164,7 @@ struct SettingsView: View {
 
     private var generalContent: some View {
         VStack(alignment: .leading, spacing: HayateChrome.groupSpacing) {
-            HayateChrome.Group(title: L.t("Appearance", ja: "外観")) {
+            HayateChrome.Panel(title: L.t("Appearance", ja: "外観")) {
                 HayateChrome.Row(
                     title: L.t("Theme", ja: "テーマ"),
                     subtitle: L.t(
@@ -182,7 +182,7 @@ struct SettingsView: View {
                     .frame(maxWidth: 140)
                 }
 
-                HayateChrome.Divider()
+                HayateChrome.RowSeparator()
 
                 HayateChrome.Row(
                     title: L.t("Language", ja: "言語"),
@@ -202,7 +202,7 @@ struct SettingsView: View {
                 }
             }
 
-            HayateChrome.Group(title: L.t("Culling", ja: "選別")) {
+            HayateChrome.Panel(title: L.t("Culling", ja: "選別")) {
                 HayateChrome.Row(
                     title: L.t("Culling profile", ja: "選別プロファイル"),
                     subtitle: cullingProfileTriage
@@ -224,7 +224,7 @@ struct SettingsView: View {
                     .frame(maxWidth: 170)
                 }
 
-                HayateChrome.Divider()
+                HayateChrome.RowSeparator()
 
                 HayateChrome.ToggleRow(
                     title: L.t("Colorize Keep only", ja: "Keep だけカラー表示"),
@@ -236,7 +236,7 @@ struct SettingsView: View {
                 )
             }
 
-            HayateChrome.Group(title: L.t("Navigation", ja: "ナビゲーション")) {
+            HayateChrome.Panel(title: L.t("Navigation", ja: "ナビゲーション")) {
                 HayateChrome.ToggleRow(
                     title: L.t("Auto-advance after rating", ja: "評価後に自動で次へ"),
                     subtitle: L.t(
@@ -246,7 +246,7 @@ struct SettingsView: View {
                     isOn: $autoAdvance
                 )
 
-                HayateChrome.Divider()
+                HayateChrome.RowSeparator()
 
                 HayateChrome.ToggleRow(
                     title: L.t("Skip decided photos", ja: "決定済みをスキップ"),
@@ -258,7 +258,7 @@ struct SettingsView: View {
                 )
             }
 
-            HayateChrome.Group(title: L.t("Sidecars", ja: "サイドカー")) {
+            HayateChrome.Panel(title: L.t("Sidecars", ja: "サイドカー")) {
                 HayateChrome.ToggleRow(
                     title: L.t("Write XMP sidecar files", ja: "XMPサイドカーを書き出す"),
                     subtitle: L.t(
@@ -269,7 +269,7 @@ struct SettingsView: View {
                 )
             }
 
-            HayateChrome.Group(title: L.t("Grid", ja: "グリッド")) {
+            HayateChrome.Panel(title: L.t("Grid", ja: "グリッド")) {
                 HayateChrome.Row(
                     title: L.t("Grid scene gap", ja: "グリッドのシーン区切り"),
                     subtitle: L.t(
@@ -291,7 +291,7 @@ struct SettingsView: View {
                 }
             }
 
-            HayateChrome.Group(title: L.t("Help", ja: "ヘルプ")) {
+            HayateChrome.Panel(title: L.t("Help", ja: "ヘルプ")) {
                 HayateChrome.Row(
                     title: L.t("Welcome Guide", ja: "ようこそガイド"),
                     subtitle: L.t(
@@ -331,14 +331,20 @@ struct SettingsView: View {
             }
 
             ForEach(ActionID.Category.allCases) { cat in
-                HayateChrome.Group(title: cat.title(lang: L.resolved)) {
-                    let items = actions(in: cat)
-                    ForEach(Array(items.enumerated()), id: \.element.id) { index, action in
-                        shortcutRow(for: action)
-                        if index < items.count - 1 {
-                            HayateChrome.Divider()
-                        }
-                    }
+                shortcutCategoryPanel(cat)
+            }
+        }
+    }
+
+
+    @ViewBuilder
+    private func shortcutCategoryPanel(_ cat: ActionID.Category) -> some View {
+        let items = actions(in: cat)
+        HayateChrome.Panel(title: cat.title(lang: L.resolved)) {
+            ForEach(Array(items.enumerated()), id: \.element.id) { index, action in
+                shortcutRow(for: action)
+                if index < items.count - 1 {
+                    HayateChrome.RowSeparator()
                 }
             }
         }
@@ -397,7 +403,7 @@ struct SettingsView: View {
 
     private var cacheContent: some View {
         VStack(alignment: .leading, spacing: HayateChrome.groupSpacing) {
-            HayateChrome.Group(title: L.t("Location & Size", ja: "場所と容量")) {
+            HayateChrome.Panel(title: L.t("Location & Size", ja: "場所と容量")) {
                 HayateChrome.Row(
                     title: L.t("Cache Location", ja: "キャッシュの場所"),
                     subtitle: effectiveCacheRoot.path
@@ -416,7 +422,7 @@ struct SettingsView: View {
                     }
                 }
 
-                HayateChrome.Divider()
+                HayateChrome.RowSeparator()
 
                 HayateChrome.Row(
                     title: L.t("Maximum Cache Size", ja: "キャッシュ上限"),
@@ -439,7 +445,7 @@ struct SettingsView: View {
                 }
             }
 
-            HayateChrome.Group(title: L.t("Usage", ja: "使用量")) {
+            HayateChrome.Panel(title: L.t("Usage", ja: "使用量")) {
                 HayateChrome.Row(
                     title: L.t("Current Usage", ja: "現在の使用量"),
                     subtitle: L.t(
