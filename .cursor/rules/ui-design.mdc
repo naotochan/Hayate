@@ -43,7 +43,7 @@ alwaysApply: true
 
 - トグル → `HayateChrome.ToggleRow`
 - メニュー / ボタン / カスタム → `HayateChrome.Row { … }`
-- グループ内の区切り → `HayateChrome.Divider`（左インセット付き）
+- グループ内の区切り → `HayateChrome.RowSeparator`（左インセット付き）
 
 説明文はキャプション色（`fg(0.42)`）。コントロール側に長い説明を置かない。
 
