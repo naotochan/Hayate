@@ -19,32 +19,32 @@ final class CIContextHolder: ObservableObject {
     }
 }
 
-/// Opens folders dropped on the Dock icon or passed via `open -a Hayate <folder>`.
+/// Opens folders dropped on the Dock icon or passed via `open -a Hayate <folder>…`.
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    /// Set from SwiftUI once the session is ready. Flushes any folder that
+    /// Set from SwiftUI once the session is ready. Flushes any folders that
     /// arrived earlier (launch-with-folder race).
-    var onOpenFolder: ((URL) -> Void)? {
+    var onOpenFolders: (([URL]) -> Void)? {
         didSet {
-            if let url = pendingFolder, let handler = onOpenFolder {
-                pendingFolder = nil
-                handler(url)
+            if let urls = pendingFolders, let handler = onOpenFolders {
+                pendingFolders = nil
+                handler(urls)
             }
         }
     }
 
-    private var pendingFolder: URL?
+    private var pendingFolders: [URL]?
 
     func application(_ application: NSApplication, open urls: [URL]) {
-        for url in urls {
+        let folders = urls.filter { url in
             var isDir: ObjCBool = false
-            if FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir), isDir.boolValue {
-                if let handler = onOpenFolder {
-                    handler(url)
-                } else {
-                    pendingFolder = url
-                }
-                return
-            }
+            return FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir)
+                && isDir.boolValue
+        }
+        guard !folders.isEmpty else { return }
+        if let handler = onOpenFolders {
+            handler(folders)
+        } else {
+            pendingFolders = folders
         }
     }
 }
@@ -92,18 +92,21 @@ struct HayateApp: App {
                 .id(localization.language)
                 .onAppear {
                     appAppearance.applyToApp()
-                    appDelegate.onOpenFolder = { [session] url in
-                        session.requestOpen(folder: url)
+                    appDelegate.onOpenFolders = { [session] urls in
+                        session.requestOpen(folders: urls)
                     }
-                    // `Hayate.app -- /path/to/folder` for demos / scripting.
+                    // `Hayate.app -- /path/to/a /path/to/b` for demos / scripting.
+                    var cliFolders: [URL] = []
                     for arg in CommandLine.arguments.dropFirst() where !arg.hasPrefix("-") {
                         let url = URL(fileURLWithPath: arg)
                         var isDir: ObjCBool = false
                         if FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir),
                            isDir.boolValue {
-                            session.requestOpen(folder: url)
-                            break
+                            cliFolders.append(url)
                         }
+                    }
+                    if !cliFolders.isEmpty {
+                        session.requestOpen(folders: cliFolders)
                     }
                 }
                 .onChange(of: appAppearance) { _, newValue in

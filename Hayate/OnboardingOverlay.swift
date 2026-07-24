@@ -308,8 +308,8 @@ struct OnboardingOverlay: View {
                 icon: "folder.badge.plus",
                 title: L.t("Open a photo folder", ja: "写真フォルダを開く"),
                 body: L.t(
-                    "Start here to choose a folder. You can also drag a folder directly onto the main area.",
-                    ja: "ここからフォルダを選びます。メインエリアにフォルダをドラッグしても開けます。"
+                    "Start here to choose folders. You can also drag one or more folders onto the main area.",
+                    ja: "ここからフォルダを選びます。メインエリアに複数フォルダをドラッグしても開けます。"
                 )
             ),
             Step(
@@ -324,8 +324,8 @@ struct OnboardingOverlay: View {
                 icon: "hand.tap",
                 title: L.t("Drop, then cull", ja: "ドロップして選別"),
                 body: L.t(
-                    "Drop a folder in this area. Once photos open, use \(keep) Keep · \(maybe) Maybe · \(out) Out. Press ? anytime for every shortcut.",
-                    ja: "このエリアにフォルダをドロップ。写真が開いたら \(keep) Keep · \(maybe) Maybe · \(out) Out。? でいつでも全ショートカットを表示できます。"
+                    "Drop folders in this area. Each becomes its own entry in the sidebar. Once photos open, use \(keep) Keep · \(maybe) Maybe · \(out) Out. Press ? anytime for every shortcut.",
+                    ja: "このエリアにフォルダをドロップ。それぞれ独立したフォルダとしてサイドバーに並びます。写真が開いたら \(keep) Keep · \(maybe) Maybe · \(out) Out。? でいつでも全ショートカットを表示できます。"
                 )
             ),
         ]

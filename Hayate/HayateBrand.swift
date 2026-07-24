@@ -34,11 +34,11 @@ struct HayateBrandScreen: View {
 
     private var subtitle: String {
         if isLoading { return "Preparing…" }
-        if dropTargeted { return "Release to open this folder" }
+        if dropTargeted { return "Release to open folder(s)" }
         if case .empty(_, _, _, let message) = mode, let message {
             return message
         }
-        return "Drop a folder or open one to begin"
+        return "Drop folders or open one to begin"
     }
 
     private var drawDuration: Double {

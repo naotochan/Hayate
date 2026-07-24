@@ -290,7 +290,42 @@ class CullingSession: ObservableObject {
 
     /// Ask the UI to open this specific folder (recent-folders menu, drag & drop).
     func requestOpen(folder url: URL) {
-        directOpenRequest = url
+        requestOpen(folders: [url])
+    }
+
+    /// Open the first folder and register the rest as independent recent folders
+    /// (multi-folder drag & drop, Dock drop, multi-select Open…).
+    /// Order is preserved: first opens, then the others appear after it in Recents.
+    func requestOpen(folders urls: [URL]) {
+        let folders = Self.uniqueDirectories(in: urls)
+        guard let first = folders.first else { return }
+        // Register trailing folders before the open request so they land in
+        // Recents even if the UI open path fails; openFolder re-fronts `first`.
+        for url in folders.dropFirst().reversed() {
+            addToRecents(url)
+        }
+        directOpenRequest = first
+    }
+
+    /// Register folders in Recents without switching the current session.
+    /// Used when several folders are dropped at once — extras stay available
+    /// in the sidebar while the first one opens for culling.
+    func rememberFolders(_ urls: [URL]) {
+        for url in Self.uniqueDirectories(in: urls).reversed() {
+            addToRecents(url)
+        }
+    }
+
+    /// Deduplicate directory URLs by standardized path, keeping first-seen order.
+    private static func uniqueDirectories(in urls: [URL]) -> [URL] {
+        var seen = Set<String>()
+        var result: [URL] = []
+        for url in urls {
+            let path = url.standardizedFileURL.path
+            guard seen.insert(path).inserted else { continue }
+            result.append(url)
+        }
+        return result
     }
 
     /// Ask the UI to present the export sheet.
