@@ -1,6 +1,94 @@
 import AppKit
 import Foundation
+import SwiftUI
 import UniformTypeIdentifiers
+
+/// Finder-style tint for sidebar folder icons. Persisted per path.
+enum FolderColor: String, CaseIterable, Identifiable, Sendable {
+    case none
+    case red
+    case orange
+    case yellow
+    case green
+    case blue
+    case purple
+    case gray
+
+    var id: String { rawValue }
+
+    /// Colors shown in the picker (excludes `.none`, which is "Clear").
+    static var swatches: [FolderColor] {
+        allCases.filter { $0 != .none }
+    }
+
+    /// Icon fill. `nil` means use the sidebar default (accent / muted).
+    var swatchColor: Color? {
+        switch self {
+        case .none: return nil
+        case .red: return Color(red: 0.92, green: 0.30, blue: 0.28)
+        case .orange: return Color(red: 0.95, green: 0.55, blue: 0.18)
+        case .yellow: return Color(red: 0.92, green: 0.78, blue: 0.20)
+        case .green: return Color(red: 0.35, green: 0.78, blue: 0.38)
+        case .blue: return Color(red: 0.28, green: 0.55, blue: 0.95)
+        case .purple: return Color(red: 0.68, green: 0.40, blue: 0.90)
+        case .gray: return Color(white: 0.55)
+        }
+    }
+
+    /// AppKit swatch for context menus (SwiftUI `Circle` is stripped by NSMenu).
+    var nsSwatchColor: NSColor? {
+        switch self {
+        case .none: return nil
+        case .red: return NSColor(calibratedRed: 0.92, green: 0.30, blue: 0.28, alpha: 1)
+        case .orange: return NSColor(calibratedRed: 0.95, green: 0.55, blue: 0.18, alpha: 1)
+        case .yellow: return NSColor(calibratedRed: 0.92, green: 0.78, blue: 0.20, alpha: 1)
+        case .green: return NSColor(calibratedRed: 0.35, green: 0.78, blue: 0.38, alpha: 1)
+        case .blue: return NSColor(calibratedRed: 0.28, green: 0.55, blue: 0.95, alpha: 1)
+        case .purple: return NSColor(calibratedRed: 0.68, green: 0.40, blue: 0.90, alpha: 1)
+        case .gray: return NSColor(calibratedWhite: 0.55, alpha: 1)
+        }
+    }
+
+    /// English product labels (same in both languages, like Keep / Color).
+    var menuTitle: String {
+        switch self {
+        case .none: return "None"
+        case .red: return "Red"
+        case .orange: return "Orange"
+        case .yellow: return "Yellow"
+        case .green: return "Green"
+        case .blue: return "Blue"
+        case .purple: return "Purple"
+        case .gray: return "Gray"
+        }
+    }
+
+    /// Colored dot that survives AppKit menu bridging.
+    func menuDotImage(diameter: CGFloat = 12, selected: Bool = false) -> NSImage {
+        let size = NSSize(width: diameter, height: diameter)
+        let image = NSImage(size: size, flipped: false) { rect in
+            let inset = rect.insetBy(dx: 1, dy: 1)
+            if let color = self.nsSwatchColor {
+                color.setFill()
+                NSBezierPath(ovalIn: inset).fill()
+            } else {
+                NSColor.secondaryLabelColor.setStroke()
+                let path = NSBezierPath(ovalIn: inset.insetBy(dx: 0.5, dy: 0.5))
+                path.lineWidth = 1
+                path.stroke()
+            }
+            if selected {
+                NSColor.white.setStroke()
+                let ring = NSBezierPath(ovalIn: rect.insetBy(dx: 0.5, dy: 0.5))
+                ring.lineWidth = 1.5
+                ring.stroke()
+            }
+            return true
+        }
+        image.isTemplate = false
+        return image
+    }
+}
 
 /// Manages the culling session state: file list, ratings, favorites, JSON persistence, and undo.
 @MainActor
@@ -32,9 +120,12 @@ class CullingSession: ObservableObject {
     @Published private(set) var recentFolders: [URL] = []
     /// User-pinned folders for the sidebar (persisted, order preserved).
     @Published private(set) var pinnedFolders: [URL] = []
+    /// Sidebar folder icon colors keyed by standardized path (Finder-style).
+    @Published private(set) var folderColors: [String: FolderColor] = [:]
 
     static let recentFoldersKey = "recentFolders"
     static let pinnedFoldersKey = "pinnedFolders"
+    static let folderColorsKey = "folderColors"
     static let maxRecentFolders = 10
     static let maxPinnedFolders = 20
 
@@ -66,6 +157,18 @@ class CullingSession: ObservableObject {
             if pinnedFolders.map(\.path) != paths {
                 defaults.set(pinnedFolders.map(\.path), forKey: Self.pinnedFoldersKey)
             }
+        }
+        // Prefer element-wise cast: `as? [String: String]` can fail on some
+        // CFPreferences bridges even when every value is a String.
+        if let raw = defaults.dictionary(forKey: Self.folderColorsKey) {
+            var loaded: [String: FolderColor] = [:]
+            for (key, value) in raw {
+                guard let name = value as? String,
+                      let color = FolderColor(rawValue: name),
+                      color != .none else { continue }
+                loaded[key] = color
+            }
+            folderColors = loaded
         }
         // Persist the browsing position (lastFileName / lastIndex) on quit —
         // ratings are saved on every change, but plain navigation isn't.
@@ -365,10 +468,11 @@ class CullingSession: ObservableObject {
     /// Move `url` to the front of the recent-folders list and persist it.
     private func addToRecents(_ url: URL) {
         // Never persist ephemeral test / system temp directories.
-        let path = url.path
+        // Use standardized paths so keys match `folderColors` / pin lookups.
+        let path = url.standardizedFileURL.path
         guard Self.isPersistableFolderPath(path) else { return }
 
-        var paths = [path] + recentFolders.map(\.path).filter { $0 != path }
+        var paths = [path] + recentFolders.map { $0.standardizedFileURL.path }.filter { $0 != path }
         if paths.count > Self.maxRecentFolders {
             paths = Array(paths.prefix(Self.maxRecentFolders))
         }
@@ -427,6 +531,30 @@ class CullingSession: ObservableObject {
         } else {
             pinFolder(url)
         }
+    }
+
+    func color(for folder: URL) -> FolderColor {
+        folderColors[folder.standardizedFileURL.path] ?? .none
+    }
+
+    func setFolderColor(_ color: FolderColor, for url: URL) {
+        let path = url.standardizedFileURL.path
+        guard Self.isPersistableFolderPath(path) else { return }
+        var next = folderColors
+        if color == .none {
+            next.removeValue(forKey: path)
+        } else {
+            next[path] = color
+        }
+        folderColors = next
+        persistFolderColors()
+    }
+
+    private func persistFolderColors() {
+        let raw = folderColors.mapValues(\.rawValue)
+        defaults.set(raw, forKey: Self.folderColorsKey)
+        // Flush promptly so a fast quit / reinstall mid-session keeps colors.
+        defaults.synchronize()
     }
 
     private static func isPersistableFolderPath(_ path: String) -> Bool {

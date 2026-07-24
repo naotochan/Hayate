@@ -276,6 +276,12 @@ struct FolderSidebar: View {
         let available = FileManager.default.isReadableFile(atPath: url.path)
         let isCurrent = session.folderURL?.standardizedFileURL.path == url.standardizedFileURL.path
         let pinTitle = pinned ? "Unpin" : "Pin"
+        let folderColor = session.color(for: url)
+        let iconColor: Color = {
+            if !available { return HayateTheme.fg(0.22) }
+            if let tint = folderColor.swatchColor { return tint }
+            return isCurrent ? Color.accentColor : HayateTheme.fg(0.55)
+        }()
 
         return HStack(spacing: 4) {
             Button {
@@ -285,9 +291,7 @@ struct FolderSidebar: View {
                 HStack(spacing: 8) {
                     Image(systemName: "folder.fill")
                         .font(.system(size: 12))
-                        .foregroundColor(available
-                                         ? (isCurrent ? Color.accentColor : HayateTheme.fg(0.55))
-                                         : HayateTheme.fg(0.22))
+                        .foregroundColor(iconColor)
                         .frame(width: 16)
 
                     VStack(alignment: .leading, spacing: 1) {
@@ -330,11 +334,6 @@ struct FolderSidebar: View {
                 .fill(isCurrent ? HayateTheme.wash(0.1) : Color.clear)
         )
         .contextMenu {
-            Button("Open") {
-                guard available else { return }
-                onSelect(url)
-            }
-            .disabled(!available)
             Button("Show in Finder") {
                 guard available else { return }
                 NSWorkspace.shared.activateFileViewerSelecting([url])
@@ -356,12 +355,43 @@ struct FolderSidebar: View {
                 .disabled(outCount == 0)
             }
 
+            Divider()
+            folderColorMenu(for: url, current: folderColor)
+
             if session.recentFolders.contains(where: {
                 $0.standardizedFileURL.path == url.standardizedFileURL.path
             }) {
                 Divider()
                 Button("Remove from Recent", role: .destructive) {
                     session.removeFromRecents(url)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func folderColorMenu(for url: URL, current: FolderColor) -> some View {
+        // Product term — keep English in both languages (like Keep / Maybe / Out).
+        Menu("Color") {
+            Button {
+                session.setFolderColor(.none, for: url)
+            } label: {
+                Label {
+                    Text(FolderColor.none.menuTitle)
+                } icon: {
+                    Image(nsImage: FolderColor.none.menuDotImage(selected: current == .none))
+                }
+            }
+            Divider()
+            ForEach(FolderColor.swatches) { color in
+                Button {
+                    session.setFolderColor(color, for: url)
+                } label: {
+                    Label {
+                        Text(color.menuTitle)
+                    } icon: {
+                        Image(nsImage: color.menuDotImage(selected: current == color))
+                    }
                 }
             }
         }

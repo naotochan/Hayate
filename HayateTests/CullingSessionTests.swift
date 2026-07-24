@@ -673,4 +673,41 @@ final class CullingSessionTests: XCTestCase {
         let dates: [Date?] = [t0, t0.addingTimeInterval(3600)]
         XCTAssertTrue(SceneBoundary.startIndices(dates: dates, gapMinutes: 0).isEmpty)
     }
+
+    // MARK: - Folder colors
+
+    func testFolderColorsSurviveRelaunch() throws {
+        let base = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("HayateFolderColor-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: base) }
+        try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+
+        session.setFolderColor(.red, for: base)
+        XCTAssertEqual(session.color(for: base), .red)
+
+        // Simulate quit → relaunch / app update (new session, same defaults suite).
+        let relaunched = CullingSession(defaults: testDefaults)
+        XCTAssertEqual(relaunched.color(for: base), .red)
+        XCTAssertEqual(
+            testDefaults.dictionary(forKey: CullingSession.folderColorsKey)?[base.standardizedFileURL.path] as? String,
+            "red"
+        )
+    }
+
+    func testFolderColorClearRemovesPersistedEntry() throws {
+        let base = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("HayateFolderColorClear-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: base) }
+        try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+
+        session.setFolderColor(.blue, for: base)
+        session.setFolderColor(.none, for: base)
+        XCTAssertEqual(session.color(for: base), .none)
+
+        let relaunched = CullingSession(defaults: testDefaults)
+        XCTAssertEqual(relaunched.color(for: base), .none)
+        XCTAssertNil(
+            testDefaults.dictionary(forKey: CullingSession.folderColorsKey)?[base.standardizedFileURL.path]
+        )
+    }
 }
