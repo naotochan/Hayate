@@ -356,11 +356,10 @@ struct FolderSidebar: View {
                 .disabled(outCount == 0)
             }
 
-            Divider()
-            Button(pinTitle, action: pinAction)
             if session.recentFolders.contains(where: {
                 $0.standardizedFileURL.path == url.standardizedFileURL.path
             }) {
+                Divider()
                 Button("Remove from Recent", role: .destructive) {
                     session.removeFromRecents(url)
                 }
