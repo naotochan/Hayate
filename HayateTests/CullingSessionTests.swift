@@ -673,4 +673,83 @@ final class CullingSessionTests: XCTestCase {
         let dates: [Date?] = [t0, t0.addingTimeInterval(3600)]
         XCTAssertTrue(SceneBoundary.startIndices(dates: dates, gapMinutes: 0).isEmpty)
     }
+
+    // MARK: - Multi-folder open
+
+    func testRequestOpenFoldersRegistersExtrasInRecents() throws {
+        // Temp paths are not persisted to Recents — use Caches instead.
+        let base = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("HayateMultiFolder-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: base) }
+
+        let a = base.appendingPathComponent("A", isDirectory: true)
+        let b = base.appendingPathComponent("B", isDirectory: true)
+        let c = base.appendingPathComponent("C", isDirectory: true)
+        for url in [a, b, c] {
+            try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        }
+
+        session.requestOpen(folders: [a, b, c])
+
+        XCTAssertEqual(session.directOpenRequest?.standardizedFileURL.path, a.standardizedFileURL.path)
+        XCTAssertEqual(
+            session.recentFolders.map { $0.standardizedFileURL.path },
+            [b, c].map { $0.standardizedFileURL.path },
+            "Extras should be registered in drop order before the first folder opens"
+        )
+    }
+
+    func testRememberFoldersPreservesOrderAndDedupes() throws {
+        let base = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("HayateRemember-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: base) }
+
+        let a = base.appendingPathComponent("A", isDirectory: true)
+        let b = base.appendingPathComponent("B", isDirectory: true)
+        try FileManager.default.createDirectory(at: a, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: b, withIntermediateDirectories: true)
+
+        session.rememberFolders([a, b, a])
+        XCTAssertEqual(
+            session.recentFolders.map { $0.standardizedFileURL.path },
+            [a, b].map { $0.standardizedFileURL.path }
+        )
+    }
+
+    // MARK: - Folder colors
+
+    func testFolderColorsSurviveRelaunch() throws {
+        let base = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("HayateFolderColor-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: base) }
+        try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+
+        session.setFolderColor(.red, for: base)
+        XCTAssertEqual(session.color(for: base), .red)
+
+        // Simulate quit → relaunch / app update (new session, same defaults suite).
+        let relaunched = CullingSession(defaults: testDefaults)
+        XCTAssertEqual(relaunched.color(for: base), .red)
+        XCTAssertEqual(
+            testDefaults.dictionary(forKey: CullingSession.folderColorsKey)?[base.standardizedFileURL.path] as? String,
+            "red"
+        )
+    }
+
+    func testFolderColorClearRemovesPersistedEntry() throws {
+        let base = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("HayateFolderColorClear-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: base) }
+        try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+
+        session.setFolderColor(.blue, for: base)
+        session.setFolderColor(.none, for: base)
+        XCTAssertEqual(session.color(for: base), .none)
+
+        let relaunched = CullingSession(defaults: testDefaults)
+        XCTAssertEqual(relaunched.color(for: base), .none)
+        XCTAssertNil(
+            testDefaults.dictionary(forKey: CullingSession.folderColorsKey)?[base.standardizedFileURL.path]
+        )
+    }
 }

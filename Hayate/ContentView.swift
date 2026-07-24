@@ -367,14 +367,16 @@ struct ContentView: View {
             })
         }
         .onDrop(of: [.fileURL], isTargeted: $isDropTargeted) { providers in
-            guard let provider = providers.first else { return false }
-            _ = provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
-                guard let data = item as? Data,
-                      let url = URL(dataRepresentation: data, relativeTo: nil),
-                      (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true else { return }
-                DispatchQueue.main.async {
-                    openFolderAndReload(url)
+            guard !providers.isEmpty else { return false }
+            Task { @MainActor in
+                var folders: [URL] = []
+                for provider in providers {
+                    guard let url = await Self.loadDroppedFileURL(from: provider),
+                          (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true
+                    else { continue }
+                    folders.append(url)
                 }
+                openFoldersAndReload(folders)
             }
             return true
         }
@@ -419,14 +421,43 @@ struct ContentView: View {
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
-        panel.allowsMultipleSelection = false
+        panel.allowsMultipleSelection = true
         panel.message = L.t(
-            "Select a folder containing RAW photos",
-            ja: "RAW写真が入ったフォルダを選んでください"
+            "Select folders containing RAW photos",
+            ja: "RAW写真が入ったフォルダを選んでください（複数可）"
         )
 
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        openFolderAndReload(url)
+        guard panel.runModal() == .OK, !panel.urls.isEmpty else { return }
+        openFoldersAndReload(panel.urls)
+    }
+
+    /// Open the first folder for culling; register any additional folders as
+    /// independent Recents so the sidebar can switch between them.
+    func openFoldersAndReload(_ urls: [URL]) {
+        var seen = Set<String>()
+        let folders = urls.filter { seen.insert($0.standardizedFileURL.path).inserted }
+        guard let first = folders.first else { return }
+        if folders.count > 1 {
+            session.rememberFolders(Array(folders.dropFirst()))
+        }
+        openFolderAndReload(first)
+    }
+
+    /// Resolve a dropped file URL from an `NSItemProvider` (Data or URL payload).
+    private static func loadDroppedFileURL(from provider: NSItemProvider) async -> URL? {
+        await withCheckedContinuation { continuation in
+            _ = provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
+                let url: URL?
+                if let data = item as? Data {
+                    url = URL(dataRepresentation: data, relativeTo: nil)
+                } else if let direct = item as? URL {
+                    url = direct
+                } else {
+                    url = nil
+                }
+                continuation.resume(returning: url)
+            }
+        }
     }
 
     /// Shared open-folder flow used by the dialog, the recent-folders menu,
