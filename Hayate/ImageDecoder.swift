@@ -123,20 +123,51 @@ actor DecodeLimiter {
 /// opening a 200+ file folder cannot launch dozens of full RAW decodes at once.
 ///
 /// Thread safety:
-/// - `CIContext` is documented thread-safe and is shared.
-/// - `CIRAWFilter` is NOT thread-safe, so each decode creates a new instance.
+/// - Two `CIContext`s are kept (each is thread-safe with its own lock):
+///   `ciContext` for plain CGImage/texture renders, and a lazily created RAW
+///   context for CIRAWFilter-backed renders — a RawCamera hang holds the
+///   context lock for the whole render, and must not freeze display renders.
+/// - `CIRAWFilter` is NOT thread-safe, so each decode creates a new instance,
+///   and decodes run serially (see `rawLimiter`).
 /// - `MTLDevice` is thread-safe.
 final class ImageDecoder: @unchecked Sendable {
     private let ciContext: CIContext
     private let device: MTLDevice
     private let signpostLog = OSLog(subsystem: "com.hayate", category: "Decode")
-    /// Two concurrent full RAW decodes: enough for current + one neighbor,
-    /// without thrashing on large folders.
-    private let rawLimiter = DecodeLimiter(maxConcurrent: 2)
+    /// Serial full RAW decodes. RawCamera (CIRAWFilter's engine) has shared
+    /// internal queues that can deadlock under concurrent decodes — observed
+    /// in the field as a permanent stall holding the CIContext lock.
+    private let rawLimiter = DecodeLimiter(maxConcurrent: 1)
+
+    /// Lazily created on first RAW decode (off the main thread — CIContext
+    /// creation compiles GPU shaders). See the class doc for why RAW renders
+    /// get their own context.
+    private var rawContextStorage: CIContext?
+    private let rawContextLock = NSLock()
 
     init(ciContext: CIContext, device: MTLDevice) {
         self.ciContext = ciContext
         self.device = device
+    }
+
+    private func rawContext() -> CIContext {
+        rawContextLock.lock()
+        defer { rawContextLock.unlock() }
+        if let rawContextStorage { return rawContextStorage }
+        let context = CIContext(mtlDevice: device)
+        rawContextStorage = context
+        return context
+    }
+
+    /// Returns a task that logs an error if it isn't cancelled within
+    /// `seconds`. A decode can't be cancelled mid-CIRAWFilter-render — the
+    /// log exists to identify files that hang RawCamera.
+    private func startStallWatchdog(seconds: UInt64, label: String, url: URL) -> Task<Void, Never> {
+        Task {
+            try? await Task.sleep(nanoseconds: seconds * 1_000_000_000)
+            guard !Task.isCancelled else { return }
+            os_log(.error, log: signpostLog, "%{public}@ stuck >%llus: %{public}@ — this file may hang RawCamera; draft previews remain usable", label, seconds, url.lastPathComponent)
+        }
     }
 
     // MARK: - Public async API (dispatches to background)
@@ -153,9 +184,12 @@ final class ImageDecoder: @unchecked Sendable {
     /// Typically ~200-500ms depending on format and resolution.
     func decodeRAW(url: URL, displaySize: CGSize, focusPeaking: Bool = false) async -> SendableTexture? {
         await rawLimiter.withPermit(tier: .high) {
-            await Task.detached(priority: .userInitiated) { [self] in
+            let watchdog = startStallWatchdog(seconds: 10, label: "decodeRAW", url: url)
+            let result = await Task.detached(priority: .userInitiated) { [self] in
                 decodeRAWSync(url: url, displaySize: displaySize, focusPeaking: focusPeaking)
             }.value
+            watchdog.cancel()
+            return result
         } ?? nil
     }
 
@@ -166,18 +200,24 @@ final class ImageDecoder: @unchecked Sendable {
     func decodeRAWToCGImage(url: URL, displaySize: CGSize, priority: TaskPriority = .userInitiated) async -> CGImage? {
         let tier: DecodeLimiter.Tier = priority >= .userInitiated ? .high : .low
         return await rawLimiter.withPermit(tier: tier) {
-            await Task.detached(priority: priority) { [self] in
+            let watchdog = startStallWatchdog(seconds: 10, label: "decodeRAWToCGImage", url: url)
+            let result = await Task.detached(priority: priority) { [self] in
                 decodeRAWToCGImageSync(url: url, displaySize: displaySize)
             }.value
+            watchdog.cancel()
+            return result
         } ?? nil
     }
 
     /// Decode a RAW file at full resolution (for zoom).
     func decodeRAWFullResolution(url: URL) async -> SendableTexture? {
         await rawLimiter.withPermit(tier: .high) {
-            await Task.detached(priority: .userInitiated) { [self] in
+            let watchdog = startStallWatchdog(seconds: 10, label: "decodeRAWFullResolution", url: url)
+            let result = await Task.detached(priority: .userInitiated) { [self] in
                 decodeRAWFullResolutionSync(url: url)
             }.value
+            watchdog.cancel()
+            return result
         } ?? nil
     }
 
@@ -290,7 +330,7 @@ final class ImageDecoder: @unchecked Sendable {
                 displaySize.height / outputImage.extent.height)
         )
         let scaledImage = outputImage.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
-        return ciContext.createCGImage(scaledImage, from: scaledImage.extent)
+        return rawContext().createCGImage(scaledImage, from: scaledImage.extent)
     }
 
     private func decodeRAWSync(url: URL, displaySize: CGSize, focusPeaking: Bool) -> SendableTexture? {
@@ -312,7 +352,7 @@ final class ImageDecoder: @unchecked Sendable {
             scaledImage = applyFocusPeaking(to: scaledImage)
         }
 
-        guard let tex = renderToTexture(image: scaledImage) else { return nil }
+        guard let tex = renderToTexture(image: scaledImage, context: rawContext()) else { return nil }
         return SendableTexture(texture: tex)
     }
 
@@ -325,13 +365,15 @@ final class ImageDecoder: @unchecked Sendable {
             return nil
         }
 
-        guard let tex = renderToTexture(image: outputImage) else { return nil }
+        guard let tex = renderToTexture(image: outputImage, context: rawContext()) else { return nil }
         return SendableTexture(texture: tex)
     }
 
     private func cgImageToTextureSync(_ cgImage: CGImage) -> SendableTexture? {
         let ciImage = CIImage(cgImage: cgImage)
-        guard let tex = renderToTexture(image: ciImage) else { return nil }
+        // Plain CGImage renders stay on the display context — only
+        // CIRAWFilter-backed renders use the RAW context.
+        guard let tex = renderToTexture(image: ciImage, context: ciContext) else { return nil }
         return SendableTexture(texture: tex)
     }
 
@@ -498,7 +540,7 @@ final class ImageDecoder: @unchecked Sendable {
 
     // MARK: - Private
 
-    private func renderToTexture(image: CIImage) -> MTLTexture? {
+    private func renderToTexture(image: CIImage, context: CIContext) -> MTLTexture? {
         let width = Int(image.extent.width)
         let height = Int(image.extent.height)
 
@@ -518,7 +560,7 @@ final class ImageDecoder: @unchecked Sendable {
         }
 
         let colorSpace = CGColorSpaceCreateDeviceRGB()
-        ciContext.render(
+        context.render(
             image,
             to: texture,
             commandBuffer: nil,
