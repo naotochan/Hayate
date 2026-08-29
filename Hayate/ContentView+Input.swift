@@ -159,6 +159,8 @@ extension ContentView {
             } else if compareActive {
                 compareActiveSlot = max(0, compareActiveSlot - 1)
                 session.currentIndex = compareIndices[compareActiveSlot]
+            } else if showGrid {
+                moveGridSelection(by: -1)
             } else {
                 navigateBack()
             }
@@ -170,6 +172,8 @@ extension ContentView {
             } else if compareActive {
                 compareActiveSlot = min(compareIndices.count - 1, compareActiveSlot + 1)
                 session.currentIndex = compareIndices[compareActiveSlot]
+            } else if showGrid {
+                moveGridSelection(by: 1)
             } else {
                 navigateForward()
             }
@@ -309,10 +313,12 @@ extension ContentView {
 
         case .selectAllGrid:
             guard showGrid else { return false }
-            if selectedIndices.count == filteredFiles.count {
+            let visibleCount = gridDisplayItems.count
+            if selectedIndices.count == visibleCount,
+               Set(gridDisplayItems.map(\.fileIndex)) == selectedIndices {
                 selectedIndices.removeAll()
             } else {
-                selectedIndices = Set(filteredFiles.map(\.index))
+                selectAllVisibleGridItems()
             }
             return true
 

@@ -608,3 +608,53 @@ enum SceneBoundary {
         return starts
     }
 }
+
+/// Burst (rapid-fire) stacks for the grid — consecutive shots closer than `maxGapSeconds`.
+struct BurstGroup: Sendable, Equatable {
+    /// File index of the first member; stable burst identifier.
+    let id: Int
+    let memberIndices: [Int]
+}
+
+enum BurstGrouping {
+    /// Consecutive runs where each adjacent pair is strictly closer than `maxGapSeconds`.
+    /// Runs of two or more photos become bursts. Missing EXIF dates break a run.
+    static func groups(dates: [Date?], maxGapSeconds: TimeInterval) -> [BurstGroup] {
+        guard maxGapSeconds > 0, !dates.isEmpty else { return [] }
+        var result: [BurstGroup] = []
+        var run: [Int] = [0]
+
+        for i in 1..<dates.count {
+            let continues: Bool
+            if let prev = dates[i - 1], let cur = dates[i] {
+                continues = abs(cur.timeIntervalSince(prev)) < maxGapSeconds
+            } else {
+                continues = false
+            }
+
+            if continues {
+                run.append(i)
+            } else {
+                if run.count >= 2 {
+                    result.append(BurstGroup(id: run[0], memberIndices: run))
+                }
+                run = [i]
+            }
+        }
+        if run.count >= 2 {
+            result.append(BurstGroup(id: run[0], memberIndices: run))
+        }
+        return result
+    }
+
+    /// Maps every burst member file index to its burst start index (`BurstGroup.id`).
+    static func memberToBurstID(groups: [BurstGroup]) -> [Int: Int] {
+        var map: [Int: Int] = [:]
+        for group in groups {
+            for index in group.memberIndices {
+                map[index] = group.id
+            }
+        }
+        return map
+    }
+}

@@ -90,9 +90,16 @@ struct ContentView: View {
     @State var gridColumnCount = 5
     /// File indices that start a new scene (EXIF time gap). Empty when off / loading.
     @State var sceneStartIndices: Set<Int> = []
+    @State var burstGroups: [BurstGroup] = []
+    /// Burst start indices (`BurstGroup.id`) expanded in the grid.
+    @State var expandedBurstIDs: Set<Int> = []
     @State var captureDateTask: Task<Void, Never>?
     /// Gap (minutes) between shots that draws a scene separator in the grid. 0 = off.
     @AppStorage("sceneGapMinutes") var sceneGapMinutes = 15
+    /// Collapse rapid-fire bursts into one grid cell (All filter only).
+    @AppStorage("burstGroupingEnabled") var burstGroupingEnabled = true
+    /// Max adjacent capture-time gap (seconds) within one burst. 0 = off.
+    @AppStorage("burstGapSeconds") var burstGapSeconds = 2
     /// Advance to the next photo automatically after rating/favorite/reject.
     @AppStorage("autoAdvance") var autoAdvance = false
     /// J/L (and arrows) skip photos that already have a decision.
@@ -583,6 +590,8 @@ struct ContentView: View {
         captureDateTask?.cancel()
         captureDateTask = nil
         sceneStartIndices = []
+        burstGroups = []
+        expandedBurstIDs = []
 
         // Textures / decode results
         currentTexture = nil

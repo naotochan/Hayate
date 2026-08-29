@@ -47,6 +47,8 @@ struct SettingsView: View {
     @AppStorage("colorizeKeepOnly") private var colorizeKeepOnly = true
     @AppStorage("cullingProfileTriage") private var cullingProfileTriage = true
     @AppStorage("sceneGapMinutes") private var sceneGapMinutes = 15
+    @AppStorage("burstGroupingEnabled") private var burstGroupingEnabled = true
+    @AppStorage("burstGapSeconds") private var burstGapSeconds = 2
     @AppStorage("appAppearance") private var appAppearance: AppAppearance = .system
     @AppStorage("previewCacheSizeLimitGB") private var cacheSizeLimitGB: Int = 10
     @AppStorage("previewCacheLocation") private var cacheLocationPath: String = ""
@@ -120,9 +122,9 @@ struct SettingsView: View {
         case .general:
             return [
                 "appearance", "language", "culling", "keep", "maybe", "out", "stars",
-                "auto-advance", "skip", "xmp", "grid", "welcome", "coffee", "support",
+                "auto-advance", "skip", "xmp", "grid", "burst", "stack", "welcome", "coffee", "support",
                 "buy me a coffee", "外観", "言語", "選別", "自動", "スキップ", "グリッド",
-                "ようこそ", "コーヒー", "支援",
+                "バースト", "連写", "スタック", "ようこそ", "コーヒー", "支援",
             ].joined(separator: " ")
         case .shortcuts:
             return "keyboard shortcuts ショートカット キー"
@@ -296,6 +298,39 @@ struct SettingsView: View {
                     .labelsHidden()
                     .pickerStyle(.menu)
                     .frame(maxWidth: 120)
+                }
+
+                HayateChrome.RowSeparator()
+
+                HayateChrome.ToggleRow(
+                    title: L.t("Burst grouping", ja: "バーストグルーピング"),
+                    subtitle: L.t(
+                        "In the All grid, collapse rapid consecutive shots into one stack (like Lightroom Auto Stack). Other filters show every photo.",
+                        ja: "「All」グリッドで連写を1スタックに折りたたみます（Lightroom の Auto Stack 相当）。他のフィルタでは全枚表示します。"
+                    ),
+                    isOn: $burstGroupingEnabled
+                )
+
+                HayateChrome.RowSeparator()
+
+                HayateChrome.Row(
+                    title: L.t("Burst gap", ja: "バースト間隔"),
+                    subtitle: L.t(
+                        "Photos shot closer together than this (by EXIF capture time) are grouped. Missing dates never join a burst.",
+                        ja: "この間隔（EXIF 撮影時刻）より短い連続写真をまとめます。EXIF 日付がない写真はバーストに含めません。"
+                    )
+                ) {
+                    Picker("", selection: $burstGapSeconds) {
+                        Text(L.t("Off", ja: "オフ")).tag(0)
+                        Text(L.t("1 second", ja: "1秒")).tag(1)
+                        Text(L.t("2 seconds", ja: "2秒")).tag(2)
+                        Text(L.t("3 seconds", ja: "3秒")).tag(3)
+                        Text(L.t("5 seconds", ja: "5秒")).tag(5)
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.menu)
+                    .frame(maxWidth: 120)
+                    .disabled(!burstGroupingEnabled)
                 }
             }
 
