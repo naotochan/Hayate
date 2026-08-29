@@ -38,6 +38,13 @@ actor PrefetchManager {
     /// Access order for LRU eviction. Most recent at the end.
     private var accessOrder: [URL] = []
 
+    /// Full-resolution decode cache — separate from the display LRU because
+    /// each entry can be ~200 MB. Capped by entry count and total pixel budget.
+    private var fullResCache: [URL: FullResCacheEntry] = [:]
+    private var fullResAccessOrder: [URL] = []
+    private static let maxFullResEntries = 2
+    private static let maxFullResTotalPixels = 100_000_000
+
     /// Currently running prefetch tasks, keyed by file URL.
     private var activeTasks: [URL: (task: Task<Void, Never>, token: UUID)] = [:]
 
@@ -54,6 +61,11 @@ actor PrefetchManager {
         let isRAW: Bool
     }
 
+    private struct FullResCacheEntry {
+        let texture: MTLTexture
+        let pixelCount: Int
+    }
+
     init(decoder: ImageDecoder, device: MTLDevice, diskCache: DiskCacheManager? = nil, buildProgress: PreviewBuildProgress) {
         self.decoder = decoder
         self.diskCache = diskCache
@@ -62,6 +74,37 @@ actor PrefetchManager {
         let perTexture: UInt64 = 3840 * 2160 * 4
         let dynamicMax = Int(recommended / 2 / perTexture)
         self.maxCacheSize = max(10, min(dynamicMax, 40))
+    }
+
+    // MARK: - Full-resolution cache
+
+    /// Return a cached full-resolution texture without decoding.
+    func cachedFullResolution(for url: URL) -> SendableTexture? {
+        guard let entry = fullResCache[url] else { return nil }
+        touchFullResAccess(url)
+        return SendableTexture(texture: entry.texture)
+    }
+
+    /// Load at full resolution, reusing the LRU cache when possible.
+    func loadFullResolution(for url: URL) async -> SendableTexture? {
+        if let cached = cachedFullResolution(for: url) {
+            guard !Task.isCancelled else { return nil }
+            return cached
+        }
+        guard let sendable = await decoder.decodeRAWFullResolution(url: url) else {
+            return nil
+        }
+        guard !Task.isCancelled else { return nil }
+        storeFullRes(texture: sendable.texture, for: url)
+        return sendable
+    }
+
+    /// Full-quality display cache hit. Draft (embedded JPEG) entries are
+    /// ignored so peaking can fall through to `loadTexture` for RAW upgrade.
+    func cachedDisplayTexture(for url: URL) -> SendableTexture? {
+        guard let entry = cache[url], entry.isRAW else { return nil }
+        touchAccess(url)
+        return SendableTexture(texture: entry.texture)
     }
 
     // MARK: - Memory cache
@@ -400,6 +443,8 @@ actor PrefetchManager {
         activeTasks.removeAll()
         cache.removeAll()
         accessOrder.removeAll()
+        fullResCache.removeAll()
+        fullResAccessOrder.removeAll()
         stopBackgroundBuild()
     }
 
@@ -420,6 +465,39 @@ actor PrefetchManager {
         while cache.count > maxCacheSize, let oldest = accessOrder.first {
             cache[oldest] = nil
             accessOrder.removeFirst()
+        }
+    }
+
+    private func storeFullRes(texture: MTLTexture, for url: URL) {
+        let pixelCount = texture.width * texture.height
+        // Skip cache when a single frame exceeds the pixel budget — storing
+        // would self-evict immediately (e.g. GFX100 ≈102M px) with no benefit.
+        guard pixelCount <= Self.maxFullResTotalPixels else { return }
+        fullResCache[url] = FullResCacheEntry(texture: texture, pixelCount: pixelCount)
+        touchFullResAccess(url)
+        evictFullResIfNeeded()
+    }
+
+    private func touchFullResAccess(_ url: URL) {
+        fullResAccessOrder.removeAll { $0 == url }
+        fullResAccessOrder.append(url)
+    }
+
+    private func removeFullResEntry(_ url: URL) {
+        fullResCache[url] = nil
+        fullResAccessOrder.removeAll { $0 == url }
+    }
+
+    private func evictFullResIfNeeded() {
+        while fullResCache.count > Self.maxFullResEntries, let oldest = fullResAccessOrder.first {
+            removeFullResEntry(oldest)
+        }
+        var totalPixels = fullResCache.values.reduce(0) { $0 + $1.pixelCount }
+        while totalPixels > Self.maxFullResTotalPixels, let oldest = fullResAccessOrder.first {
+            if let entry = fullResCache[oldest] {
+                totalPixels -= entry.pixelCount
+            }
+            removeFullResEntry(oldest)
         }
     }
 }
