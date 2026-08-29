@@ -8,7 +8,48 @@ struct MetalImageView: NSViewRepresentable {
     let device: MTLDevice
     var zoomScale: CGFloat = 1.0
     var panOffset: CGPoint = .zero
+    /// Updated from `MTKView.drawableSize` (physical pixels, Retina-aware).
+    @Binding var reportedDrawableSize: CGSize
     @Environment(\.colorScheme) private var colorScheme
+
+    init(
+        texture: MTLTexture?,
+        device: MTLDevice,
+        zoomScale: CGFloat = 1.0,
+        panOffset: CGPoint = .zero,
+        reportedDrawableSize: Binding<CGSize> = .constant(.zero)
+    ) {
+        self.texture = texture
+        self.device = device
+        self.zoomScale = zoomScale
+        self.panOffset = panOffset
+        _reportedDrawableSize = reportedDrawableSize
+    }
+
+    /// `zoomScale` where one image texel maps to one drawable pixel (100% / 1:1).
+    /// `drawableSize` must be physical pixels (`MTKView.drawableSize`), not points.
+    static func oneToOneZoomScale(textureSize: CGSize, drawableSize: CGSize) -> CGFloat {
+        guard textureSize.width > 0, textureSize.height > 0,
+              drawableSize.width > 0, drawableSize.height > 0 else {
+            return 1.0
+        }
+        let viewAspect = drawableSize.width / drawableSize.height
+        let texAspect = textureSize.width / textureSize.height
+
+        var baseX = 1.0 as CGFloat
+        var baseY = 1.0 as CGFloat
+        if texAspect > viewAspect {
+            baseY = viewAspect / texAspect
+        } else {
+            baseX = texAspect / viewAspect
+        }
+
+        // Fit (`zoomScale` 1) maps the texture into `baseX`/`baseY` NDC half-extents;
+        // displayed texel width = baseX * zoomScale * drawableWidth.
+        let scaleX = textureSize.width / (baseX * drawableSize.width)
+        let scaleY = textureSize.height / (baseY * drawableSize.height)
+        return max(scaleX, scaleY)
+    }
 
     func makeNSView(context: Context) -> MTKView {
         let mtkView = MTKView(frame: .zero, device: device)
@@ -22,15 +63,25 @@ struct MetalImageView: NSViewRepresentable {
     }
 
     func updateNSView(_ mtkView: MTKView, context: Context) {
+        context.coordinator.reportedDrawableSize = $reportedDrawableSize
         context.coordinator.texture = texture
         context.coordinator.zoomScale = Float(zoomScale)
         context.coordinator.panOffset = panOffset
         mtkView.clearColor = HayateTheme.metalClear(for: colorScheme)
+        publishDrawableSize(from: mtkView)
         mtkView.setNeedsDisplay(mtkView.bounds)
     }
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(device: device)
+        Coordinator(device: device, reportedDrawableSize: $reportedDrawableSize)
+    }
+
+    private func publishDrawableSize(from view: MTKView) {
+        let size = view.drawableSize
+        guard size.width > 0, size.height > 0 else { return }
+        if reportedDrawableSize != size {
+            reportedDrawableSize = size
+        }
     }
 
     @MainActor
@@ -48,7 +99,10 @@ struct MetalImageView: NSViewRepresentable {
         private var redrawPending = false
         private weak var lastView: MTKView?
 
-        init(device: MTLDevice) {
+        private var reportedDrawableSize: Binding<CGSize>
+
+        init(device: MTLDevice, reportedDrawableSize: Binding<CGSize>) {
+            self.reportedDrawableSize = reportedDrawableSize
             self.commandQueue = device.makeCommandQueue()
 
             let library: MTLLibrary?
@@ -73,9 +127,20 @@ struct MetalImageView: NSViewRepresentable {
             super.init()
         }
 
-        func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {}
+        func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {
+            guard size.width > 0, size.height > 0 else { return }
+            if reportedDrawableSize.wrappedValue != size {
+                reportedDrawableSize.wrappedValue = size
+            }
+        }
 
         func draw(in view: MTKView) {
+            let drawableSize = view.drawableSize
+            if drawableSize.width > 0, drawableSize.height > 0,
+               reportedDrawableSize.wrappedValue != drawableSize {
+                reportedDrawableSize.wrappedValue = drawableSize
+            }
+
             // Bound in-flight display work: when the GPU is backed up (heavy
             // RAW renders during rapid navigation), drop the frame instead of
             // blocking the main thread inside `view.currentDrawable` (drawable

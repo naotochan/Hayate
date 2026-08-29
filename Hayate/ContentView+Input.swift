@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import MetalKit
 
 /// Keyboard, scroll-wheel, and drag input handling for ContentView.
 extension ContentView {
@@ -210,7 +211,12 @@ extension ContentView {
                 panOffset = .zero
                 loadFullResolutionIfNeeded()
             }
+            isOneToOneZoomTarget = false
             updatePanCursor(dragging: false)
+            return true
+
+        case .toggleOneToOneZoom:
+            toggleOneToOneZoom()
             return true
 
         case .toggleFocusPeaking:
@@ -326,6 +332,7 @@ extension ContentView {
             let delta = event.magnification
             zoomScale = max(1.0, min(zoomScale * (1.0 + delta), 10.0))
             if zoomScale <= 1.01 { panOffset = .zero }
+            isOneToOneZoomTarget = false
             updatePanCursor(dragging: false)
             loadFullResolutionIfNeeded()
         } else if event.type == .scrollWheel {
@@ -334,6 +341,7 @@ extension ContentView {
                 let delta = event.scrollingDeltaY * 0.01
                 zoomScale = max(1.0, min(zoomScale * (1.0 + delta), 10.0))
                 if zoomScale <= 1.01 { panOffset = .zero }
+                isOneToOneZoomTarget = false
                 updatePanCursor(dragging: false)
                 loadFullResolutionIfNeeded()
             } else {
@@ -400,6 +408,95 @@ extension ContentView {
     func resetZoom() {
         zoomScale = 1.0
         panOffset = .zero
+        isOneToOneZoomTarget = false
         updatePanCursor(dragging: false)
+    }
+
+    // MARK: - 1:1 zoom
+
+    func toggleOneToOneZoom() {
+        if isOneToOneZoomTarget {
+            zoomScale = 1.0
+            panOffset = .zero
+            isOneToOneZoomTarget = false
+            updatePanCursor(dragging: false)
+            return
+        }
+
+        guard let oneToOne = currentOneToOneZoomScale() else { return }
+
+        applyOneToOneZoom(oneToOneScale: oneToOne, preservePan: zoomScale > 1.01)
+        isOneToOneZoomTarget = true
+        loadFullResolutionIfNeeded()
+        updatePanCursor(dragging: false)
+    }
+
+    /// Re-apply 1:1 after full-res texture swap (metadata vs decoded size may differ slightly).
+    func syncOneToOneZoomAfterFullResLoad() {
+        guard isOneToOneZoomTarget else { return }
+        guard let oneToOne = currentOneToOneZoomScale(preferTexture: true) else { return }
+        applyOneToOneZoom(oneToOneScale: oneToOne, preservePan: true)
+    }
+
+    private func applyOneToOneZoom(oneToOneScale: CGFloat, preservePan: Bool) {
+        let previousScale = max(zoomScale, 1.0)
+        let targetScale = min(max(oneToOneScale, 1.0), 10.0)
+        zoomScale = targetScale
+        if targetScale <= 1.001 {
+            panOffset = .zero
+        } else if preservePan, previousScale > 1.01 {
+            let ratio = targetScale / previousScale
+            panOffset = CGPoint(x: panOffset.x * ratio, y: panOffset.y * ratio)
+        } else {
+            panOffset = .zero
+        }
+    }
+
+    private func currentOneToOneZoomScale(preferTexture: Bool = false) -> CGFloat? {
+        let imageSize: CGSize?
+        if preferTexture, let texture = currentZoomTexture() {
+            imageSize = CGSize(width: texture.width, height: texture.height)
+        } else if let url = currentZoomFileURL() {
+            imageSize = ImageDecoder.orientedPixelSize(url: url)
+        } else {
+            imageSize = nil
+        }
+        guard let imageSize, imageSize.width > 0, imageSize.height > 0 else { return nil }
+
+        let drawableSize = effectiveDrawableSizeForZoom()
+        guard drawableSize.width > 0, drawableSize.height > 0 else { return nil }
+        return MetalImageView.oneToOneZoomScale(textureSize: imageSize, drawableSize: drawableSize)
+    }
+
+    private func currentZoomFileURL() -> URL? {
+        if compareMode, !compareIndices.isEmpty {
+            let index = compareIndices[compareActiveSlot]
+            guard session.files.indices.contains(index) else { return nil }
+            return session.files[index]
+        }
+        return session.currentFile
+    }
+
+    private func currentZoomTexture() -> MTLTexture? {
+        if compareMode, !compareIndices.isEmpty {
+            return compareTextures[compareIndices[compareActiveSlot]]
+        }
+        return currentTexture
+    }
+
+    private func effectiveDrawableSizeForZoom() -> CGSize {
+        if metalDrawableSize.width > 0, metalDrawableSize.height > 0 {
+            return metalDrawableSize
+        }
+        guard let window = NSApp.keyWindow ?? NSApp.mainWindow,
+              let contentView = window.contentView else {
+            return .zero
+        }
+        let scale = window.backingScaleFactor
+        var size = contentView.bounds.size
+        if compareMode, compareIndices.count > 1 {
+            size.width /= CGFloat(compareIndices.count)
+        }
+        return CGSize(width: size.width * scale, height: size.height * scale)
     }
 }

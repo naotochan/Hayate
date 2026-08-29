@@ -69,6 +69,10 @@ struct ContentView: View {
     static let thumbnailCacheLimit = 600
     @State var zoomScale: CGFloat = 1.0
     @State var panOffset: CGPoint = .zero
+    /// Latest `MTKView.drawableSize` from the primary image view (physical pixels).
+    @State var metalDrawableSize: CGSize = .zero
+    /// When true, re-apply 1:1 zoom after full-res texture swap (preview → full).
+    @State var isOneToOneZoomTarget = false
     /// In-flight full-resolution decode for zoom. `fullResURL` marks the file
     /// being decoded (retrigger guard); `fullResDisplayedURL` marks the file
     /// whose full-res texture actually sits in `currentTexture` — only then
@@ -191,7 +195,13 @@ struct ContentView: View {
                 } else {
                     // Single photo view
                     if let device = metalDevice {
-                        MetalImageView(texture: currentTexture, device: device, zoomScale: zoomScale, panOffset: panOffset)
+                        MetalImageView(
+                            texture: currentTexture,
+                            device: device,
+                            zoomScale: zoomScale,
+                            panOffset: panOffset,
+                            reportedDrawableSize: $metalDrawableSize
+                        )
                     }
 
                     if imageLoadFailed, currentTexture == nil, !isLoading {
@@ -765,7 +775,7 @@ struct ContentView: View {
     /// this file. The texture is intentionally not cached — full-res textures
     /// are large (~200 MB for 45 MP) and only one is alive at a time.
     func loadFullResolutionIfNeeded() {
-        guard zoomScale > 1.01, !focusPeakingEnabled, !showGrid, !compareMode,
+        guard zoomScale > 1.001, !focusPeakingEnabled, !showGrid, !compareMode,
               let file = session.currentFile,
               let decoder = decoder,
               fullResURL != file else { return }
@@ -776,12 +786,13 @@ struct ContentView: View {
                 if !Task.isCancelled { fullResURL = nil }  // allow retry on next zoom event
                 return
             }
-            guard !Task.isCancelled, session.currentFile == file, zoomScale > 1.01 else {
+            guard !Task.isCancelled, session.currentFile == file, zoomScale > 1.001 else {
                 fullResURL = nil
                 return
             }
             fullResDisplayedURL = file
             currentTexture = sendable.texture
+            syncOneToOneZoomAfterFullResLoad()
         }
     }
 

@@ -154,7 +154,7 @@ struct ShortcutsHelpOverlay: View {
         ))
 
         var viewRows: [Row] = []
-        for action in [ActionID.toggleGrid, .toggleCompare, .toggleFitZoom] {
+        for action in [ActionID.toggleGrid, .toggleCompare, .toggleFitZoom, .toggleOneToOneZoom] {
             if let shortcut = bindings[action] {
                 viewRows.append(Row(
                     keys: shortcut.display,
