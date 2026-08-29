@@ -594,6 +594,171 @@ final class CullingSessionTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: xmpURL.path), "Sidecar should be trashed with the photo")
     }
 
+    func testXMPSidecarWritesExplicitColorLabel() {
+        testDefaults.set(true, forKey: "writeXMPSidecars")
+        loadTestFiles(count: 1)
+
+        session.setColorLabel(.blue)
+        CullingSession.flushXMPQueue()
+
+        let xmpURL = tempDir.appendingPathComponent("IMG_0001.xmp")
+        let content = (try? String(contentsOf: xmpURL, encoding: .utf8)) ?? ""
+        XCTAssertTrue(content.contains("xmp:Label=\"Blue\""))
+    }
+
+    func testXMPSidecarLabelOverridesFavoriteConvention() {
+        testDefaults.set(true, forKey: "writeXMPSidecars")
+        loadTestFiles(count: 1)
+
+        session.toggleFavorite()
+        session.setColorLabel(.green)
+        CullingSession.flushXMPQueue()
+
+        let xmpURL = tempDir.appendingPathComponent("IMG_0001.xmp")
+        let content = (try? String(contentsOf: xmpURL, encoding: .utf8)) ?? ""
+        XCTAssertTrue(content.contains("xmp:Label=\"Green\""))
+        XCTAssertFalse(content.contains("xmp:Label=\"Red\""))
+    }
+
+    func testXMPParseStringReadsRatingAndLabel() {
+        let xmp = """
+        <rdf:Description rdf:about=""
+         xmlns:xmp="http://ns.adobe.com/xap/1.0/"
+         xmp:Rating="4"
+         xmp:Label="Purple"/>
+        """
+        let parsed = CullingSession.parseXMPString(xmp)
+        XCTAssertEqual(parsed?.rating, 4)
+        XCTAssertEqual(parsed?.label, .purple)
+    }
+
+    func testXMPParseStringAcceptsSingleQuotesAndWhitespace() {
+        let xmp = """
+        <rdf:Description xmp:Rating = '3' xmp:Label = ' Blue '/>
+        """
+        let parsed = CullingSession.parseXMPString(xmp)
+        XCTAssertEqual(parsed?.rating, 3)
+        XCTAssertEqual(parsed?.label, .blue)
+    }
+
+    func testXMPParseStringIgnoresRatingZeroOnly() {
+        XCTAssertNil(CullingSession.parseXMPString(#"xmp:Rating="0""#))
+    }
+
+    func testXMPParseStringRejectsMalformedXML() {
+        XCTAssertNil(CullingSession.parseXMPString("not xml at all <<>>"))
+        XCTAssertNil(CullingSession.parseXMPString("<xmp:Label>Unknown</xmp:Label>"))
+    }
+
+    func testXMPImportAdoptsForeignSidecar() async {
+        loadTestFiles(count: 2)
+        writeTestXMP(basename: "IMG_0001", rating: 5, label: "Green")
+        writeTestXMP(basename: "IMG_0002", rating: -1)
+
+        let fresh = makeSession()
+        XCTAssertTrue(fresh.openFolder(tempDir))
+        await CullingSession.flushXMPImport()
+
+        XCTAssertEqual(fresh.entries["IMG_0001.CR3"]?.rating, 5)
+        XCTAssertEqual(fresh.entries["IMG_0001.CR3"]?.colorLabel, .green)
+        XCTAssertTrue(fresh.entries["IMG_0002.CR3"]?.isRejected == true)
+    }
+
+    func testXMPImportPrefersJSONOverSidecar() async {
+        loadTestFiles(count:1)
+        let json = SessionData(
+            entries: ["IMG_0001.CR3": CullingSession.PhotoEntry(
+                fileName: "IMG_0001.CR3",
+                rating: 2,
+                colorLabel: .red
+            )],
+            lastIndex: 0,
+            lastFileName: "IMG_0001.CR3"
+        )
+        let jsonURL = tempDir.appendingPathComponent(".hayate.json")
+        try? JSONEncoder().encode(json).write(to: jsonURL)
+        writeTestXMP(basename: "IMG_0001", rating: 5, label: "Blue")
+
+        let fresh = makeSession()
+        XCTAssertTrue(fresh.openFolder(tempDir))
+        await CullingSession.flushXMPImport()
+
+        XCTAssertEqual(fresh.entries["IMG_0001.CR3"]?.rating, 2)
+        XCTAssertEqual(fresh.entries["IMG_0001.CR3"]?.colorLabel, .red)
+    }
+
+    func testXMPImportPersistsToJSON() async {
+        loadTestFiles(count: 1)
+        writeTestXMP(basename: "IMG_0001", rating: 3, label: "Yellow")
+
+        let fresh = makeSession()
+        XCTAssertTrue(fresh.openFolder(tempDir))
+        await CullingSession.flushXMPImport()
+
+        let jsonURL = tempDir.appendingPathComponent(".hayate.json")
+        guard let data = try? Data(contentsOf: jsonURL),
+              let decoded = try? JSONDecoder().decode(SessionData.self, from: data) else {
+            XCTFail("Imported XMP should be saved to JSON")
+            return
+        }
+        XCTAssertEqual(decoded.entries["IMG_0001.CR3"]?.rating, 3)
+        XCTAssertEqual(decoded.entries["IMG_0001.CR3"]?.colorLabel, .yellow)
+    }
+
+    func testXMPImportDiscardedWhenFolderChanges() async throws {
+        let base = tempDir.appendingPathComponent("switch-\(UUID().uuidString)", isDirectory: true)
+        let dirA = base.appendingPathComponent("A", isDirectory: true)
+        let dirB = base.appendingPathComponent("B", isDirectory: true)
+        try FileManager.default.createDirectory(at: dirA, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: dirB, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: base) }
+
+        for dir in [dirA, dirB] {
+            let url = dir.appendingPathComponent("IMG_0001.CR3")
+            FileManager.default.createFile(atPath: url.path, contents: Data())
+        }
+        let xmpURL = dirA.appendingPathComponent("IMG_0001.xmp")
+        let xmp = """
+        <rdf:Description xmlns:xmp="http://ns.adobe.com/xap/1.0/"
+         xmp:Rating="5" xmp:Label="Green"/>
+        """
+        try? Data(xmp.utf8).write(to: xmpURL)
+
+        let fresh = makeSession()
+        XCTAssertTrue(fresh.openFolder(dirA))
+        XCTAssertTrue(fresh.openFolder(dirB))
+        await CullingSession.flushXMPImport()
+
+        XCTAssertNil(fresh.entries["IMG_0001.CR3"])
+        let jsonURL = dirB.appendingPathComponent(".hayate.json")
+        if FileManager.default.fileExists(atPath: jsonURL.path),
+           let data = try? Data(contentsOf: jsonURL),
+           let decoded = try? JSONDecoder().decode(SessionData.self, from: data) {
+            XCTAssertNil(decoded.entries["IMG_0001.CR3"])
+        }
+    }
+
+    /// Write a minimal foreign (non-Hayate) XMP sidecar for import tests.
+    private func writeTestXMP(basename: String, rating: Int? = nil, label: String? = nil) {
+        var attributes: [String] = []
+        if let rating { attributes.append("xmp:Rating=\"\(rating)\"") }
+        if let label { attributes.append("xmp:Label=\"\(label)\"") }
+        let attrBlock = attributes.joined(separator: "\n   ")
+        let xmp = """
+        <?xpacket begin="" id="W5M0MpCehiHzreSzNTczkc9d"?>
+        <x:xmpmeta xmlns:x="adobe:ns:meta/" x:xmptk="Adobe XMP Core">
+         <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+          <rdf:Description rdf:about=""
+           xmlns:xmp="http://ns.adobe.com/xap/1.0/"
+           \(attrBlock)/>
+         </rdf:RDF>
+        </x:xmpmeta>
+        <?xpacket end="w"?>
+        """
+        let xmpURL = tempDir.appendingPathComponent("\(basename).xmp")
+        try? Data(xmp.utf8).write(to: xmpURL)
+    }
+
     // MARK: - PhotoEntry
 
     func testPhotoEntryDefaults() {
@@ -601,6 +766,68 @@ final class CullingSessionTests: XCTestCase {
         XCTAssertEqual(entry.rating, 0)
         XCTAssertFalse(entry.isFavorite)
         XCTAssertFalse(entry.isRejected)
+        XCTAssertEqual(entry.colorLabel, .none)
+    }
+
+    // MARK: - Color labels
+
+    func testColorLabelToggle() {
+        loadTestFiles(count: 1)
+
+        session.setColorLabel(.red)
+        XCTAssertEqual(session.currentEntry?.colorLabel, .red)
+
+        session.setColorLabel(.red)
+        XCTAssertNil(session.currentEntry)
+    }
+
+    func testColorLabelUndo() {
+        loadTestFiles(count: 1)
+
+        session.setColorLabel(.blue)
+        session.undo()
+        XCTAssertNil(session.currentEntry)
+    }
+
+    func testColorLabelJSONRoundTrip() {
+        loadTestFiles(count: 2)
+
+        session.setColorLabel(.green)
+        session.navigateForward()
+        session.setColorLabel(.purple)
+
+        let jsonURL = tempDir.appendingPathComponent(".hayate.json")
+        guard let data = try? Data(contentsOf: jsonURL),
+              let decoded = try? JSONDecoder().decode(SessionData.self, from: data) else {
+            XCTFail("Could not read JSON")
+            return
+        }
+
+        XCTAssertEqual(decoded.entries["IMG_0001.CR3"]?.colorLabel, .green)
+        XCTAssertEqual(decoded.entries["IMG_0002.CR3"]?.colorLabel, .purple)
+    }
+
+    func testJSONOnlySavesColorLabel() {
+        loadTestFiles(count: 2)
+        session.setColorLabel(.yellow)
+
+        let jsonURL = tempDir.appendingPathComponent(".hayate.json")
+        guard let data = try? Data(contentsOf: jsonURL),
+              let decoded = try? JSONDecoder().decode(SessionData.self, from: data) else {
+            XCTFail("Could not read JSON")
+            return
+        }
+
+        XCTAssertEqual(decoded.entries.count, 1)
+        XCTAssertEqual(decoded.entries["IMG_0001.CR3"]?.colorLabel, .yellow)
+    }
+
+    func testPhotoEntryDecodesWithoutColorLabelKey() throws {
+        let json = """
+        {"fileName":"test.CR3","rating":2,"isFavorite":false,"isRejected":false}
+        """
+        let entry = try JSONDecoder().decode(CullingSession.PhotoEntry.self, from: Data(json.utf8))
+        XCTAssertEqual(entry.colorLabel, .none)
     }
 
     // MARK: - Triage (Keep / Maybe / Out)

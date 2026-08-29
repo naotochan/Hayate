@@ -237,18 +237,74 @@ class CullingSession: ObservableObject {
         return nil
     }
 
+    /// Lightroom-compatible photo color label. Purple has no digit shortcut (LR parity).
+    enum ColorLabel: String, Codable, Equatable, Sendable {
+        case none
+        case red
+        case yellow
+        case green
+        case blue
+        case purple
+
+        init(xmpValue: String) {
+            let trimmed = xmpValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            switch trimmed.lowercased() {
+            case "red": self = .red
+            case "yellow": self = .yellow
+            case "green": self = .green
+            case "blue": self = .blue
+            case "purple": self = .purple
+            default: self = .none
+            }
+        }
+
+        /// `xmp:Label` value (Lightroom capitalizes the first letter).
+        var xmpValue: String {
+            switch self {
+            case .none: return ""
+            case .red: return "Red"
+            case .yellow: return "Yellow"
+            case .green: return "Green"
+            case .blue: return "Blue"
+            case .purple: return "Purple"
+            }
+        }
+    }
+
     struct PhotoEntry: Codable {
         let fileName: String
         var rating: Int       // 0-5 (0 = unrated)
         var isFavorite: Bool
         var isRejected: Bool
+        var colorLabel: ColorLabel
 
-        init(fileName: String, rating: Int = 0, isFavorite: Bool = false, isRejected: Bool = false) {
+        init(
+            fileName: String,
+            rating: Int = 0,
+            isFavorite: Bool = false,
+            isRejected: Bool = false,
+            colorLabel: ColorLabel = .none
+        ) {
             self.fileName = fileName
             self.rating = rating
             self.isFavorite = isFavorite
             self.isRejected = isRejected
+            self.colorLabel = colorLabel
         }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            fileName = try container.decode(String.self, forKey: .fileName)
+            rating = try container.decodeIfPresent(Int.self, forKey: .rating) ?? 0
+            isFavorite = try container.decodeIfPresent(Bool.self, forKey: .isFavorite) ?? false
+            isRejected = try container.decodeIfPresent(Bool.self, forKey: .isRejected) ?? false
+            colorLabel = (try? container.decode(ColorLabel.self, forKey: .colorLabel)) ?? .none
+        }
+    }
+
+    /// Whether an entry carries any persisted culling state.
+    private static func entryHasState(_ entry: PhotoEntry) -> Bool {
+        entry.rating > 0 || entry.isFavorite || entry.isRejected || entry.colorLabel != .none
     }
 
     /// Three-value culling profile (Keep / Maybe / Out), stored on top of the
@@ -499,6 +555,7 @@ class CullingSession: ObservableObject {
 
         // Load existing JSON (may restore lastFileName / lastIndex)
         loadJSON()
+        importXMPSidecars()
         return true
     }
 
@@ -692,6 +749,13 @@ class CullingSession: ObservableObject {
         saveJSON()
     }
 
+    /// Set a color label for the current photo. Pressing the same label again clears it.
+    func setColorLabel(_ label: ColorLabel) {
+        guard let file = currentFile else { return }
+        applyColorLabel(label, toFileNamed: file.lastPathComponent)
+        saveJSON()
+    }
+
     // MARK: - Batch Operations
 
     func setRatingForIndices(_ indices: Set<Int>, rating: Int) {
@@ -711,6 +775,11 @@ class CullingSession: ObservableObject {
 
     func setTriageForIndices(_ indices: Set<Int>, _ state: TriageState) {
         forEachFileName(in: indices) { applyTriage(state, toFileNamed: $0) }
+        saveJSON()
+    }
+
+    func setColorLabelForIndices(_ indices: Set<Int>, label: ColorLabel) {
+        forEachFileName(in: indices) { applyColorLabel(label, toFileNamed: $0) }
         saveJSON()
     }
 
@@ -825,6 +894,25 @@ class CullingSession: ObservableObject {
         writeXMPSidecar(forFileNamed: fileName)
     }
 
+    /// Set a color label; pressing the same label again clears to `.none`.
+    private func applyColorLabel(_ label: ColorLabel, toFileNamed fileName: String) {
+        let previous = entries[fileName]
+        let current = previous?.colorLabel ?? .none
+        let target: ColorLabel = (current == label && label != .none) ? .none : label
+
+        undoStack.append(.entrySnapshot(fileName: fileName, oldEntry: previous))
+
+        var entry = previous ?? PhotoEntry(fileName: fileName)
+        entry.colorLabel = target
+
+        if Self.entryHasState(entry) {
+            entries[fileName] = entry
+        } else {
+            entries[fileName] = nil
+        }
+        writeXMPSidecar(forFileNamed: fileName)
+    }
+
     /// Apply an exclusive triage state. Same state again → undecided.
     /// Mapping: Keep→favorite, Out→reject, Maybe→rating 3 (clears the other two).
     private func applyTriage(_ state: TriageState, toFileNamed fileName: String, recordUndo: Bool = true) {
@@ -856,7 +944,7 @@ class CullingSession: ObservableObject {
             entry.rating = 0
         }
 
-        if entry.isFavorite || entry.isRejected || entry.rating > 0 {
+        if Self.entryHasState(entry) {
             entries[fileName] = entry
         } else {
             entries[fileName] = nil
@@ -1018,6 +1106,37 @@ class CullingSession: ObservableObject {
         xmpQueue.sync { }
     }
 
+    /// In-flight XMP imports scheduled onto the main actor (see `importXMPSidecars`).
+    private nonisolated(unsafe) static var xmpImportInFlight = 0
+    private nonisolated static let xmpImportLock = NSLock()
+
+    private nonisolated static func xmpImportBegan() {
+        xmpImportLock.lock()
+        xmpImportInFlight += 1
+        xmpImportLock.unlock()
+    }
+
+    private nonisolated static func xmpImportEnded() {
+        xmpImportLock.lock()
+        xmpImportInFlight -= 1
+        xmpImportLock.unlock()
+    }
+
+    private nonisolated static func xmpImportIsPending() -> Bool {
+        xmpImportLock.lock()
+        defer { xmpImportLock.unlock() }
+        return xmpImportInFlight > 0
+    }
+
+    /// Test hook: wait for queued I/O and any pending main-actor XMP import merge.
+    /// Safe on `@MainActor` tests — yields instead of blocking the main thread.
+    nonisolated static func flushXMPImport() async {
+        flushXMPQueue()
+        while xmpImportIsPending() {
+            await Task.yield()
+        }
+    }
+
     /// Write (or refresh) a `<basename>.xmp` sidecar next to the RAW so
     /// Lightroom / Capture One can pick up ratings. Opt-in via Settings.
     /// Convention: rejected → xmp:Rating="-1" (Bridge), favorite → xmp:Label="Red".
@@ -1031,10 +1150,15 @@ class CullingSession: ObservableObject {
         let rating = entry?.rating ?? 0
         let isFavorite = entry?.isFavorite ?? false
         let isRejected = entry?.isRejected ?? false
-        let hasState = rating > 0 || isFavorite || isRejected
+        let colorLabel = entry?.colorLabel ?? .none
+        let hasState = Self.entryHasState(
+            entry ?? PhotoEntry(fileName: fileName)
+        )
 
         var attributes = "xmp:Rating=\"\(isRejected ? -1 : rating)\""
-        if isFavorite {
+        if colorLabel != .none {
+            attributes += "\n   xmp:Label=\"\(colorLabel.xmpValue)\""
+        } else if isFavorite {
             attributes += "\n   xmp:Label=\"Red\""
         } else if rating > 0 {
             // Maybe (triage) — Bridge yellow label so it survives into other apps.
@@ -1077,6 +1201,107 @@ class CullingSession: ObservableObject {
                   existing.contains(Self.xmpToolkitTag) else { return }
             try? FileManager.default.trashItem(at: xmpURL, resultingItemURL: nil)
         }
+    }
+
+    // MARK: - XMP Import
+
+    /// Parsed metadata from a sidecar. `rating` is -1…5 when present.
+    struct XMPMetadata: Sendable {
+        var rating: Int?
+        var label: ColorLabel?
+
+        var hasAnyValue: Bool {
+            if let rating, rating != 0 { return true }
+            if let label, label != .none { return true }
+            return false
+        }
+    }
+
+    /// Read sidecars for photos without a `.hayate.json` entry and merge on the main actor.
+    private func importXMPSidecars() {
+        guard let folderURL = folderURL else { return }
+        let sourceFolderURL = folderURL.standardizedFileURL
+        let fileNames = files.map(\.lastPathComponent)
+        let existingEntryKeys = Set(entries.keys)
+        let folderPath = sourceFolderURL.path
+
+        Self.xmpQueue.async { [weak self] in
+            var imports: [String: XMPMetadata] = [:]
+            for fileName in fileNames {
+                guard !existingEntryKeys.contains(fileName) else { continue }
+                let rawURL = URL(fileURLWithPath: folderPath).appendingPathComponent(fileName)
+                let xmpURL = rawURL.deletingPathExtension().appendingPathExtension("xmp")
+                guard let metadata = Self.parseXMP(at: xmpURL), metadata.hasAnyValue else { continue }
+                imports[fileName] = metadata
+            }
+            guard !imports.isEmpty else { return }
+            Self.xmpImportBegan()
+            Task { @MainActor [weak self] in
+                defer { Self.xmpImportEnded() }
+                self?.applyXMPImports(imports, sourceFolderURL: sourceFolderURL)
+            }
+        }
+    }
+
+    /// Adopt XMP values only when JSON has no entry and the session still shows the same folder.
+    private func applyXMPImports(_ imports: [String: XMPMetadata], sourceFolderURL: URL) {
+        guard folderURL?.standardizedFileURL == sourceFolderURL else { return }
+        let currentFileNames = Set(files.map(\.lastPathComponent))
+
+        var changed = false
+        for (fileName, metadata) in imports {
+            guard currentFileNames.contains(fileName) else { continue }
+            guard entries[fileName] == nil else { continue }
+            var entry = PhotoEntry(fileName: fileName)
+            if let rating = metadata.rating {
+                if rating < 0 {
+                    entry.isRejected = true
+                    entry.rating = 0
+                } else if rating > 0 {
+                    entry.rating = min(5, rating)
+                }
+            }
+            if let label = metadata.label, label != .none {
+                entry.colorLabel = label
+            }
+            guard Self.entryHasState(entry) else { continue }
+            entries[fileName] = entry
+            changed = true
+        }
+        if changed { saveJSON() }
+    }
+
+    /// Parse `xmp:Rating` (-1…5) and `xmp:Label` from a sidecar file.
+    nonisolated static func parseXMP(at url: URL) -> XMPMetadata? {
+        guard FileManager.default.fileExists(atPath: url.path),
+              let data = try? Data(contentsOf: url) else { return nil }
+        let text = String(data: data, encoding: .utf8)
+            ?? String(data: data, encoding: .isoLatin1)
+        guard let text else { return nil }
+        return parseXMPString(text)
+    }
+
+    /// Attribute and element forms used by Hayate, Lightroom, and Bridge.
+    nonisolated static func parseXMPString(_ text: String) -> XMPMetadata? {
+        var metadata = XMPMetadata()
+
+        if let match = text.firstMatch(of: /xmp:Rating\s*=\s*"(-?\d+)"/) {
+            metadata.rating = Int(match.1)
+        } else if let match = text.firstMatch(of: /xmp:Rating\s*=\s*'(-?\d+)'/) {
+            metadata.rating = Int(match.1)
+        } else if let match = text.firstMatch(of: /<xmp:Rating[^>]*>\s*(-?\d+)\s*<\/xmp:Rating>/) {
+            metadata.rating = Int(match.1)
+        }
+
+        if let match = text.firstMatch(of: /xmp:Label\s*=\s*"([^"]+)"/) {
+            metadata.label = ColorLabel(xmpValue: String(match.1))
+        } else if let match = text.firstMatch(of: /xmp:Label\s*=\s*'([^']+)'/) {
+            metadata.label = ColorLabel(xmpValue: String(match.1))
+        } else if let match = text.firstMatch(of: /<xmp:Label[^>]*>\s*([^<]+?)\s*<\/xmp:Label>/) {
+            metadata.label = ColorLabel(xmpValue: String(match.1))
+        }
+
+        return metadata.hasAnyValue ? metadata : nil
     }
 
     // MARK: - JSON Persistence
@@ -1135,7 +1360,7 @@ class CullingSession: ObservableObject {
         guard let url = jsonURL else { return }
 
         // Only save entries that have non-default values
-        let toSave = entries.filter { $0.value.rating > 0 || $0.value.isFavorite || $0.value.isRejected }
+        let toSave = entries.filter { Self.entryHasState($0.value) }
 
         // Merge back entries for files that weren't visible during this session.
         let all = toSave.merging(orphanedEntries) { current, _ in current }
