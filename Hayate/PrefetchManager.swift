@@ -298,6 +298,7 @@ actor PrefetchManager {
             guard !ordered.isEmpty else { return }
 
             os_log(.default, log: Self.log, "background build: %d of %d files missing previews, %d missing thumbnails", missingPreviewSet.count, files.count, missingThumbSet.count)
+            let buildStart = CFAbsoluteTimeGetCurrent()
 
             await MainActor.run {
                 progress.total = ordered.count
@@ -305,10 +306,11 @@ actor PrefetchManager {
                 progress.isBuilding = true
             }
 
-            // Modest parallelism: embedded JPEG extract is cheap and ImageIO
-            // scales well; the actor-serialized disk writes keep IO calm.
+            // Embedded-JPEG extract + draft encode are CPU/IO bound; scale
+            // with cores, capped so older machines aren't drowned in bitmap
+            // allocations. The actor-serialized disk writes keep IO calm.
             var noEmbedded = 0
-            let parallel = 4
+            let parallel = min(8, max(4, ProcessInfo.processInfo.activeProcessorCount))
             var next = 0
             while next < ordered.count {
                 guard !Task.isCancelled else { break }
@@ -354,7 +356,7 @@ actor PrefetchManager {
                 }
             }
 
-            os_log(.default, log: Self.log, "background build finished: %d processed, %d without an embedded preview", next, noEmbedded)
+            os_log(.default, log: Self.log, "background build finished: %d processed, %d without an embedded preview (%.1fs)", next, noEmbedded, CFAbsoluteTimeGetCurrent() - buildStart)
 
             await MainActor.run {
                 progress.isBuilding = false
