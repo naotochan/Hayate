@@ -34,6 +34,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private var pendingFolders: [URL]?
 
+    /// Set by ContentView on appear. Recreates the main window when the Dock
+    /// is clicked while the process is alive but has no windows (WindowGroup
+    /// windows can't be created from the delegate directly).
+    var openMainWindow: (() -> Void)?
+
     func application(_ application: NSApplication, open urls: [URL]) {
         let folders = urls.filter { url in
             var isDir: ObjCBool = false
@@ -46,6 +51,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } else {
             pendingFolders = folders
         }
+    }
+
+    /// Close the last window → quit. Without this the process stays alive
+    /// windowless (background preview tasks included) and Dock clicks reach
+    /// the live process without creating a window, so Hayate won't reopen.
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        true
+    }
+
+    /// Dock-click insurance while the process is alive: bring back an
+    /// existing (e.g. minimized) window, or ask SwiftUI for a fresh one.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        guard !flag else { return true }
+        if let window = sender.windows.first(where: { $0.canBecomeKey }) {
+            if window.isMiniaturized { window.deminiaturize(nil) }
+            window.makeKeyAndOrderFront(nil)
+        } else {
+            openMainWindow?()
+        }
+        return true
     }
 }
 
@@ -68,6 +93,9 @@ struct HayateApp: App {
         return "Hayate (\(version) · build \(build))"
     }
 
+    /// WindowGroup scene id, used by `openWindow(id:)` for Dock reopen.
+    static let mainWindowID = "main"
+
     init() {
         guard let device = MTLCreateSystemDefaultDevice() else {
             fatalError("Metal is not supported on this device")
@@ -81,7 +109,7 @@ struct HayateApp: App {
     }
 
     var body: some Scene {
-        WindowGroup(Self.windowTitle) {
+        WindowGroup(Self.windowTitle, id: Self.mainWindowID) {
             ContentView()
                 .environmentObject(session)
                 .environmentObject(keybindings)
