@@ -43,6 +43,7 @@ extension ContentView {
                 } else {
                     Color.gray.opacity(0.3)
                         .onAppear { loadThumbnail(for: url) }
+                        .onDisappear { cancelThumbnailLoad(for: url) }
                 }
             }
             .frame(width: 80, height: 60)

@@ -237,6 +237,7 @@ extension ContentView {
                                 .scaleEffect(0.5)
                         }
                         .onAppear { loadThumbnail(for: url) }
+                        .onDisappear { cancelThumbnailLoad(for: url) }
                 }
 
                 // Selection checkmark (top left)
