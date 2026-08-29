@@ -70,6 +70,12 @@ enum HayateTheme {
         )
     }
 
+    /// Caution / needs-review accents (grid badges, non-destructive alerts).
+    static let warning = adaptive(
+        dark: NSColor(red: 0.95, green: 0.72, blue: 0.22, alpha: 1),
+        light: NSColor(red: 0.82, green: 0.52, blue: 0.08, alpha: 1)
+    )
+
     /// Metal letterbox / clear color matching `canvas`.
     static func metalClear(for colorScheme: ColorScheme?) -> MTLClearColor {
         let isDark: Bool

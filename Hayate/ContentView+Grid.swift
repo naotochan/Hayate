@@ -482,6 +482,13 @@ extension ContentView {
                         Spacer()
                         // Badges (top right)
                         HStack(spacing: 4) {
+                            if assistedCullingEnabled, photoAnalysisStore.needsReview.contains(url) {
+                                Image(systemName: "exclamationmark.triangle.fill")
+                                    .font(.system(size: 11))
+                                    .foregroundColor(HayateTheme.warning)
+                                    .help(L.needsReviewBadgeHelp)
+                                    .accessibilityLabel(L.needsReviewBadgeLabel)
+                            }
                             if let badge = burstBadge {
                                 burstCountBadge(
                                     count: badge.count,

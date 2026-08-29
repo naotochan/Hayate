@@ -109,6 +109,9 @@ struct ContentView: View {
     @AppStorage("colorizeKeepOnly") var colorizeKeepOnly = true
     /// Keep / Maybe / Out instead of 1–5 stars (stored via favorite / rating / reject).
     @AppStorage("cullingProfileTriage") var cullingProfileTriage = true
+    /// Grid hints from on-device sharpness / face-quality scores (folder-relative).
+    @AppStorage("assistedCullingEnabled") var assistedCullingEnabled = true
+    @StateObject var photoAnalysisStore = PhotoAnalysisStore()
     @State var compareMode = false
     @State var compareIndices: [Int] = []
     @State var compareActiveSlot: Int = 0  // which photo is "active" for rating
@@ -403,6 +406,13 @@ struct ContentView: View {
                 updateHistogram()
             }
         }
+        .onChange(of: assistedCullingEnabled) { _, enabled in
+            if enabled {
+                startPhotoAnalysis()
+            } else {
+                stopPhotoAnalysis()
+            }
+        }
         .sheet(isPresented: $showExportSheet) {
             ExportSheet(onBulkDelete: {
                 // The displayed photo may have been trashed; currentIndex can
@@ -545,6 +555,7 @@ struct ContentView: View {
             await MainActor.run {
                 guard generation == folderOpenGeneration, !session.files.isEmpty else { return }
                 startBackgroundBuild()
+                startPhotoAnalysis()
             }
         }
     }
@@ -573,6 +584,21 @@ struct ContentView: View {
         }
     }
 
+    func startPhotoAnalysis() {
+        guard let decoder else { return }
+        photoAnalysisStore.start(
+            generation: folderOpenGeneration,
+            enabled: assistedCullingEnabled,
+            files: session.files,
+            focusIndex: session.currentIndex,
+            decoder: decoder
+        )
+    }
+
+    func stopPhotoAnalysis() {
+        photoAnalysisStore.stop()
+    }
+
     /// Clear all view-local state when switching to a new folder mid-session.
     /// Session-level state (files, entries, undoStack) is reset by `CullingSession.openFolder`.
     /// The `decoder` and `prefetchManager` instances are kept — they're bound to CIContext/device,
@@ -589,6 +615,7 @@ struct ContentView: View {
         thumbnailTasks.removeAll()
         captureDateTask?.cancel()
         captureDateTask = nil
+        stopPhotoAnalysis()
         sceneStartIndices = []
         burstGroups = []
         expandedBurstIDs = []

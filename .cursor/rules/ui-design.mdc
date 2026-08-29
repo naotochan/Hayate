@@ -16,7 +16,7 @@ alwaysApply: true
 | レイアウト見本 | `Hayate/SettingsView.swift` | サイドバー付きの完成形 |
 | 単一シート見本 | `Hayate/ExportSheet.swift` | サイドバーなしの同クロム |
 | 再利用部品 | `Hayate/HayateChrome.swift` | `Panel` / `Row` / `ToggleRow` / `RowSeparator` / `SearchField` / `SidebarItem` / `PageTitle` |
-| 色・面トークン | `Hayate/HayateTheme.swift` | `settingsCanvas` / `settingsSidebar` / `panel` / `fg` / `wash` / `separator` |
+| 色・面トークン | `Hayate/HayateTheme.swift` | `settingsCanvas` / `settingsSidebar` / `panel` / `fg` / `wash` / `separator` / `warning` |
 | ビューア面 | 同上の `canvas` / `sidebar` / `bar` | 写真まわり。設定カードに流用しない |
 
 エージェント・人間とも、UI 変更前にこの表を開いてから書く。
@@ -40,6 +40,7 @@ alwaysApply: true
 | 区切り線 | `HayateTheme.separator` |
 | 文字 | `HayateTheme.fg(_:)` |
 | 選択・検索欄など | `HayateTheme.wash(_:)` |
+| 注意・要確認バッジ | `HayateTheme.warning` |
 | 写真ビューア周り | `canvas` / `sidebar` / `bar`（設定用トークンと混ぜない） |
 
 ハードコードの `Color(white:)` / `NSColor` を画面側に増やさない。
