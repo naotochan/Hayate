@@ -5,7 +5,7 @@ import SQLite3
 import UniformTypeIdentifiers
 import os.signpost
 
-/// Actor that manages on-disk HEIF preview cache backed by SQLite metadata.
+/// Actor that manages the on-disk preview cache backed by SQLite metadata.
 ///
 /// Cache layout:
 /// ```
@@ -18,6 +18,9 @@ import os.signpost
 ///     └── ab/
 ///         └── cd1234…ef.heic
 /// ```
+///
+/// Cached files keep the historical `.heic` extension, but draft/thumbnail
+/// content is JPEG — readers sniff content, so the extension is cosmetic.
 ///
 /// Cache key = SHA256(canonicalPath + "|" + mtime + "|" + size), first 16 hex chars.
 /// Canonical path = symlinks resolved + standardized, so /var vs /private/var
@@ -149,7 +152,7 @@ actor DiskCacheManager {
         let isFullQuality: Bool
     }
 
-    /// Load a cached preview HEIF from disk. Returns nil on miss.
+    /// Load a cached preview from disk. Returns nil on miss.
     /// Updates `last_access_at` on hit for LRU tracking.
     func loadPreview(for url: URL) -> CachedPreview? {
         let signpostID = OSSignpostID(log: signpostLog)
@@ -173,7 +176,7 @@ actor DiskCacheManager {
         return CachedPreview(image: image, isFullQuality: previewIsFullQuality(key: key))
     }
 
-    /// Store a CGImage as HEIF on disk. HEIF encoding runs off-actor so
+    /// Store a CGImage in the disk cache. Encoding runs off-actor so
     /// concurrent `loadPreview` calls are not blocked behind other stores.
     /// - Draft (`isFullQuality: false`) is skipped when any preview already exists.
     /// - Full quality replaces a draft, and is a no-op when a full preview exists.
@@ -196,16 +199,17 @@ actor DiskCacheManager {
         let tempURL = shardDir.appendingPathComponent("\(UUID().uuidString).heic")
         let quality = isFullQuality ? 0.85 : 0.80
 
-        // Phase B: expensive encode off actor.
+        // Phase B: expensive encode off actor. Drafts encode as JPEG (fast,
+        // interim quality); only full RAW renders pay for HEIF.
         os_signpost(.begin, log: signpostLog, name: "storePreviewEncode", signpostID: signpostID)
         let encoded = await Task.detached(priority: .utility) {
-            Self.writeHEIF(cgImage: cgImage, to: tempURL, quality: quality)
+            Self.writeEncoded(cgImage: cgImage, to: tempURL, type: isFullQuality ? .heic : .jpeg, quality: quality)
         }.value
         os_signpost(.end, log: signpostLog, name: "storePreviewEncode", signpostID: signpostID)
 
         guard encoded else {
             try? FileManager.default.removeItem(at: tempURL)
-            os_log(.error, log: signpostLog, "HEIF encode failed for %{public}@", url.lastPathComponent)
+            os_log(.error, log: signpostLog, "preview encode failed for %{public}@", url.lastPathComponent)
             return
         }
 
@@ -352,7 +356,7 @@ actor DiskCacheManager {
         return image
     }
 
-    /// Store a sidebar thumbnail HEIF. Encoding runs off-actor like `store`.
+    /// Store a sidebar thumbnail. Encoding runs off-actor like `store`.
     func storeThumbnail(cgImage: CGImage, for url: URL) async {
         guard let key = cacheKey(for: url) else { return }
         guard !entryExists(key: key, table: "thumbnails") else { return }
@@ -363,12 +367,12 @@ actor DiskCacheManager {
         let tempURL = shardDir.appendingPathComponent("\(UUID().uuidString).heic")
 
         let encoded = await Task.detached(priority: .utility) {
-            Self.writeHEIF(cgImage: cgImage, to: tempURL, quality: 0.8)
+            Self.writeEncoded(cgImage: cgImage, to: tempURL, type: .jpeg, quality: 0.8)
         }.value
 
         guard encoded else {
             try? FileManager.default.removeItem(at: tempURL)
-            os_log(.error, log: signpostLog, "HEIF encode failed for %{public}@", url.lastPathComponent)
+            os_log(.error, log: signpostLog, "preview encode failed for %{public}@", url.lastPathComponent)
             return
         }
 
@@ -435,13 +439,18 @@ actor DiskCacheManager {
             .appendingPathComponent("\(key).heic")
     }
 
-    // MARK: - HEIF I/O
+    // MARK: - Image I/O
 
+    /// Encode a CGImage for the cache. Drafts and thumbnails use JPEG:
+    /// several times faster to encode than HEIF, and drafts are
+    /// interim-quality by design. Full RAW renders keep HEIF for size.
+    /// The `.heic` file extension is historical — a key's file may hold
+    /// either codec across draft→full upgrades; readers sniff content.
     @discardableResult
-    private static func writeHEIF(cgImage: CGImage, to url: URL, quality: Double = 0.85) -> Bool {
+    private static func writeEncoded(cgImage: CGImage, to url: URL, type: UTType, quality: Double) -> Bool {
         guard let dest = CGImageDestinationCreateWithURL(
             url as CFURL,
-            UTType.heic.identifier as CFString,
+            type.identifier as CFString,
             1,
             nil
         ) else { return false }
