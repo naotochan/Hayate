@@ -64,6 +64,17 @@ enum ResolvedLanguage: Equatable {
     var colorLabelKeysRow: String {
         t("6 Red / 7 Yellow / 8 Green / 9 Blue", ja: "6 赤 / 7 黄 / 8 緑 / 9 青")
     }
+
+    var needsReviewBadgeLabel: String {
+        t("Needs review", ja: "要確認")
+    }
+
+    var needsReviewBadgeHelp: String {
+        t(
+            "Lower sharpness or face quality relative to this folder — for your eyes only.",
+            ja: "このフォルダ内でシャープネスまたは顔の品質が低めです。最終判断はあなたが行います。"
+        )
+    }
 }
 
 /// In-app JP/EN switching. Injected as an `EnvironmentObject`.
@@ -98,6 +109,10 @@ final class LocalizationStore: ObservableObject {
     }
 
     var colorLabelKeysRow: String { resolved.colorLabelKeysRow }
+
+    var needsReviewBadgeLabel: String { resolved.needsReviewBadgeLabel }
+
+    var needsReviewBadgeHelp: String { resolved.needsReviewBadgeHelp }
 }
 
 // MARK: - Appearance

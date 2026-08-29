@@ -49,6 +49,7 @@ struct SettingsView: View {
     @AppStorage("sceneGapMinutes") private var sceneGapMinutes = 15
     @AppStorage("burstGroupingEnabled") private var burstGroupingEnabled = true
     @AppStorage("burstGapSeconds") private var burstGapSeconds = 2
+    @AppStorage("assistedCullingEnabled") private var assistedCullingEnabled = true
     @AppStorage("appAppearance") private var appAppearance: AppAppearance = .system
     @AppStorage("previewCacheSizeLimitGB") private var cacheSizeLimitGB: Int = 10
     @AppStorage("previewCacheLocation") private var cacheLocationPath: String = ""
@@ -123,8 +124,10 @@ struct SettingsView: View {
             return [
                 "appearance", "language", "culling", "keep", "maybe", "out", "stars",
                 "auto-advance", "skip", "xmp", "grid", "burst", "stack", "welcome", "coffee", "support",
-                "buy me a coffee", "外観", "言語", "選別", "自動", "スキップ", "グリッド",
+                "buy me a coffee", "assisted", "sharpness", "face", "quality", "review", "hint",
+                "外観", "言語", "選別", "自動", "スキップ", "グリッド",
                 "バースト", "連写", "スタック", "ようこそ", "コーヒー", "支援",
+                "判断支援", "シャープネス", "顔", "要確認",
             ].joined(separator: " ")
         case .shortcuts:
             return "keyboard shortcuts ショートカット キー"
@@ -332,6 +335,17 @@ struct SettingsView: View {
                     .frame(maxWidth: 120)
                     .disabled(!burstGroupingEnabled)
                 }
+
+                HayateChrome.RowSeparator()
+
+                HayateChrome.ToggleRow(
+                    title: L.t("Assisted culling hints", ja: "判断支援スコア"),
+                    subtitle: L.t(
+                        "Show a review badge on grid thumbnails when sharpness or face quality looks weak compared to this folder. You always make the final call.",
+                        ja: "フォルダ内の相対比較でシャープネスや顔の品質が弱いとき、グリッドに要確認バッジを表示します。最終判断は常にあなたが行います。"
+                    ),
+                    isOn: $assistedCullingEnabled
+                )
             }
 
             HayateChrome.Panel(title: L.t("Help", ja: "ヘルプ")) {
