@@ -250,6 +250,39 @@ final class ImageDecoder: @unchecked Sendable {
         }.value
     }
 
+    /// Display-oriented full-resolution pixel size from file metadata (no decode).
+    /// Swaps width/height when EXIF/TIFF orientation implies 90° rotation.
+    nonisolated static func orientedPixelSize(url: URL) -> CGSize? {
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+              let props = CGImageSourceCopyPropertiesAtIndex(
+                source, 0, [kCGImageSourceShouldCache: false] as CFDictionary
+              ) as? [CFString: Any] else {
+            return nil
+        }
+        guard let pixelWidth = props[kCGImagePropertyPixelWidth] as? Int,
+              let pixelHeight = props[kCGImagePropertyPixelHeight] as? Int,
+              pixelWidth > 0, pixelHeight > 0 else {
+            return nil
+        }
+        var width = CGFloat(pixelWidth)
+        var height = CGFloat(pixelHeight)
+
+        let orientation: Int = {
+            if let o = props[kCGImagePropertyOrientation] as? Int { return o }
+            if let tiff = props[kCGImagePropertyTIFFDictionary] as? [CFString: Any],
+               let o = tiff[kCGImagePropertyTIFFOrientation] as? Int { return o }
+            return 1
+        }()
+
+        switch orientation {
+        case 5, 6, 7, 8:
+            swap(&width, &height)
+        default:
+            break
+        }
+        return CGSize(width: width, height: height)
+    }
+
     /// Capture date from EXIF DateTimeOriginal only. Missing / unreadable → nil.
     nonisolated static func captureDate(url: URL) -> Date? {
         guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),

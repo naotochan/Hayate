@@ -20,7 +20,10 @@ extension ContentView {
                                     texture: compareTextures[fileIndex],
                                     device: device,
                                     zoomScale: zoomScale,
-                                    panOffset: panOffset
+                                    panOffset: panOffset,
+                                    reportedDrawableSize: slot == compareActiveSlot
+                                        ? $metalDrawableSize
+                                        : .constant(.zero)
                                 )
                             }
 

@@ -37,6 +37,11 @@ enum ResolvedLanguage: Equatable {
     func t(_ english: String, ja japanese: String) -> String {
         self == .japanese ? japanese : english
     }
+
+    /// Viewer: fit ↔ 1:1 (100%) zoom — one image pixel per physical screen pixel.
+    var toggleFitOneToOneZoom: String {
+        t("Toggle fit / 1:1 zoom", ja: "フィット / 1:1 ズーム")
+    }
 }
 
 /// In-app JP/EN switching. Injected as an `EnvironmentObject`.
