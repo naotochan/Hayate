@@ -37,8 +37,8 @@ actor PrefetchManager {
     /// Access order for LRU eviction. Most recent at the end.
     private var accessOrder: [URL] = []
 
-    /// Currently running prefetch tasks, keyed by URL.
-    private var activeTasks: [URL: Task<Void, Never>] = [:]
+    /// Currently running prefetch tasks, keyed by file URL.
+    private var activeTasks: [URL: (task: Task<Void, Never>, token: UUID)] = [:]
 
     /// Background preview build task — cancelled on folder change.
     private var backgroundBuildTask: Task<Void, Never>?
@@ -111,10 +111,14 @@ actor PrefetchManager {
             partialShown = true
         }
 
-        // A prefetch may already be decoding this URL. Wait for it and reuse
-        // its cached result instead of running the same RAW decode twice.
-        if let active = activeTasks[url] {
-            await active.value
+        // A prefetch may already be working on this URL. Wait only until it has
+        // put *something* in the memory cache — the visible photo must not be
+        // held hostage by the prefetch's slow RAW stage.
+        if let active = activeTasks[url]?.task {
+            while cache[url] == nil, !active.isCancelled, !Task.isCancelled {
+                guard activeTasks[url] != nil else { break }  // finished, nothing cached
+                try? await Task.sleep(nanoseconds: 10_000_000)
+            }
             guard !Task.isCancelled else { return nil }
             if let entry = cache[url] {
                 touchAccess(url)
@@ -122,6 +126,19 @@ actor PrefetchManager {
                 if entry.isRAW { return sendable }
                 if !partialShown, let onPartial { await onPartial(sendable) }
                 partialShown = true
+            }
+            // Await the captured handle — the task stays awaitable after it
+            // self-removes from activeTasks, so we never miss a finished decode.
+            if !active.isCancelled {
+                await active.value
+                guard !Task.isCancelled else { return nil }
+                if let entry = cache[url] {
+                    touchAccess(url)
+                    let sendable = SendableTexture(texture: entry.texture)
+                    if entry.isRAW { return sendable }
+                    if !partialShown, let onPartial { await onPartial(sendable) }
+                    partialShown = true
+                }
             }
         }
 
@@ -139,6 +156,7 @@ actor PrefetchManager {
     private func performLoad(
         for url: URL,
         displaySize: CGSize,
+        priority: TaskPriority = .userInitiated,
         onPartial: (@MainActor @Sendable (SendableTexture) -> Void)? = nil,
         partialShown: Bool = false
     ) async -> SendableTexture? {
@@ -172,7 +190,7 @@ actor PrefetchManager {
         guard !Task.isCancelled else { return nil }
 
         // L3b: full RAW decode, persisted to the disk cache (upgrades any draft)
-        guard let cgImage = await decoder.decodeRAWToCGImage(url: url, displaySize: displaySize),
+        guard let cgImage = await decoder.decodeRAWToCGImage(url: url, displaySize: displaySize, priority: priority),
               let sendable = await decoder.cgImageToTexture(cgImage) else {
             // RAW failed — keep a draft texture if we already have one.
             if let entry = cache[url] {
@@ -209,9 +227,9 @@ actor PrefetchManager {
         // Keep the current photo's in-flight task alive even though it's not a
         // prefetch target — the UI's loadTexture may be joining it right now.
         let currentURL = files.indices.contains(currentIndex) ? files[currentIndex] : nil
-        for (url, task) in activeTasks {
+        for (url, entry) in activeTasks {
             if !targetURLs.contains(url) && url != currentURL {
-                task.cancel()
+                entry.task.cancel()
                 activeTasks[url] = nil
             }
         }
@@ -232,14 +250,19 @@ actor PrefetchManager {
             // calling it from the task registered there would await itself.
             let hasJPEGEntry = cache[url] != nil
 
-            activeTasks[url] = Task {
-                _ = await self.performLoad(
-                    for: url,
-                    displaySize: size,
-                    partialShown: hasJPEGEntry
-                )
-                await self.removeActiveTask(for: url)
-            }
+            let token = UUID()
+            activeTasks[url] = (
+                Task(priority: .utility) {
+                    _ = await self.performLoad(
+                        for: url,
+                        displaySize: size,
+                        priority: .utility,
+                        partialShown: hasJPEGEntry
+                    )
+                    await self.removeActiveTask(for: url, token: token)
+                },
+                token
+            )
             started += 1
         }
     }
@@ -355,8 +378,8 @@ actor PrefetchManager {
 
     /// Clear the memory cache and cancel all tasks.
     func clear() {
-        for (_, task) in activeTasks {
-            task.cancel()
+        for (_, entry) in activeTasks {
+            entry.task.cancel()
         }
         activeTasks.removeAll()
         cache.removeAll()
@@ -366,8 +389,10 @@ actor PrefetchManager {
 
     // MARK: - Private
 
-    private func removeActiveTask(for url: URL) {
-        activeTasks[url] = nil
+    private func removeActiveTask(for url: URL, token: UUID) {
+        if activeTasks[url]?.token == token {
+            activeTasks[url] = nil
+        }
     }
 
     private func touchAccess(_ url: URL) {

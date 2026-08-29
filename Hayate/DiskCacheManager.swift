@@ -124,30 +124,64 @@ actor DiskCacheManager {
         return CachedPreview(image: image, isFullQuality: previewIsFullQuality(key: key))
     }
 
-    /// Store a CGImage as HEIF on disk.
+    /// Store a CGImage as HEIF on disk. HEIF encoding runs off-actor so
+    /// concurrent `loadPreview` calls are not blocked behind other stores.
     /// - Draft (`isFullQuality: false`) is skipped when any preview already exists.
     /// - Full quality replaces a draft, and is a no-op when a full preview exists.
-    func store(cgImage: CGImage, for url: URL, isFullQuality: Bool = true) {
+    func store(cgImage: CGImage, for url: URL, isFullQuality: Bool = true) async {
         let signpostID = OSSignpostID(log: signpostLog)
         os_signpost(.begin, log: signpostLog, name: "storePreview", signpostID: signpostID)
         defer { os_signpost(.end, log: signpostLog, name: "storePreview", signpostID: signpostID) }
 
         guard let key = cacheKey(for: url) else { return }
+
+        // Phase A: fast policy check on actor (do not delete existing files yet).
         if let existingFull = previewIsFullQualityIfPresent(key: key) {
             if existingFull { return }
             if !isFullQuality { return }
-            // Upgrade draft → full: replace the HEIF on disk.
-            let filePath = heifPath(for: key, dir: displayDir)
-            try? FileManager.default.removeItem(at: filePath)
-            deleteEntry(key: key, table: "previews")
         }
 
         let filePath = heifPath(for: key, dir: displayDir)
         let shardDir = filePath.deletingLastPathComponent()
         try? FileManager.default.createDirectory(at: shardDir, withIntermediateDirectories: true)
-
+        let tempURL = shardDir.appendingPathComponent("\(UUID().uuidString).heic")
         let quality = isFullQuality ? 0.85 : 0.80
-        guard writeHEIF(cgImage: cgImage, to: filePath, quality: quality) else { return }
+
+        // Phase B: expensive encode off actor.
+        os_signpost(.begin, log: signpostLog, name: "storePreviewEncode", signpostID: signpostID)
+        let encoded = await Task.detached(priority: .utility) {
+            Self.writeHEIF(cgImage: cgImage, to: tempURL, quality: quality)
+        }.value
+        os_signpost(.end, log: signpostLog, name: "storePreviewEncode", signpostID: signpostID)
+
+        guard encoded else {
+            try? FileManager.default.removeItem(at: tempURL)
+            return
+        }
+
+        // Phase C: commit on actor — re-check policy after encode suspension.
+        if let existingFull = previewIsFullQualityIfPresent(key: key) {
+            if existingFull {
+                try? FileManager.default.removeItem(at: tempURL)
+                return
+            }
+            if !isFullQuality {
+                try? FileManager.default.removeItem(at: tempURL)
+                return
+            }
+            // Upgrade draft → full: clear the stale row before re-insert.
+            deleteEntry(key: key, table: "previews")
+        }
+
+        try? FileManager.default.createDirectory(at: shardDir, withIntermediateDirectories: true)
+        // Clear crash-orphaned files with no DB row (moveItem won't clobber).
+        try? FileManager.default.removeItem(at: filePath)
+        do {
+            try FileManager.default.moveItem(at: tempURL, to: filePath)
+        } catch {
+            try? FileManager.default.removeItem(at: tempURL)
+            return
+        }
 
         let fileSize = (try? FileManager.default.attributesOfItem(atPath: filePath.path)[.size] as? Int64) ?? 0
         insertPreviewEntry(key: key, url: url, fileSize: fileSize, isFullQuality: isFullQuality)
@@ -245,15 +279,40 @@ actor DiskCacheManager {
         return image
     }
 
-    func storeThumbnail(cgImage: CGImage, for url: URL) {
+    /// Store a sidebar thumbnail HEIF. Encoding runs off-actor like `store`.
+    func storeThumbnail(cgImage: CGImage, for url: URL) async {
         guard let key = cacheKey(for: url) else { return }
         guard !entryExists(key: key, table: "thumbnails") else { return }
 
         let filePath = heifPath(for: key, dir: thumbDir)
         let shardDir = filePath.deletingLastPathComponent()
         try? FileManager.default.createDirectory(at: shardDir, withIntermediateDirectories: true)
+        let tempURL = shardDir.appendingPathComponent("\(UUID().uuidString).heic")
 
-        guard writeHEIF(cgImage: cgImage, to: filePath, quality: 0.8) else { return }
+        let encoded = await Task.detached(priority: .utility) {
+            Self.writeHEIF(cgImage: cgImage, to: tempURL, quality: 0.8)
+        }.value
+
+        guard encoded else {
+            try? FileManager.default.removeItem(at: tempURL)
+            return
+        }
+
+        // Re-check after encode suspension — another store may have committed.
+        guard !entryExists(key: key, table: "thumbnails") else {
+            try? FileManager.default.removeItem(at: tempURL)
+            return
+        }
+
+        try? FileManager.default.createDirectory(at: shardDir, withIntermediateDirectories: true)
+        // Clear crash-orphaned files with no DB row (moveItem won't clobber).
+        try? FileManager.default.removeItem(at: filePath)
+        do {
+            try FileManager.default.moveItem(at: tempURL, to: filePath)
+        } catch {
+            try? FileManager.default.removeItem(at: tempURL)
+            return
+        }
 
         let fileSize = (try? FileManager.default.attributesOfItem(atPath: filePath.path)[.size] as? Int64) ?? 0
         insertEntry(key: key, url: url, fileSize: fileSize, table: "thumbnails")
@@ -299,7 +358,7 @@ actor DiskCacheManager {
     // MARK: - HEIF I/O
 
     @discardableResult
-    private func writeHEIF(cgImage: CGImage, to url: URL, quality: Double = 0.85) -> Bool {
+    private static func writeHEIF(cgImage: CGImage, to url: URL, quality: Double = 0.85) -> Bool {
         guard let dest = CGImageDestinationCreateWithURL(
             url as CFURL,
             UTType.heic.identifier as CFString,
