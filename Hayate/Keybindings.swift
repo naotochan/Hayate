@@ -106,6 +106,7 @@ enum ActionID: String, Codable, CaseIterable, Identifiable {
     case setTriageMaybe
     case toggleGrid
     case toggleCompare
+    case toggleSurvey
     case toggleFitZoom
     case toggleOneToOneZoom
     case toggleFocusPeaking
@@ -141,6 +142,8 @@ enum ActionID: String, Codable, CaseIterable, Identifiable {
             return lang.t("Toggle grid view", ja: "グリッド表示")
         case .toggleCompare:
             return lang.t("Toggle compare mode", ja: "比較モード")
+        case .toggleSurvey:
+            return lang.t("Toggle survey mode", ja: "サーベイモード")
         case .toggleFitZoom:
             return lang.t("Toggle fit / 2× zoom", ja: "フィット / 2× ズーム")
         case .toggleOneToOneZoom:
@@ -183,6 +186,8 @@ enum ActionID: String, Codable, CaseIterable, Identifiable {
             return triageMode
                 ? lang.t("Keep active (compare)", ja: "アクティブを Keep（比較）")
                 : title(lang: lang)
+        case .toggleSurvey:
+            return lang.t("Survey: compare 2–6 photos", ja: "サーベイ: 2–6 枚を比較")
         case .toggleShortcutsHelp:
             return lang.t("Show / hide this cheat sheet", ja: "この早見表の表示 / 非表示")
         default:
@@ -218,7 +223,7 @@ enum ActionID: String, Codable, CaseIterable, Identifiable {
         switch self {
         case .navigateBack, .navigateForward: return .navigation
         case .toggleFavorite, .toggleRejected, .setTriageMaybe: return .rating
-        case .toggleGrid, .toggleCompare, .toggleFitZoom, .toggleOneToOneZoom, .toggleFocusPeaking, .toggleInfo, .toggleHistogram, .toggleShortcutsHelp, .toggleSidebar: return .view
+        case .toggleGrid, .toggleCompare, .toggleSurvey, .toggleFitZoom, .toggleOneToOneZoom, .toggleFocusPeaking, .toggleInfo, .toggleHistogram, .toggleShortcutsHelp, .toggleSidebar: return .view
         case .deletePhoto, .undo, .selectAllGrid: return .editing
         case .openFolder: return .file
         case .pickCompare, .skipNextBaseline: return .compareMode
@@ -245,6 +250,7 @@ final class KeybindingStore: ObservableObject {
         .setTriageMaybe: Shortcut(keyCode: 46),                         // M (Maybe)
         .toggleGrid: Shortcut(keyCode: 5),                              // G
         .toggleCompare: Shortcut(keyCode: 8),                           // C
+        .toggleSurvey: Shortcut(keyCode: 45),                           // N
         .toggleFitZoom: Shortcut(keyCode: 49),                          // Space
         .toggleOneToOneZoom: Shortcut(keyCode: 6),                      // Z
         .toggleFocusPeaking: Shortcut(keyCode: 3),                      // F

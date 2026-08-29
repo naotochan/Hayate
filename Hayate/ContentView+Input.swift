@@ -53,6 +53,10 @@ extension ContentView {
                 exitCompareMode()
                 return true
             }
+            if surveyMode {
+                exitSurveyMode()
+                return true
+            }
             if showGrid {
                 showGrid = false
                 loadCurrentImage()
@@ -95,6 +99,13 @@ extension ContentView {
             return true
         }
 
+        // Arrow keys in survey — move the active pane within the grid layout.
+        if surveyMode, [123, 124, 125, 126].contains(event.keyCode),
+           event.modifierFlags.intersection(Shortcut.relevantModifiers).isEmpty {
+            moveSurveySelection(keyCode: event.keyCode)
+            return true
+        }
+
         // Arrow keys — always navigate (alias for navigateBack / navigateForward).
         if event.keyCode == 123 || event.keyCode == 124 {
             return perform(event.keyCode == 123 ? .navigateBack : .navigateForward)
@@ -110,8 +121,12 @@ extension ContentView {
            (0...5).contains(rating) {
             let batch = showGrid && !selectedIndices.isEmpty
             let compareActive = compareMode && !compareIndices.isEmpty
+            let surveyActive = surveyMode && !surveyIndices.isEmpty
             if compareActive {
                 session.currentIndex = compareIndices[compareActiveSlot]
+                session.setRating(rating)
+            } else if surveyActive {
+                session.currentIndex = surveyIndices[surveyActiveSlot]
                 session.setRating(rating)
             } else if batch {
                 session.setRatingForIndices(selectedIndices, rating: rating)
@@ -135,10 +150,13 @@ extension ContentView {
         // In compare mode, operations apply to the active slot's photo.
         let batch = showGrid && !selectedIndices.isEmpty
         let compareActive = compareMode && !compareIndices.isEmpty
+        let surveyActive = surveyMode && !surveyIndices.isEmpty
 
         switch action {
         case .navigateBack:
-            if compareActive {
+            if surveyActive {
+                moveSurveySelection(keyCode: 123)
+            } else if compareActive {
                 compareActiveSlot = max(0, compareActiveSlot - 1)
                 session.currentIndex = compareIndices[compareActiveSlot]
             } else {
@@ -147,7 +165,9 @@ extension ContentView {
             return true
 
         case .navigateForward:
-            if compareActive {
+            if surveyActive {
+                moveSurveySelection(keyCode: 124)
+            } else if compareActive {
                 compareActiveSlot = min(compareIndices.count - 1, compareActiveSlot + 1)
                 session.currentIndex = compareIndices[compareActiveSlot]
             } else {
@@ -157,9 +177,12 @@ extension ContentView {
 
         case .toggleFavorite:
             if cullingProfileTriage {
-                applyTriage(.keep, batch: batch, compareActive: compareActive)
+                applyTriage(.keep, batch: batch, compareActive: compareActive, surveyActive: surveyActive)
             } else if compareActive {
                 session.currentIndex = compareIndices[compareActiveSlot]
+                session.toggleFavorite()
+            } else if surveyActive {
+                session.currentIndex = surveyIndices[surveyActiveSlot]
                 session.toggleFavorite()
             } else if batch {
                 session.toggleFavoriteForIndices(selectedIndices)
@@ -171,9 +194,12 @@ extension ContentView {
 
         case .toggleRejected:
             if cullingProfileTriage {
-                applyTriage(.out, batch: batch, compareActive: compareActive)
+                applyTriage(.out, batch: batch, compareActive: compareActive, surveyActive: surveyActive)
             } else if compareActive {
                 session.currentIndex = compareIndices[compareActiveSlot]
+                session.toggleRejected()
+            } else if surveyActive {
+                session.currentIndex = surveyIndices[surveyActiveSlot]
                 session.toggleRejected()
             } else if batch {
                 session.toggleRejectedForIndices(selectedIndices)
@@ -185,20 +211,34 @@ extension ContentView {
 
         case .setTriageMaybe:
             guard cullingProfileTriage else { return false }
-            applyTriage(.maybe, batch: batch, compareActive: compareActive)
+            applyTriage(.maybe, batch: batch, compareActive: compareActive, surveyActive: surveyActive)
             return true
 
         case .toggleGrid:
+            if surveyMode {
+                exitSurveyMode(returnToGrid: true)
+                return true
+            }
             if compareMode { exitCompareMode() }
             showGrid.toggle()
             if !showGrid { selectedIndices.removeAll() }
             return true
 
         case .toggleCompare:
+            if surveyMode { exitSurveyMode(returnToGrid: false) }
             if compareMode {
                 exitCompareMode()
             } else {
                 enterCompareMode()
+            }
+            return true
+
+        case .toggleSurvey:
+            if compareMode { exitCompareMode() }
+            if surveyMode {
+                exitSurveyMode(returnToGrid: true)
+            } else {
+                enterSurveyMode()
             }
             return true
 
@@ -220,13 +260,13 @@ extension ContentView {
             return true
 
         case .toggleFocusPeaking:
-            if compareMode { return false }
+            if compareMode || surveyMode { return false }
             focusPeakingEnabled.toggle()
             loadCurrentImage()
             return true
 
         case .toggleInfo:
-            if compareMode || showGrid { return false }
+            if compareMode || surveyMode || showGrid { return false }
             showInfo.toggle()
             if showInfo {
                 loadEXIF()
@@ -236,7 +276,7 @@ extension ContentView {
             return true
 
         case .toggleHistogram:
-            if compareMode || showGrid { return false }
+            if compareMode || surveyMode || showGrid { return false }
             showHistogram.toggle()
             if showHistogram {
                 updateHistogram()
@@ -281,6 +321,10 @@ extension ContentView {
             return true
 
         case .pickCompare:
+            if surveyMode {
+                decideSurveyWinner()
+                return true
+            }
             if compareMode {
                 pickActivePhoto()
                 return true
@@ -293,6 +337,7 @@ extension ContentView {
             return false
 
         case .skipNextBaseline:
+            if surveyMode { return true }
             if compareActive {
                 skipToNextBaseline()
                 return true
@@ -304,17 +349,21 @@ extension ContentView {
     /// Photo Mechanic-style auto-advance: jump to the next photo after a
     /// rating action in the single-photo view (opt-in via Settings).
     private func autoAdvanceIfEnabled() {
-        guard autoAdvance, !showGrid, !compareMode else { return }
+        guard autoAdvance, !showGrid, !compareMode, !surveyMode else { return }
         navigateForward()
     }
 
     private func applyTriage(
         _ state: CullingSession.TriageState,
         batch: Bool,
-        compareActive: Bool
+        compareActive: Bool,
+        surveyActive: Bool = false
     ) {
         if compareActive {
             session.currentIndex = compareIndices[compareActiveSlot]
+            session.setTriage(state)
+        } else if surveyActive {
+            session.currentIndex = surveyIndices[surveyActiveSlot]
             session.setTriage(state)
         } else if batch {
             session.setTriageForIndices(selectedIndices, state)
@@ -469,6 +518,11 @@ extension ContentView {
     }
 
     private func currentZoomFileURL() -> URL? {
+        if surveyMode, !surveyIndices.isEmpty {
+            let index = surveyIndices[surveyActiveSlot]
+            guard session.files.indices.contains(index) else { return nil }
+            return session.files[index]
+        }
         if compareMode, !compareIndices.isEmpty {
             let index = compareIndices[compareActiveSlot]
             guard session.files.indices.contains(index) else { return nil }
@@ -478,6 +532,9 @@ extension ContentView {
     }
 
     private func currentZoomTexture() -> MTLTexture? {
+        if surveyMode, !surveyIndices.isEmpty {
+            return surveyTextures[surveyIndices[surveyActiveSlot]]
+        }
         if compareMode, !compareIndices.isEmpty {
             return compareTextures[compareIndices[compareActiveSlot]]
         }
@@ -494,7 +551,12 @@ extension ContentView {
         }
         let scale = window.backingScaleFactor
         var size = contentView.bounds.size
-        if compareMode, compareIndices.count > 1 {
+        if surveyMode, !surveyIndices.isEmpty {
+            let cols = surveyColumnCount(for: surveyIndices.count)
+            let rows = surveyRowCount(for: surveyIndices.count)
+            size.width /= CGFloat(cols)
+            size.height /= CGFloat(rows)
+        } else if compareMode, compareIndices.count > 1 {
             size.width /= CGFloat(compareIndices.count)
         }
         return CGSize(width: size.width * scale, height: size.height * scale)
