@@ -180,19 +180,6 @@ final class ImageDecoder: @unchecked Sendable {
         }.value
     }
 
-    /// Decode a RAW file to MTLTexture at the specified display size.
-    /// Typically ~200-500ms depending on format and resolution.
-    func decodeRAW(url: URL, displaySize: CGSize, focusPeaking: Bool = false) async -> SendableTexture? {
-        await rawLimiter.withPermit(tier: .high) {
-            let watchdog = startStallWatchdog(seconds: 10, label: "decodeRAW", url: url)
-            let result = await Task.detached(priority: .userInitiated) { [self] in
-                decodeRAWSync(url: url, displaySize: displaySize, focusPeaking: focusPeaking)
-            }.value
-            watchdog.cancel()
-            return result
-        } ?? nil
-    }
-
     /// Decode a RAW file to CGImage at the specified display size.
     /// Used by the disk cache path: produces a CGImage that can be both
     /// converted to MTLTexture (for memory cache) and written as HEIF (for disk cache)
@@ -219,6 +206,14 @@ final class ImageDecoder: @unchecked Sendable {
             watchdog.cancel()
             return result
         } ?? nil
+    }
+
+    /// Derive a focus-peaking texture from an already-decoded image. Scales down
+    /// to `displaySize` when the source is larger (e.g. a cached full-res texture).
+    func applyFocusPeaking(to texture: SendableTexture, displaySize: CGSize) async -> SendableTexture? {
+        await Task.detached(priority: .userInitiated) { [self] in
+            applyFocusPeakingToTextureSync(texture: texture.texture, displaySize: displaySize)
+        }.value
     }
 
     /// Convert a CGImage (e.g. extracted JPEG) to MTLTexture.
@@ -366,29 +361,6 @@ final class ImageDecoder: @unchecked Sendable {
         return rawContext().createCGImage(scaledImage, from: scaledImage.extent)
     }
 
-    private func decodeRAWSync(url: URL, displaySize: CGSize, focusPeaking: Bool) -> SendableTexture? {
-        let signpostID = OSSignpostID(log: signpostLog)
-        os_signpost(.begin, log: signpostLog, name: "decodeRAW", signpostID: signpostID, "file: %{public}s", url.lastPathComponent)
-        defer { os_signpost(.end, log: signpostLog, name: "decodeRAW", signpostID: signpostID) }
-
-        guard let outputImage = fullQualityImage(url: url) else {
-            return nil
-        }
-
-        let scale = min(1,
-            min(displaySize.width / outputImage.extent.width,
-                displaySize.height / outputImage.extent.height)
-        )
-        var scaledImage = outputImage.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
-
-        if focusPeaking {
-            scaledImage = applyFocusPeaking(to: scaledImage)
-        }
-
-        guard let tex = renderToTexture(image: scaledImage, context: rawContext()) else { return nil }
-        return SendableTexture(texture: tex)
-    }
-
     private func decodeRAWFullResolutionSync(url: URL) -> SendableTexture? {
         let signpostID = OSSignpostID(log: signpostLog)
         os_signpost(.begin, log: signpostLog, name: "decodeRAWFull", signpostID: signpostID, "file: %{public}s", url.lastPathComponent)
@@ -399,6 +371,19 @@ final class ImageDecoder: @unchecked Sendable {
         }
 
         guard let tex = renderToTexture(image: outputImage, context: rawContext()) else { return nil }
+        return SendableTexture(texture: tex)
+    }
+
+    private func applyFocusPeakingToTextureSync(texture: MTLTexture, displaySize: CGSize) -> SendableTexture? {
+        guard let ciImage = CIImage(mtlTexture: texture, options: nil) else { return nil }
+        let extent = ciImage.extent
+        let scale = min(1,
+            min(displaySize.width / extent.width,
+                displaySize.height / extent.height)
+        )
+        var scaled = ciImage.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
+        scaled = applyFocusPeaking(to: scaled)
+        guard let tex = renderToTexture(image: scaled, context: ciContext) else { return nil }
         return SendableTexture(texture: tex)
     }
 

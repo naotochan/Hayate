@@ -248,15 +248,14 @@ extension ContentView {
     }
 
     /// Shared load path: the unified PrefetchManager pipeline (memory → disk →
-    /// JPEG → RAW). Focus peaking skips the cache fast paths and decodes the
-    /// RAW directly.
+    /// JPEG → RAW). Focus peaking reuses cached RAW or full-res decodes when
+    /// available, otherwise runs the same pipeline then derives peaking.
     private func loadCompareTextureContent(for fileIndex: Int) async {
-        guard let decoder = decoder else { return }
         let url = session.files[fileIndex]
         let displaySize = previewDisplaySize
 
         if focusPeakingEnabled {
-            if let sendable = await decoder.decodeRAW(url: url, displaySize: displaySize, focusPeaking: true) {
+            if let sendable = await loadFocusPeakingTexture(for: url, displaySize: displaySize) {
                 compareTextures[fileIndex] = sendable.texture
             }
             return
