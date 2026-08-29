@@ -1,6 +1,7 @@
 @preconcurrency import Metal
 import Foundation
 import CoreGraphics
+import os.log
 
 /// Observable progress for background preview generation.
 /// Updated by PrefetchManager, observed by ContentView.
@@ -45,6 +46,8 @@ actor PrefetchManager {
 
     /// Progress object updated during background builds.
     let buildProgress: PreviewBuildProgress
+
+    private static let log = OSLog(subsystem: "com.hayate", category: "Prefetch")
 
     struct CacheEntry {
         let texture: MTLTexture
@@ -294,6 +297,8 @@ actor PrefetchManager {
                 .filter { missingPreviewSet.contains($0) || missingThumbSet.contains($0) }
             guard !ordered.isEmpty else { return }
 
+            os_log(.default, log: Self.log, "background build: %d of %d files missing previews, %d missing thumbnails", missingPreviewSet.count, files.count, missingThumbSet.count)
+
             await MainActor.run {
                 progress.total = ordered.count
                 progress.completed = 0
@@ -302,6 +307,7 @@ actor PrefetchManager {
 
             // Modest parallelism: embedded JPEG extract is cheap and ImageIO
             // scales well; the actor-serialized disk writes keep IO calm.
+            var noEmbedded = 0
             let parallel = 4
             var next = 0
             while next < ordered.count {
@@ -310,12 +316,14 @@ actor PrefetchManager {
                 let batch = Array(ordered[next..<end])
                 next = end
 
-                await withTaskGroup(of: Void.self) { group in
+                await withTaskGroup(of: Bool.self) { group in
                     for url in batch {
                         let needPreview = missingPreviewSet.contains(url)
                         let needThumb = missingThumbSet.contains(url)
                         group.addTask {
-                            guard !Task.isCancelled else { return }
+                            // Cancelled items count as "has embedded" so a
+                            // cancelled build doesn't skew the diagnostic.
+                            guard !Task.isCancelled else { return true }
 
                             if let jpeg = await decoder.extractJPEG(url: url) {
                                 if needPreview {
@@ -325,14 +333,18 @@ actor PrefetchManager {
                                     let thumb = decoder.downscaledCGImage(jpeg, maxPixelSize: 400) ?? jpeg
                                     await diskCache.storeThumbnail(cgImage: thumb, for: url)
                                 }
-                                return
+                                return true
                             }
 
                             // No embedded preview — fall back to a cheap thumb extract only.
                             if needThumb, let thumb = await decoder.extractThumbnail(url: url) {
                                 await diskCache.storeThumbnail(cgImage: thumb, for: url)
                             }
+                            return false
                         }
+                    }
+                    for await hadEmbedded in group where !hadEmbedded {
+                        noEmbedded += 1
                     }
                 }
 
@@ -341,6 +353,8 @@ actor PrefetchManager {
                     progress.completed = completed
                 }
             }
+
+            os_log(.default, log: Self.log, "background build finished: %d processed, %d without an embedded preview", next, noEmbedded)
 
             await MainActor.run {
                 progress.isBuilding = false

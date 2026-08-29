@@ -46,8 +46,12 @@ actor DiskCacheManager {
 
     /// Read the user-configured cache root from UserDefaults, falling back to the default.
     static var userConfiguredCacheRoot: URL {
-        if let path = UserDefaults.standard.string(forKey: "previewCacheLocation") {
-            return URL(fileURLWithPath: path, isDirectory: true)
+        // Settings' "Reset" writes an empty string — treat it as unset. A
+        // bogus root makes the SQLite index unopenable and silently disables
+        // persistence (every launch rebuilt every preview).
+        if let path = UserDefaults.standard.string(forKey: "previewCacheLocation"),
+           !path.isEmpty {
+            return URL(fileURLWithPath: path, isDirectory: true).standardizedFileURL
         }
         return defaultCacheRoot
     }
@@ -60,40 +64,79 @@ actor DiskCacheManager {
     }
 
     init(cacheRoot: URL? = nil) {
-        let root = cacheRoot ?? Self.defaultCacheRoot
+        let requested = cacheRoot ?? Self.defaultCacheRoot
+        var root = requested
+        var db = Self.openIndex(at: root)
+        if db == nil, root != Self.defaultCacheRoot {
+            // An unusable custom location (deleted volume, unwritable, empty
+            // path from Settings' Reset) must not silently kill persistence —
+            // without the index every launch rebuilds every preview.
+            os_log(.error, log: Self.log, "Preview cache at %{public}@ is unusable; falling back to the default location", root.path)
+            root = Self.defaultCacheRoot
+            db = Self.openIndex(at: root)
+        }
+        if db == nil {
+            os_log(.fault, log: Self.log, "Preview cache index could not be opened at %{public}@ — previews will not persist this session", root.path)
+        }
+
         self.cacheRoot = root
         self.displayDir = root.appendingPathComponent("display", isDirectory: true)
         self.thumbDir = root.appendingPathComponent("thumb", isDirectory: true)
+        self.dbHandle = SQLiteHandle(db)
+    }
 
+    private static let log = OSLog(subsystem: "com.hayate", category: "DiskCache")
+
+    /// Create the cache directories and open/migrate the SQLite index at
+    /// `root`. Returns nil (after logging) when the database cannot be opened.
+    private static func openIndex(at root: URL) -> OpaquePointer? {
+        let displayDir = root.appendingPathComponent("display", isDirectory: true)
+        let thumbDir = root.appendingPathComponent("thumb", isDirectory: true)
         try? FileManager.default.createDirectory(at: displayDir, withIntermediateDirectories: true)
         try? FileManager.default.createDirectory(at: thumbDir, withIntermediateDirectories: true)
 
         var dbHandle: OpaquePointer?
         let dbPath = root.appendingPathComponent("index.sqlite").path
-        if sqlite3_open_v2(dbPath, &dbHandle, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_FULLMUTEX, nil) == SQLITE_OK {
-            // A previous Hayate instance may still hold the WAL while exiting.
-            // Wait briefly instead of failing: failed reads make every file
-            // look uncached and trigger a full preview rebuild on each launch.
-            sqlite3_busy_timeout(dbHandle, 3_000)
-            let tableSQL = """
-            CREATE TABLE IF NOT EXISTS %@ (
-                key TEXT PRIMARY KEY,
-                source_path TEXT NOT NULL,
-                source_mtime REAL NOT NULL,
-                source_size INTEGER NOT NULL,
-                file_size INTEGER NOT NULL DEFAULT 0,
-                last_access_at REAL NOT NULL,
-                created_at REAL NOT NULL
-            )
-            """
-            sqlite3_exec(dbHandle, String(format: tableSQL, "previews"), nil, nil, nil)
-            sqlite3_exec(dbHandle, String(format: tableSQL, "thumbnails"), nil, nil, nil)
-            // Draft (embedded JPEG) vs full-quality (CIRAW) preview. Existing
-            // rows default to full so older caches keep their previous meaning.
-            sqlite3_exec(dbHandle, "ALTER TABLE previews ADD COLUMN is_full_quality INTEGER NOT NULL DEFAULT 1", nil, nil, nil)
-            sqlite3_exec(dbHandle, "PRAGMA journal_mode=WAL", nil, nil, nil)
+        guard sqlite3_open_v2(dbPath, &dbHandle, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_FULLMUTEX, nil) == SQLITE_OK else {
+            os_log(.error, log: log, "sqlite open failed at %{public}@: %{public}@", dbPath, dbHandle.map { String(cString: sqlite3_errmsg($0)) } ?? "unknown error")
+            if let dbHandle { sqlite3_close(dbHandle) }
+            return nil
         }
-        self.dbHandle = SQLiteHandle(dbHandle)
+
+        // A previous Hayate instance may still hold the WAL while exiting.
+        // Wait briefly instead of failing: failed reads make every file look
+        // uncached and trigger a full preview rebuild on each launch. Kept
+        // short — this actor sits on the viewer's critical path.
+        sqlite3_busy_timeout(dbHandle, 1_000)
+
+        let tableSQL = """
+        CREATE TABLE IF NOT EXISTS %@ (
+            key TEXT PRIMARY KEY,
+            source_path TEXT NOT NULL,
+            source_mtime REAL NOT NULL,
+            source_size INTEGER NOT NULL,
+            file_size INTEGER NOT NULL DEFAULT 0,
+            last_access_at REAL NOT NULL,
+            created_at REAL NOT NULL
+        )
+        """
+        sqlite3_exec(dbHandle, String(format: tableSQL, "previews"), nil, nil, nil)
+        sqlite3_exec(dbHandle, String(format: tableSQL, "thumbnails"), nil, nil, nil)
+
+        // Draft (embedded JPEG) vs full-quality (CIRAW) preview, added after
+        // the first shipped schema. A blind ALTER whose failure went ignored
+        // broke every preview insert for the process lifetime ("no such
+        // column"), so check first and log failures.
+        var columnCheck: OpaquePointer?
+        let hasFullQuality = sqlite3_prepare_v2(dbHandle, "SELECT is_full_quality FROM previews LIMIT 0", -1, &columnCheck, nil) == SQLITE_OK
+        sqlite3_finalize(columnCheck)
+        if !hasFullQuality,
+           sqlite3_exec(dbHandle, "ALTER TABLE previews ADD COLUMN is_full_quality INTEGER NOT NULL DEFAULT 1", nil, nil, nil) != SQLITE_OK {
+            os_log(.error, log: log, "is_full_quality migration failed: %{public}@", String(cString: sqlite3_errmsg(dbHandle)))
+        }
+
+        sqlite3_exec(dbHandle, "PRAGMA journal_mode=WAL", nil, nil, nil)
+        return dbHandle
     }
 
     // MARK: - Public API
@@ -121,7 +164,7 @@ actor DiskCacheManager {
             return nil
         }
 
-        touchEntry(key: key, table: "previews")
+        touchEntryThrottled(key: key, table: "previews")
 
         guard let source = CGImageSourceCreateWithURL(filePath as CFURL, nil),
               let image = CGImageSourceCreateImageAtIndex(source, 0, nil) else {
@@ -162,6 +205,7 @@ actor DiskCacheManager {
 
         guard encoded else {
             try? FileManager.default.removeItem(at: tempURL)
+            os_log(.error, log: signpostLog, "HEIF encode failed for %{public}@", url.lastPathComponent)
             return
         }
 
@@ -186,6 +230,7 @@ actor DiskCacheManager {
             try FileManager.default.moveItem(at: tempURL, to: filePath)
         } catch {
             try? FileManager.default.removeItem(at: tempURL)
+            os_log(.error, log: signpostLog, "cache store move failed for %{public}@: %{public}@", url.lastPathComponent, error.localizedDescription)
             return
         }
 
@@ -218,10 +263,13 @@ actor DiskCacheManager {
     }
 
     /// Filter a list of URLs to only those missing from the disk cache.
+    /// One index query total — per-file SELECTs made a large folder occupy
+    /// this actor (blocking the viewer's loads behind it) on every launch.
     func uncachedURLs(from urls: [URL]) -> [URL] {
-        urls.filter { url in
+        let existing = allKeys(table: "previews")
+        return urls.filter { url in
             guard let key = cacheKey(for: url) else { return true }
-            return !entryExists(key: key, table: "previews")
+            return !existing.contains(key)
         }
     }
 
@@ -237,19 +285,38 @@ actor DiskCacheManager {
     }
 
     /// Evict oldest entries (display first, then thumb) until total size is under `maxBytes`.
+    /// Freed bytes are tracked locally instead of re-querying SUM(file_size)
+    /// per entry — on a large cache that O(N) re-query loop occupied this
+    /// actor long enough to stall the viewer.
     func evict(maxBytes: Int64) {
-        while totalSize() > maxBytes {
-            if let oldest = oldestEntry(table: "previews") {
-                let filePath = heifPath(for: oldest, dir: displayDir)
-                try? FileManager.default.removeItem(at: filePath)
-                deleteEntry(key: oldest, table: "previews")
-            } else if let oldest = oldestEntry(table: "thumbnails") {
-                let filePath = heifPath(for: oldest, dir: thumbDir)
-                try? FileManager.default.removeItem(at: filePath)
-                deleteEntry(key: oldest, table: "thumbnails")
-            } else {
-                break
+        var remaining = totalSize()
+        guard remaining > maxBytes else { return }
+        var evicted = 0
+        var lastAttempted: String?
+        while remaining > maxBytes {
+            var key = oldestEntry(table: "previews")
+            var table = "previews"
+            var dir = displayDir
+            if key == nil {
+                key = oldestEntry(table: "thumbnails")
+                table = "thumbnails"
+                dir = thumbDir
             }
+            guard let victim = key else { break }
+            // A failed delete (e.g. locked DB) would otherwise re-select the
+            // same row forever.
+            guard victim != lastAttempted else { break }
+            lastAttempted = victim
+
+            let filePath = heifPath(for: victim, dir: dir)
+            let fileSize = (try? FileManager.default.attributesOfItem(atPath: filePath.path)[.size] as? Int64) ?? 0
+            try? FileManager.default.removeItem(at: filePath)
+            deleteEntry(key: victim, table: table)
+            remaining -= fileSize
+            evicted += 1
+        }
+        if evicted > 0 {
+            os_log(.default, log: signpostLog, "cache evicted %d entries to fit %lld-byte limit", evicted, maxBytes)
         }
     }
 
@@ -276,7 +343,7 @@ actor DiskCacheManager {
             return nil
         }
 
-        touchEntry(key: key, table: "thumbnails")
+        touchEntryThrottled(key: key, table: "thumbnails")
 
         guard let source = CGImageSourceCreateWithURL(filePath as CFURL, nil),
               let image = CGImageSourceCreateImageAtIndex(source, 0, nil) else {
@@ -301,6 +368,7 @@ actor DiskCacheManager {
 
         guard encoded else {
             try? FileManager.default.removeItem(at: tempURL)
+            os_log(.error, log: signpostLog, "HEIF encode failed for %{public}@", url.lastPathComponent)
             return
         }
 
@@ -317,6 +385,7 @@ actor DiskCacheManager {
             try FileManager.default.moveItem(at: tempURL, to: filePath)
         } catch {
             try? FileManager.default.removeItem(at: tempURL)
+            os_log(.error, log: signpostLog, "cache store move failed for %{public}@: %{public}@", url.lastPathComponent, error.localizedDescription)
             return
         }
 
@@ -335,9 +404,10 @@ actor DiskCacheManager {
     }
 
     func uncachedThumbnailURLs(from urls: [URL]) -> [URL] {
-        urls.filter { url in
+        let existing = allKeys(table: "thumbnails")
+        return urls.filter { url in
             guard let key = cacheKey(for: url) else { return true }
-            return !entryExists(key: key, table: "thumbnails")
+            return !existing.contains(key)
         }
     }
 
@@ -387,6 +457,24 @@ actor DiskCacheManager {
 
     private static let sqliteTransient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
 
+    /// All keys in a table, fetched in a single query.
+    private func allKeys(table: String) -> Set<String> {
+        guard let db = db else { return [] }
+        var stmt: OpaquePointer?
+        defer { sqlite3_finalize(stmt) }
+        guard sqlite3_prepare_v2(db, "SELECT key FROM \(table)", -1, &stmt, nil) == SQLITE_OK else {
+            os_log(.error, log: signpostLog, "allKeys prepare failed on %{public}@: %{public}@", table, String(cString: sqlite3_errmsg(db)))
+            return []
+        }
+        var keys = Set<String>()
+        while sqlite3_step(stmt) == SQLITE_ROW {
+            if let cStr = sqlite3_column_text(stmt, 0) {
+                keys.insert(String(cString: cStr))
+            }
+        }
+        return keys
+    }
+
     private func entryExists(key: String, table: String) -> Bool {
         guard let db = db else { return false }
         var stmt: OpaquePointer?
@@ -407,7 +495,10 @@ actor DiskCacheManager {
         var stmt: OpaquePointer?
         defer { sqlite3_finalize(stmt) }
         let sql = "INSERT OR REPLACE INTO \(table) (key, source_path, source_mtime, source_size, file_size, last_access_at, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)"
-        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return }
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+            os_log(.error, log: signpostLog, "cache insert prepare failed: %{public}@", String(cString: sqlite3_errmsg(db)))
+            return
+        }
         let transient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
         sqlite3_bind_text(stmt, 1, key, -1, transient)
         sqlite3_bind_text(stmt, 2, url.path, -1, transient)
@@ -416,7 +507,10 @@ actor DiskCacheManager {
         sqlite3_bind_int64(stmt, 5, fileSize)
         sqlite3_bind_double(stmt, 6, now)
         sqlite3_bind_double(stmt, 7, now)
-        sqlite3_step(stmt)
+        let stepResult = sqlite3_step(stmt)
+        if stepResult != SQLITE_DONE {
+            os_log(.error, log: signpostLog, "cache insert step failed (%d): %{public}@", stepResult, String(cString: sqlite3_errmsg(db)))
+        }
     }
 
     private func insertPreviewEntry(key: String, url: URL, fileSize: Int64, isFullQuality: Bool) {
@@ -433,7 +527,10 @@ actor DiskCacheManager {
         (key, source_path, source_mtime, source_size, file_size, last_access_at, created_at, is_full_quality)
         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
         """
-        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return }
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+            os_log(.error, log: signpostLog, "cache insert prepare failed: %{public}@", String(cString: sqlite3_errmsg(db)))
+            return
+        }
         let transient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
         sqlite3_bind_text(stmt, 1, key, -1, transient)
         sqlite3_bind_text(stmt, 2, url.path, -1, transient)
@@ -443,7 +540,10 @@ actor DiskCacheManager {
         sqlite3_bind_double(stmt, 6, now)
         sqlite3_bind_double(stmt, 7, now)
         sqlite3_bind_int(stmt, 8, isFullQuality ? 1 : 0)
-        sqlite3_step(stmt)
+        let stepResult = sqlite3_step(stmt)
+        if stepResult != SQLITE_DONE {
+            os_log(.error, log: signpostLog, "cache insert step failed (%d): %{public}@", stepResult, String(cString: sqlite3_errmsg(db)))
+        }
     }
 
     /// `nil` = no row; otherwise the stored `is_full_quality` flag.
@@ -460,6 +560,20 @@ actor DiskCacheManager {
 
     private func previewIsFullQuality(key: String) -> Bool {
         previewIsFullQualityIfPresent(key: key) ?? true
+    }
+
+    /// Last touch per "table|key" this session. LRU bookkeeping writes once
+    /// per key per hour instead of on every view — the viewer path must not
+    /// take a WAL write lock per photo.
+    private var recentTouches: [String: Date] = [:]
+
+    private func touchEntryThrottled(key: String, table: String) {
+        let id = "\(table)|\(key)"
+        let now = Date()
+        if let last = recentTouches[id], now.timeIntervalSince(last) < 3_600 { return }
+        if recentTouches.count > 10_000 { recentTouches.removeAll() }
+        recentTouches[id] = now
+        touchEntry(key: key, table: table)
     }
 
     private func touchEntry(key: String, table: String) {
