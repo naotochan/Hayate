@@ -64,6 +64,12 @@ extension ContentView {
                         .padding(.vertical, 2)
                         .background(Color.accentColor.opacity(0.5))
                         .cornerRadius(3)
+
+                    if selectedIndices.count >= 2 {
+                        Text(L.t("N survey", ja: "N サーベイ"))
+                            .font(.system(size: 11))
+                            .foregroundColor(.secondary)
+                    }
                 }
             }
             .padding(.horizontal, 12)

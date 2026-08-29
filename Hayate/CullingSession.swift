@@ -277,6 +277,8 @@ class CullingSession: ObservableObject {
         case rejectedChange(fileName: String, oldValue: Bool)
         /// Compound restore for triage (Keep/Maybe/Out) so ⌘Z undoes in one step.
         case entrySnapshot(fileName: String, oldEntry: PhotoEntry?)
+        /// Multiple entry restores undone in one ⌘Z (e.g. survey decide).
+        case compositeEntrySnapshots([(fileName: String, oldEntry: PhotoEntry?)])
         case deletion(url: URL, index: Int, entry: PhotoEntry?)
     }
 
@@ -712,6 +714,58 @@ class CullingSession: ObservableObject {
         saveJSON()
     }
 
+    /// Survey decide: Keep/favorite the winner and Out/reject all others as one undo step.
+    func applySurveyDecision(winnerIndex: Int, otherIndices: [Int], triageMode: Bool) {
+        guard files.indices.contains(winnerIndex) else { return }
+        let winnerFileName = files[winnerIndex].lastPathComponent
+        var snapshots: [(fileName: String, oldEntry: PhotoEntry?)] = []
+
+        if triageMode {
+            if TriageState.of(entries[winnerFileName]) != .keep {
+                snapshots.append((winnerFileName, entries[winnerFileName]))
+            }
+            for index in otherIndices where files.indices.contains(index) {
+                let fileName = files[index].lastPathComponent
+                if TriageState.of(entries[fileName]) != .out {
+                    snapshots.append((fileName, entries[fileName]))
+                }
+            }
+            guard !snapshots.isEmpty else { return }
+            undoStack.append(.compositeEntrySnapshots(snapshots))
+            if TriageState.of(entries[winnerFileName]) != .keep {
+                applyTriage(.keep, toFileNamed: winnerFileName, recordUndo: false)
+            }
+            for index in otherIndices where files.indices.contains(index) {
+                let fileName = files[index].lastPathComponent
+                if TriageState.of(entries[fileName]) != .out {
+                    applyTriage(.out, toFileNamed: fileName, recordUndo: false)
+                }
+            }
+        } else {
+            if entries[winnerFileName]?.isFavorite != true {
+                snapshots.append((winnerFileName, entries[winnerFileName]))
+            }
+            for index in otherIndices where files.indices.contains(index) {
+                let fileName = files[index].lastPathComponent
+                if entries[fileName]?.isRejected != true {
+                    snapshots.append((fileName, entries[fileName]))
+                }
+            }
+            guard !snapshots.isEmpty else { return }
+            undoStack.append(.compositeEntrySnapshots(snapshots))
+            if entries[winnerFileName]?.isFavorite != true {
+                applyToggleFavorite(toFileNamed: winnerFileName, recordUndo: false)
+            }
+            for index in otherIndices where files.indices.contains(index) {
+                let fileName = files[index].lastPathComponent
+                if entries[fileName]?.isRejected != true {
+                    applyToggleRejected(toFileNamed: fileName, recordUndo: false)
+                }
+            }
+        }
+        saveJSON()
+    }
+
     // MARK: - Mutation primitives
 
     /// Run `body` for each valid index's file name. Callers persist afterwards.
@@ -733,14 +787,18 @@ class CullingSession: ObservableObject {
 
     /// Toggle favorite; turning it on clears rejected (mutually exclusive).
     /// Pushes favoriteChange first, then rejectedChange if clearing. Does not persist.
-    private func applyToggleFavorite(toFileNamed fileName: String) {
+    private func applyToggleFavorite(toFileNamed fileName: String, recordUndo: Bool = true) {
         let oldFav = entries[fileName]?.isFavorite ?? false
         let oldRej = entries[fileName]?.isRejected ?? false
-        undoStack.append(.favoriteChange(fileName: fileName, oldValue: oldFav))
+        if recordUndo {
+            undoStack.append(.favoriteChange(fileName: fileName, oldValue: oldFav))
+        }
         var entry = entries[fileName] ?? PhotoEntry(fileName: fileName)
         entry.isFavorite = !entry.isFavorite
         if entry.isFavorite && entry.isRejected {
-            undoStack.append(.rejectedChange(fileName: fileName, oldValue: oldRej))
+            if recordUndo {
+                undoStack.append(.rejectedChange(fileName: fileName, oldValue: oldRej))
+            }
             entry.isRejected = false
         }
         entries[fileName] = entry
@@ -749,14 +807,18 @@ class CullingSession: ObservableObject {
 
     /// Toggle rejected; turning it on clears favorite (mutually exclusive).
     /// Pushes rejectedChange first, then favoriteChange if clearing. Does not persist.
-    private func applyToggleRejected(toFileNamed fileName: String) {
+    private func applyToggleRejected(toFileNamed fileName: String, recordUndo: Bool = true) {
         let oldRej = entries[fileName]?.isRejected ?? false
         let oldFav = entries[fileName]?.isFavorite ?? false
-        undoStack.append(.rejectedChange(fileName: fileName, oldValue: oldRej))
+        if recordUndo {
+            undoStack.append(.rejectedChange(fileName: fileName, oldValue: oldRej))
+        }
         var entry = entries[fileName] ?? PhotoEntry(fileName: fileName)
         entry.isRejected = !entry.isRejected
         if entry.isRejected && entry.isFavorite {
-            undoStack.append(.favoriteChange(fileName: fileName, oldValue: oldFav))
+            if recordUndo {
+                undoStack.append(.favoriteChange(fileName: fileName, oldValue: oldFav))
+            }
             entry.isFavorite = false
         }
         entries[fileName] = entry
@@ -765,12 +827,14 @@ class CullingSession: ObservableObject {
 
     /// Apply an exclusive triage state. Same state again → undecided.
     /// Mapping: Keep→favorite, Out→reject, Maybe→rating 3 (clears the other two).
-    private func applyTriage(_ state: TriageState, toFileNamed fileName: String) {
+    private func applyTriage(_ state: TriageState, toFileNamed fileName: String, recordUndo: Bool = true) {
         let previous = entries[fileName]
         let current = TriageState.of(previous)
         let target: TriageState = (current == state && state != .undecided) ? .undecided : state
 
-        undoStack.append(.entrySnapshot(fileName: fileName, oldEntry: previous))
+        if recordUndo {
+            undoStack.append(.entrySnapshot(fileName: fileName, oldEntry: previous))
+        }
 
         var entry = previous ?? PhotoEntry(fileName: fileName)
         switch target {
@@ -913,6 +977,12 @@ class CullingSession: ObservableObject {
         case .entrySnapshot(let fileName, let oldEntry):
             entries[fileName] = oldEntry
 
+        case .compositeEntrySnapshots(let snapshots):
+            for snapshot in snapshots {
+                entries[snapshot.fileName] = snapshot.oldEntry
+                writeXMPSidecar(forFileNamed: snapshot.fileName)
+            }
+
         case .deletion:
             // File deletion undo is not supported (trashed items can be recovered via Finder)
             break
@@ -925,7 +995,7 @@ class CullingSession: ObservableObject {
              .rejectedChange(let fileName, _),
              .entrySnapshot(let fileName, _):
             writeXMPSidecar(forFileNamed: fileName)
-        case .deletion:
+        case .compositeEntrySnapshots, .deletion:
             break
         }
 

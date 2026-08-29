@@ -42,6 +42,23 @@ enum ResolvedLanguage: Equatable {
     var toggleFitOneToOneZoom: String {
         t("Toggle fit / 1:1 zoom", ja: "フィット / 1:1 ズーム")
     }
+
+    var surveyModeLabel: String {
+        t("SURVEY", ja: "サーベイ")
+    }
+
+    func surveyFooterHints(triage: Bool) -> String {
+        if triage {
+            return t(
+                "↑↓←→ select  |  K keep  |  O out  |  ⏎ decide  |  Esc grid",
+                ja: "↑↓←→ 選択  |  K Keep  |  O Out  |  ⏎ 決定  |  Esc グリッド"
+            )
+        }
+        return t(
+            "↑↓←→ select  |  K favorite  |  O reject  |  0–5 stars  |  ⏎ decide  |  Esc grid",
+            ja: "↑↓←→ 選択  |  K お気に入り  |  O リジェクト  |  0–5 星  |  ⏎ 決定  |  Esc グリッド"
+        )
+    }
 }
 
 /// In-app JP/EN switching. Injected as an `EnvironmentObject`.
@@ -67,6 +84,12 @@ final class LocalizationStore: ObservableObject {
     /// Pick the string for the current resolved language.
     func t(_ english: String, ja japanese: String) -> String {
         resolved.t(english, ja: japanese)
+    }
+
+    var surveyModeLabel: String { resolved.surveyModeLabel }
+
+    func surveyFooterHints(triage: Bool) -> String {
+        resolved.surveyFooterHints(triage: triage)
     }
 }
 

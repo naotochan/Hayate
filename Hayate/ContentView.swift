@@ -106,6 +106,13 @@ struct ContentView: View {
     @State var compareIndices: [Int] = []
     @State var compareActiveSlot: Int = 0  // which photo is "active" for rating
     @State var compareTextures: [Int: MTLTexture] = [:]
+    @State var surveyMode = false
+    @State var surveyIndices: [Int] = []
+    @State var surveyActiveSlot: Int = 0
+    @State var surveyTextures: [Int: MTLTexture] = [:]
+    /// Bumped on enter/exit so in-flight survey texture loads can't repopulate after clear.
+    @State var surveyTextureGeneration: UInt = 0
+    @State var surveyTextureLoadTask: Task<Void, Never>?
 
     enum GridFilter: String, CaseIterable {
         case all
@@ -192,6 +199,8 @@ struct ContentView: View {
                     gridView
                 } else if compareMode {
                     compareView
+                } else if surveyMode {
+                    surveyView
                 } else {
                     // Single photo view
                     if let device = metalDevice {
@@ -335,11 +344,21 @@ struct ContentView: View {
                     selectedIndices.removeAll()
                     pendingDeletionIndices = nil
                     if deleted > 0 {
-                        loadCurrentImage()
+                        if surveyMode {
+                            exitSurveyMode(returnToGrid: true)
+                        } else {
+                            loadCurrentImage()
+                        }
                     }
                 } else {
-                    _ = session.deleteCurrentFile()
-                    loadCurrentImage()
+                    let deleted = session.deleteCurrentFile()
+                    if deleted {
+                        if surveyMode {
+                            exitSurveyMode(returnToGrid: true)
+                        } else {
+                            loadCurrentImage()
+                        }
+                    }
                 }
             }
             Button(L.t("Cancel", ja: "キャンセル"), role: .cancel) {
@@ -350,6 +369,8 @@ struct ContentView: View {
         }
         .onChange(of: session.currentIndex) { _, _ in
             guard !isOpeningFolder else { return }
+            // Compare/survey share zoom across panes — skip reload here so slot moves don't reset zoom.
+            guard !surveyMode, !compareMode else { return }
             loadCurrentImage()
         }
         .onChange(of: session.openFolderRequest) { _, _ in
@@ -582,6 +603,13 @@ struct ContentView: View {
         compareIndices.removeAll()
         compareActiveSlot = 0
         compareTextures.removeAll()
+        surveyMode = false
+        surveyIndices.removeAll()
+        surveyActiveSlot = 0
+        surveyTextures.removeAll()
+        surveyTextureLoadTask?.cancel()
+        surveyTextureLoadTask = nil
+        surveyTextureGeneration &+= 1
 
         // View helpers
         focusPeakingEnabled = false
@@ -816,7 +844,7 @@ struct ContentView: View {
     /// into `currentTexture` when ready. Reuses the PrefetchManager full-res LRU
     /// so zoom-out → zoom-in on the same photo does not re-decode.
     func loadFullResolutionIfNeeded() {
-        guard zoomScale > 1.001, !focusPeakingEnabled, !showGrid, !compareMode,
+        guard zoomScale > 1.001, !focusPeakingEnabled, !showGrid, !compareMode, !surveyMode,
               let file = session.currentFile,
               let prefetchManager = prefetchManager else { return }
         if fullResDisplayedURL == file { return }
