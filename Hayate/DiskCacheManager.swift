@@ -19,7 +19,9 @@ import os.signpost
 ///         └── cd1234…ef.heic
 /// ```
 ///
-/// Cache key = SHA256(absolutePath + "|" + mtime + "|" + size), first 16 hex chars.
+/// Cache key = SHA256(canonicalPath + "|" + mtime + "|" + size), first 16 hex chars.
+/// Canonical path = symlinks resolved + standardized, so /var vs /private/var
+/// and trailing-slash variants of the same file share one key.
 /// Sharded into subdirectories by the first 2 characters of the key.
 actor DiskCacheManager {
     /// Wraps an SQLite handle so it gets closed automatically when the actor is deallocated.
@@ -69,6 +71,10 @@ actor DiskCacheManager {
         var dbHandle: OpaquePointer?
         let dbPath = root.appendingPathComponent("index.sqlite").path
         if sqlite3_open_v2(dbPath, &dbHandle, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_FULLMUTEX, nil) == SQLITE_OK {
+            // A previous Hayate instance may still hold the WAL while exiting.
+            // Wait briefly instead of failing: failed reads make every file
+            // look uncached and trigger a full preview rebuild on each launch.
+            sqlite3_busy_timeout(dbHandle, 3_000)
             let tableSQL = """
             CREATE TABLE IF NOT EXISTS %@ (
                 key TEXT PRIMARY KEY,
@@ -338,10 +344,14 @@ actor DiskCacheManager {
     // MARK: - Cache key
 
     private func cacheKey(for url: URL) -> String? {
-        guard let attrs = try? FileManager.default.attributesOfItem(atPath: url.path) else { return nil }
+        // Canonicalize so the same file keys identically whether its URL came
+        // from the Open panel (/private/var/…), recents (URL(fileURLWithPath:)
+        // keeps /var/…), symlinks, or a trailing slash.
+        let path = url.resolvingSymlinksInPath().standardizedFileURL.path
+        guard let attrs = try? FileManager.default.attributesOfItem(atPath: path) else { return nil }
         let mtime = (attrs[.modificationDate] as? Date)?.timeIntervalSince1970 ?? 0
         let size = (attrs[.size] as? UInt64) ?? 0
-        let input = "\(url.path)|\(mtime)|\(size)"
+        let input = "\(path)|\(mtime)|\(size)"
         let hash = SHA256.hash(data: Data(input.utf8))
         return hash.prefix(8).map { String(format: "%02x", $0) }.joined()
     }
