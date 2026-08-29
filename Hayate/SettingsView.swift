@@ -426,10 +426,10 @@ struct SettingsView: View {
     // MARK: - Cache
 
     private var effectiveCacheRoot: URL {
-        if cacheLocationPath.isEmpty {
-            return DiskCacheManager.defaultCacheRoot
-        }
-        return URL(fileURLWithPath: cacheLocationPath, isDirectory: true)
+        // Single source of truth — DiskCacheManager applies the same
+        // empty-string/fallback handling, so Settings shows what the app
+        // actually uses.
+        DiskCacheManager.userConfiguredCacheRoot
     }
 
     private var cacheContent: some View {
