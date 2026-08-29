@@ -10,6 +10,22 @@ extension ContentView {
     static let gridSpacing: CGFloat = 6
     static let gridPadding: CGFloat = 8
 
+    /// One visible grid slot — a single photo or a collapsed burst stack.
+    struct GridDisplayItem: Identifiable {
+        let fileIndex: Int
+        let url: URL
+        /// Non-nil on the burst representative: collapsed stack or expanded header badge.
+        let burstBadge: BurstBadgeInfo?
+
+        struct BurstBadgeInfo {
+            let burstID: Int
+            let count: Int
+            let isCollapsed: Bool
+        }
+
+        var id: Int { fileIndex }
+    }
+
     var filteredFiles: [(index: Int, url: URL)] {
         session.files.enumerated().compactMap { index, url in
             let entry = session.entries[url.lastPathComponent]
@@ -26,8 +42,60 @@ extension ContentView {
         }
     }
 
+    /// Visible grid order — respects burst collapse when grouping is active.
+    var gridDisplayItems: [GridDisplayItem] {
+        let items = filteredFiles
+        guard burstGroupingEnabled, gridFilter == .all, burstGapSeconds > 0, !burstGroups.isEmpty else {
+            return items.map { GridDisplayItem(fileIndex: $0.index, url: $0.url, burstBadge: nil) }
+        }
+
+        let burstByID = Dictionary(uniqueKeysWithValues: burstGroups.map { ($0.id, $0) })
+        let memberMap = BurstGrouping.memberToBurstID(groups: burstGroups)
+
+        return items.compactMap { item in
+            guard let burstID = memberMap[item.index], let burst = burstByID[burstID] else {
+                return GridDisplayItem(fileIndex: item.index, url: item.url, burstBadge: nil)
+            }
+            let badge = GridDisplayItem.BurstBadgeInfo(
+                burstID: burstID,
+                count: burst.memberIndices.count,
+                isCollapsed: !expandedBurstIDs.contains(burstID)
+            )
+            if expandedBurstIDs.contains(burstID) {
+                return GridDisplayItem(
+                    fileIndex: item.index,
+                    url: item.url,
+                    burstBadge: item.index == burstID ? badge : nil
+                )
+            }
+            guard item.index == burstID else { return nil }
+            return GridDisplayItem(fileIndex: item.index, url: item.url, burstBadge: badge)
+        }
+    }
+
+    /// Burst members hidden inside a collapsed stack → their representative file index.
+    private var collapsedBurstMemberMap: [Int: Int] {
+        guard burstGroupingEnabled, gridFilter == .all, burstGapSeconds > 0 else { return [:] }
+        var map: [Int: Int] = [:]
+        for group in burstGroups where !expandedBurstIDs.contains(group.id) {
+            for index in group.memberIndices {
+                map[index] = group.id
+            }
+        }
+        return map
+    }
+
+    /// Index to use for grid lookup, scroll, and highlight when `fileIndex` may be
+    /// a non-representative member of a collapsed burst.
+    private func gridNavigationIndex(for fileIndex: Int) -> Int {
+        collapsedBurstMemberMap[fileIndex] ?? fileIndex
+    }
+
     var gridView: some View {
-        VStack(spacing: 0) {
+        let burstMemberMap = collapsedBurstMemberMap
+        let currentNavIndex = burstMemberMap[session.currentIndex] ?? session.currentIndex
+
+        return VStack(spacing: 0) {
             // Filter bar
             HStack(spacing: 8) {
                 folderSwitcher
@@ -94,9 +162,9 @@ extension ContentView {
                                     columns: [GridItem(.adaptive(minimum: Self.gridItemMinWidth, maximum: Self.gridItemMaxWidth), spacing: Self.gridSpacing)],
                                     spacing: Self.gridSpacing
                                 ) {
-                                    ForEach(chunk.items, id: \.index) { item in
-                                        gridCell(for: item.url, index: item.index)
-                                            .id(item.index)
+                                    ForEach(chunk.items) { item in
+                                        gridCell(for: item, currentNavIndex: currentNavIndex)
+                                            .id(item.fileIndex)
                                     }
                                 }
                             }
@@ -105,41 +173,64 @@ extension ContentView {
                     }
                     .onAppear {
                         updateGridColumnCount(width: geo.size.width)
-                        proxy.scrollTo(session.currentIndex, anchor: .center)
-                        refreshSceneBoundaries()
+                        normalizeGridCurrentIndex()
+                        proxy.scrollTo(gridNavigationIndex(for: session.currentIndex), anchor: .center)
+                        refreshGridCaptureMetadata()
                     }
                     .onChange(of: geo.size.width) { _, width in
                         updateGridColumnCount(width: width)
                     }
                     .onChange(of: session.currentIndex) { _, newIndex in
-                        proxy.scrollTo(newIndex, anchor: nil)
+                        proxy.scrollTo(gridNavigationIndex(for: newIndex), anchor: nil)
+                    }
+                    .onChange(of: expandedBurstIDs) { _, _ in
+                        proxy.scrollTo(gridNavigationIndex(for: session.currentIndex), anchor: nil)
+                    }
+                    .onChange(of: burstGroups) { _, _ in
+                        pruneSelectionForCollapsedBursts()
+                        let before = session.currentIndex
+                        normalizeGridCurrentIndex()
+                        if session.currentIndex != before {
+                            proxy.scrollTo(gridNavigationIndex(for: session.currentIndex), anchor: nil)
+                        }
+                    }
+                    .onChange(of: gridFilter) { _, _ in
+                        pruneSelectionForCollapsedBursts()
+                        normalizeGridCurrentIndex()
                     }
                     .onChange(of: sceneGapMinutes) { _, _ in
-                        refreshSceneBoundaries()
+                        refreshGridCaptureMetadata()
+                    }
+                    .onChange(of: burstGapSeconds) { _, _ in
+                        refreshGridCaptureMetadata()
+                    }
+                    .onChange(of: burstGroupingEnabled) { _, _ in
+                        pruneSelectionForCollapsedBursts()
+                        normalizeGridCurrentIndex()
                     }
                     .onChange(of: session.files) { _, _ in
-                        refreshSceneBoundaries()
+                        refreshGridCaptureMetadata()
                     }
                 }
             }
         }
     }
 
-    /// Filtered grid items split wherever `sceneStartIndices` marks a new scene.
-    private var sceneChunks: [(id: Int, items: [(index: Int, url: URL)])] {
-        let items = filteredFiles
+    /// Display items split wherever `sceneStartIndices` marks a new scene.
+    private var sceneChunks: [(id: Int, items: [GridDisplayItem])] {
+        let items = gridDisplayItems
         guard !items.isEmpty else { return [] }
         guard sceneGapMinutes > 0, !sceneStartIndices.isEmpty else {
-            return [(id: items[0].index, items: items)]
+            return [(id: items[0].fileIndex, items: items)]
         }
-        var chunks: [(id: Int, items: [(index: Int, url: URL)])] = []
-        var current: [(index: Int, url: URL)] = []
-        var chunkId = items[0].index
+        var chunks: [(id: Int, items: [GridDisplayItem])] = []
+        var current: [GridDisplayItem] = []
+        var chunkId = items[0].fileIndex
         for item in items {
-            if !current.isEmpty && sceneStartIndices.contains(item.index) {
+            if !current.isEmpty && sceneStartIndices.contains(item.fileIndex) {
                 chunks.append((id: chunkId, items: current))
                 current = [item]
-                chunkId = item.index
+                chunkId = item.fileIndex
             } else {
                 current.append(item)
             }
@@ -158,15 +249,23 @@ extension ContentView {
             .frame(maxWidth: .infinity)
     }
 
-    /// Scan EXIF DateTimeOriginal for the open folder and recompute scene starts.
-    func refreshSceneBoundaries() {
+    /// Scan EXIF capture times once per folder and derive scene breaks + burst groups.
+    func refreshGridCaptureMetadata() {
         captureDateTask?.cancel()
-        guard sceneGapMinutes > 0, !session.files.isEmpty else {
-            sceneStartIndices = []
+        sceneStartIndices = []
+        burstGroups = []
+
+        guard !session.files.isEmpty else {
+            expandedBurstIDs = []
             return
         }
         let files = session.files
-        let gap = sceneGapMinutes
+        let sceneGap = sceneGapMinutes
+        let burstGap = burstGapSeconds
+        guard sceneGap > 0 || burstGap > 0 else {
+            expandedBurstIDs = []
+            return
+        }
         captureDateTask = Task {
             var dates: [Date?] = Array(repeating: nil, count: files.count)
             await withTaskGroup(of: (Int, Date?).self) { group in
@@ -181,10 +280,29 @@ extension ContentView {
                 }
             }
             guard !Task.isCancelled else { return }
-            let starts = SceneBoundary.startIndices(dates: dates, gapMinutes: gap)
+            let starts = sceneGap > 0
+                ? SceneBoundary.startIndices(dates: dates, gapMinutes: sceneGap)
+                : []
+            let bursts = burstGap > 0
+                ? BurstGrouping.groups(dates: dates, maxGapSeconds: TimeInterval(burstGap))
+                : []
+            let validBurstIDs = Set(bursts.map(\.id))
             await MainActor.run {
                 sceneStartIndices = starts
+                burstGroups = bursts
+                expandedBurstIDs = expandedBurstIDs.intersection(validBurstIDs)
+                pruneSelectionForCollapsedBursts()
+                normalizeGridCurrentIndex()
             }
+        }
+    }
+
+    /// When the grid is showing a collapsed burst, keep `currentIndex` on the visible representative.
+    func normalizeGridCurrentIndex() {
+        guard showGrid, burstGroupingEnabled, gridFilter == .all, burstGapSeconds > 0 else { return }
+        let resolved = gridNavigationIndex(for: session.currentIndex)
+        if session.currentIndex != resolved {
+            session.currentIndex = resolved
         }
     }
 
@@ -195,36 +313,142 @@ extension ContentView {
         gridColumnCount = max(1, Int(usable / (Self.gridItemMinWidth + Self.gridSpacing)))
     }
 
-    /// Move the current photo by `delta` positions within the *filtered* grid
-    /// order (so navigation doesn't jump to photos hidden by the filter).
+    /// Move the current photo by `delta` positions within the *displayed* grid
+    /// order (collapsed bursts count as one slot).
     /// With `clamping` off, an out-of-range move is a no-op instead of jumping
     /// to the first/last photo — used by ↑↓ row navigation at the edges.
+    /// When `navigateUndecidedOnly` is on, skips display items whose photo is decided.
     func moveGridSelection(by delta: Int, clamping: Bool = true) {
-        let items = filteredFiles
+        let items = gridDisplayItems
         guard !items.isEmpty else { return }
-        if let pos = items.firstIndex(where: { $0.index == session.currentIndex }) {
-            let target = pos + delta
-            let newPos: Int
-            if clamping {
-                newPos = max(0, min(items.count - 1, target))
+        let lookupIndex = gridNavigationIndex(for: session.currentIndex)
+
+        guard let startPos = items.firstIndex(where: { $0.fileIndex == lookupIndex }) else {
+            if let pos = firstUndecidedDisplayPosition(in: items, from: 0, step: 1) {
+                session.currentIndex = items[pos].fileIndex
             } else {
-                guard items.indices.contains(target) else { return }
-                newPos = target
+                session.currentIndex = items[0].fileIndex
             }
-            session.currentIndex = items[newPos].index
+            return
+        }
+
+        let step = delta >= 0 ? 1 : -1
+        let count = abs(delta)
+
+        if navigateUndecidedOnly {
+            var pos = startPos
+            var found = 0
+            while found < count {
+                let nextPos = pos + step
+                guard items.indices.contains(nextPos) else {
+                    if !clamping { return }
+                    break
+                }
+                pos = nextPos
+                if !isDisplayItemDecided(items[pos]) {
+                    found += 1
+                }
+            }
+            guard found == count, pos != startPos else { return }
+            session.currentIndex = items[pos].fileIndex
+            return
+        }
+
+        let target = startPos + delta
+        let newPos: Int
+        if clamping {
+            newPos = max(0, min(items.count - 1, target))
         } else {
-            // Current photo is filtered out — snap to the first visible one.
-            session.currentIndex = items[0].index
+            guard items.indices.contains(target) else { return }
+            newPos = target
+        }
+        session.currentIndex = items[newPos].fileIndex
+    }
+
+    private func isDisplayItemDecided(_ item: GridDisplayItem) -> Bool {
+        let name = session.files[item.fileIndex].lastPathComponent
+        return session.isDecided(fileNamed: name, triageMode: cullingProfileTriage)
+    }
+
+    /// First undecided display index at or after `from` when stepping by `step` (±1).
+    private func firstUndecidedDisplayPosition(
+        in items: [GridDisplayItem],
+        from: Int,
+        step: Int
+    ) -> Int? {
+        var i = from
+        while items.indices.contains(i) {
+            if !isDisplayItemDecided(items[i]) { return i }
+            i += step
+        }
+        return nil
+    }
+
+    /// Shift+click range select along visible grid order (excludes collapsed burst members).
+    func selectGridDisplayRange(anchorFileIndex: Int, targetFileIndex: Int) {
+        let items = gridDisplayItems
+        let anchor = gridNavigationIndex(for: anchorFileIndex)
+        guard let anchorPos = items.firstIndex(where: { $0.fileIndex == anchor }),
+              let targetPos = items.firstIndex(where: { $0.fileIndex == targetFileIndex }) else {
+            return
+        }
+        for pos in min(anchorPos, targetPos)...max(anchorPos, targetPos) {
+            selectedIndices.insert(items[pos].fileIndex)
         }
     }
 
-    private func gridCell(for url: URL, index: Int) -> some View {
-        let isCurrent = index == session.currentIndex
+    /// Visible grid slots only — excludes collapsed burst members.
+    func selectAllVisibleGridItems() {
+        selectedIndices = Set(gridDisplayItems.map(\.fileIndex))
+    }
+
+    private func toggleBurstExpansion(burstID: Int) {
+        if expandedBurstIDs.contains(burstID) {
+            expandedBurstIDs.remove(burstID)
+            pruneSelectionForCollapsedBursts()
+            if let group = burstGroups.first(where: { $0.id == burstID }),
+               group.memberIndices.contains(session.currentIndex),
+               session.currentIndex != burstID {
+                session.currentIndex = burstID
+            }
+        } else {
+            expandedBurstIDs.insert(burstID)
+        }
+    }
+
+    /// Drop selections on burst members that are no longer visible after collapse.
+    func pruneSelectionForCollapsedBursts() {
+        guard burstGroupingEnabled, gridFilter == .all, burstGapSeconds > 0 else { return }
+        let memberMap = BurstGrouping.memberToBurstID(groups: burstGroups)
+        selectedIndices = selectedIndices.filter { index in
+            guard let burstID = memberMap[index], !expandedBurstIDs.contains(burstID) else {
+                return true
+            }
+            return index == burstID
+        }
+    }
+
+    private func gridCell(for item: GridDisplayItem, currentNavIndex: Int) -> some View {
+        gridCell(for: item.url, index: item.fileIndex, burstBadge: item.burstBadge, currentNavIndex: currentNavIndex)
+    }
+
+    private func gridCell(
+        for url: URL,
+        index: Int,
+        burstBadge: GridDisplayItem.BurstBadgeInfo? = nil,
+        currentNavIndex: Int
+    ) -> some View {
+        let isCurrent = index == currentNavIndex
         let isSelected = selectedIndices.contains(index)
         let entry = session.entries[url.lastPathComponent]
+        let showStackChrome = burstBadge?.isCollapsed == true
 
         return VStack(spacing: 0) {
             ZStack {
+                if showStackChrome {
+                    burstStackChrome
+                }
+
                 // Thumbnail: use .fit to prevent overflow
                 if let nsImage = thumbnails[url] {
                     Image(nsImage: nsImage)
@@ -257,8 +481,17 @@ extension ContentView {
                         }
                         Spacer()
                         // Badges (top right)
-                        PhotoBadgeView(entry: entry, triageStyle: cullingProfileTriage)
-                            .padding(4)
+                        HStack(spacing: 4) {
+                            if let badge = burstBadge {
+                                burstCountBadge(
+                                    count: badge.count,
+                                    burstID: badge.burstID,
+                                    isCollapsed: badge.isCollapsed
+                                )
+                            }
+                            PhotoBadgeView(entry: entry, triageStyle: cullingProfileTriage)
+                        }
+                        .padding(4)
                     }
                     Spacer()
                 }
@@ -280,7 +513,10 @@ extension ContentView {
         .cornerRadius(4)
         .overlay(
             RoundedRectangle(cornerRadius: 4)
-                .stroke(isSelected ? Color.accentColor : (isCurrent && selectedIndices.isEmpty ? HayateTheme.fg(1) : Color.clear), lineWidth: 2)
+                .stroke(
+                    isSelected ? Color.accentColor : (isCurrent && selectedIndices.isEmpty ? HayateTheme.fg(1) : Color.clear),
+                    lineWidth: 2
+                )
         )
         .opacity(entry?.isRejected == true ? 0.5 : 1.0)
         .onTapGesture(count: 2) {
@@ -292,10 +528,8 @@ extension ContentView {
         }
         .onTapGesture(count: 1) {
             if NSEvent.modifierFlags.contains(.shift) {
-                // Shift+click: range select from last selected
                 let anchor = selectedIndices.max() ?? session.currentIndex
-                let range = min(anchor, index)...max(anchor, index)
-                for i in range { selectedIndices.insert(i) }
+                selectGridDisplayRange(anchorFileIndex: anchor, targetFileIndex: index)
             } else if NSEvent.modifierFlags.contains(.command) {
                 // Cmd+click: add currentIndex on first multi-select, then toggle
                 if selectedIndices.isEmpty {
@@ -312,5 +546,40 @@ extension ContentView {
                 session.currentIndex = index
             }
         }
+    }
+
+    /// Offset frames behind the representative thumbnail for a collapsed burst.
+    private var burstStackChrome: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 4)
+                .strokeBorder(HayateTheme.wash(0.22), lineWidth: 1)
+                .background(RoundedRectangle(cornerRadius: 4).fill(HayateTheme.wash(0.04)))
+                .offset(x: 5, y: 5)
+            RoundedRectangle(cornerRadius: 4)
+                .strokeBorder(HayateTheme.wash(0.18), lineWidth: 1)
+                .background(RoundedRectangle(cornerRadius: 4).fill(HayateTheme.wash(0.06)))
+                .offset(x: 2.5, y: 2.5)
+        }
+        .allowsHitTesting(false)
+    }
+
+    private func burstCountBadge(count: Int, burstID: Int, isCollapsed: Bool) -> some View {
+        Button {
+            toggleBurstExpansion(burstID: burstID)
+        } label: {
+            Text("\(count)")
+                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                .foregroundColor(HayateTheme.fg(0.95))
+                .padding(.horizontal, 5)
+                .padding(.vertical, 3)
+                .background(HayateTheme.wash(0.55))
+                .cornerRadius(4)
+        }
+        .buttonStyle(.plain)
+        .help(
+            isCollapsed
+                ? L.t("Expand burst", ja: "バーストを展開")
+                : L.t("Collapse burst", ja: "バーストを折りたたむ")
+        )
     }
 }
