@@ -58,7 +58,9 @@ struct ContentView: View {
     @State var thumbnails: [URL: NSImage] = [:]
     /// Insertion order of `thumbnails` keys, oldest first, for capped eviction.
     @State var thumbnailOrder: [URL] = []
-    @State var thumbnailLoadTask: Task<Void, Never>?
+    /// In-flight thumbnail loads keyed by file URL. Cells cancel on disappear so
+    /// fast scrolling can't flood the disk-cache actor with stale reads.
+    @State var thumbnailTasks: [URL: (task: Task<Void, Never>, token: UUID)] = [:]
 
     /// Cap on the in-memory thumbnail dictionary. ~0.5 MB per 400px thumbnail,
     /// so 600 entries ≈ 300 MB worst case. Evicted thumbnails reload on demand
@@ -539,8 +541,8 @@ struct ContentView: View {
         currentDecodeTask?.cancel()
         currentDecodeTask = nil
         cancelFullResolutionLoad()
-        thumbnailLoadTask?.cancel()
-        thumbnailLoadTask = nil
+        for entry in thumbnailTasks.values { entry.task.cancel() }
+        thumbnailTasks.removeAll()
         captureDateTask?.cancel()
         captureDateTask = nil
         sceneStartIndices = []
@@ -786,21 +788,46 @@ struct ContentView: View {
 
     func loadThumbnail(for url: URL) {
         guard let decoder = decoder else { return }
+        guard thumbnails[url] == nil else { return }
+        guard thumbnailTasks[url] == nil else { return }
         let cache = diskCache
-        Task.detached(priority: .utility) {
+        let token = UUID()
+
+        let task = Task.detached(priority: .utility) {
+            var warmingImage: CGImage?
+
             if let cache = cache, let cgImage = await cache.loadThumbnail(for: url) {
-                let nsImage = NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
-                await MainActor.run { storeThumbnail(nsImage, for: url) }
-                return
+                if !Task.isCancelled {
+                    let nsImage = NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
+                    await MainActor.run { storeThumbnail(nsImage, for: url) }
+                }
+            } else if !Task.isCancelled, let cgImage = await decoder.extractThumbnail(url: url) {
+                if !Task.isCancelled {
+                    let nsImage = NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
+                    await MainActor.run { storeThumbnail(nsImage, for: url) }
+                    warmingImage = cgImage
+                }
             }
 
-            guard let cgImage = await decoder.extractThumbnail(url: url) else { return }
-            let nsImage = NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
-            await MainActor.run { storeThumbnail(nsImage, for: url) }
+            // Unregister before disk warming so the placeholder→Image swap's
+            // onDisappear self-cancel can't kill the warming write.
+            await MainActor.run { removeThumbnailTask(for: url, token: token) }
 
-            if let cache = cache {
+            if let cache = cache, let cgImage = warmingImage, !Task.isCancelled {
                 await cache.storeThumbnail(cgImage: cgImage, for: url)
             }
+        }
+
+        thumbnailTasks[url] = (task, token)
+    }
+
+    func cancelThumbnailLoad(for url: URL) {
+        thumbnailTasks.removeValue(forKey: url)?.task.cancel()
+    }
+
+    private func removeThumbnailTask(for url: URL, token: UUID) {
+        if thumbnailTasks[url]?.token == token {
+            thumbnailTasks.removeValue(forKey: url)
         }
     }
 
