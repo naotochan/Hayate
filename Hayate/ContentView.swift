@@ -12,6 +12,7 @@ struct ContentView: View {
     @EnvironmentObject var L: LocalizationStore
     @Environment(\.ciContext) var ciContext
     @Environment(\.metalDevice) var metalDevice
+    @Environment(\.openWindow) var openWindow
 
     @State var currentTexture: MTLTexture?
     @State var decoder: ImageDecoder?
@@ -289,6 +290,11 @@ struct ContentView: View {
         .onAppear {
             initializeDecoder()
             installKeyHandler()
+            // Dock-reopen insurance: the delegate calls this when the process
+            // is alive but has no windows to show.
+            (NSApplication.shared.delegate as? AppDelegate)?.openMainWindow = {
+                openWindow(id: HayateApp.mainWindowID)
+            }
             if !hasCompletedOnboarding {
                 sidebarVisible = true
                 showOnboarding = true
