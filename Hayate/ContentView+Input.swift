@@ -137,6 +137,37 @@ extension ContentView {
             return true
         }
 
+        // Color labels 6–9 (fixed — same mechanism as star keys; both profiles).
+        if !event.modifierFlags.contains(.command),
+           let chars = event.charactersIgnoringModifiers,
+           chars.count == 1,
+           let digit = Int(chars),
+           (6...9).contains(digit) {
+            let label: CullingSession.ColorLabel = switch digit {
+            case 6: .red
+            case 7: .yellow
+            case 8: .green
+            case 9: .blue
+            default: .none
+            }
+            let batch = showGrid && !selectedIndices.isEmpty
+            let compareActive = compareMode && !compareIndices.isEmpty
+            let surveyActive = surveyMode && !surveyIndices.isEmpty
+            if compareActive {
+                session.currentIndex = compareIndices[compareActiveSlot]
+                session.setColorLabel(label)
+            } else if surveyActive {
+                session.currentIndex = surveyIndices[surveyActiveSlot]
+                session.setColorLabel(label)
+            } else if batch {
+                session.setColorLabelForIndices(selectedIndices, label: label)
+            } else {
+                session.setColorLabel(label)
+                autoAdvanceIfEnabled()
+            }
+            return true
+        }
+
         // ---- Dynamic bindings from KeybindingStore ----
         if let action = keybindings.action(for: event) {
             return perform(action)

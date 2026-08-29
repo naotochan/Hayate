@@ -15,7 +15,7 @@ enum CullThumbnailStyle {
     }
 }
 
-/// Shared favorite / rejected / rating badge cluster overlaid on photo
+/// Shared favorite / rejected / rating / color-label badge cluster overlaid on photo
 /// thumbnails (grid cells, compare slots, filmstrip). Renders nothing when
 /// the entry has no state to show.
 struct PhotoBadgeView: View {
@@ -30,6 +30,10 @@ struct PhotoBadgeView: View {
     /// Keep / Maybe / Out glyphs instead of stars.
     var triageStyle = false
 
+    private var colorLabel: CullingSession.ColorLabel {
+        entry?.colorLabel ?? .none
+    }
+
     var body: some View {
         if triageStyle {
             triageBody
@@ -42,33 +46,48 @@ struct PhotoBadgeView: View {
     private var triageBody: some View {
         switch CullingSession.TriageState.of(entry) {
         case .undecided:
-            EmptyView()
+            if colorLabel != .none {
+                badge { colorDot(colorLabel) }
+            } else {
+                EmptyView()
+            }
         case .keep:
             badge {
-                Image(systemName: "heart.fill")
-                    .font(.system(size: iconSize))
-                    .foregroundColor(.red)
+                HStack(spacing: spacing) {
+                    if colorLabel != .none { colorDot(colorLabel) }
+                    Image(systemName: "heart.fill")
+                        .font(.system(size: iconSize))
+                        .foregroundColor(.red)
+                }
             }
         case .maybe:
             badge {
-                Text("M")
-                    .font(.system(size: starSize, weight: .bold, design: .monospaced))
-                    .foregroundColor(.yellow)
+                HStack(spacing: spacing) {
+                    if colorLabel != .none { colorDot(colorLabel) }
+                    Text("M")
+                        .font(.system(size: starSize, weight: .bold, design: .monospaced))
+                        .foregroundColor(.yellow)
+                }
             }
         case .out:
             badge {
-                Image(systemName: compact ? "xmark" : "xmark.circle.fill")
-                    .font(.system(size: iconSize, weight: compact ? .bold : .regular))
-                    .foregroundColor(.orange)
+                HStack(spacing: spacing) {
+                    if colorLabel != .none { colorDot(colorLabel) }
+                    Image(systemName: compact ? "xmark" : "xmark.circle.fill")
+                        .font(.system(size: iconSize, weight: compact ? .bold : .regular))
+                        .foregroundColor(.orange)
+                }
             }
         }
     }
 
     @ViewBuilder
     private var starsBody: some View {
-        if let entry = entry, entry.isFavorite || entry.isRejected || entry.rating > 0 {
+        let hasStarsState = entry.map { $0.isFavorite || $0.isRejected || $0.rating > 0 } ?? false
+        if hasStarsState || colorLabel != .none, let entry {
             badge {
                 HStack(spacing: spacing) {
+                    if colorLabel != .none { colorDot(colorLabel) }
                     if entry.isFavorite {
                         Image(systemName: "heart.fill")
                             .font(.system(size: iconSize))
@@ -104,5 +123,23 @@ struct PhotoBadgeView: View {
             .padding(padding)
             .background(Color.black.opacity(0.6))
             .cornerRadius(cornerRadius)
+    }
+
+    /// Lightroom-style label colors — single source for grid / filmstrip / compare / survey.
+    private func colorDot(_ label: CullingSession.ColorLabel) -> some View {
+        Circle()
+            .fill(Self.labelColor(label))
+            .frame(width: iconSize, height: iconSize)
+    }
+
+    private static func labelColor(_ label: CullingSession.ColorLabel) -> Color {
+        switch label {
+        case .none: return .clear
+        case .red: return Color(red: 0.92, green: 0.30, blue: 0.28)
+        case .yellow: return Color(red: 0.92, green: 0.78, blue: 0.20)
+        case .green: return Color(red: 0.35, green: 0.78, blue: 0.38)
+        case .blue: return Color(red: 0.28, green: 0.55, blue: 0.95)
+        case .purple: return Color(red: 0.68, green: 0.40, blue: 0.90)
+        }
     }
 }

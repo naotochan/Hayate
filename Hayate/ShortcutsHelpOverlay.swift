@@ -135,8 +135,16 @@ struct ShortcutsHelpOverlay: View {
                 Row(keys: key(.setTriageMaybe) ?? "M", label: "Maybe"),
                 Row(keys: key(.toggleRejected) ?? "O", label: "Out"),
             ])
+            essentials.append(Row(
+                keys: "6–9",
+                label: lang.colorLabelKeysRow
+            ))
         } else {
             essentials.append(Row(keys: "0–5", label: lang.t("Star rating", ja: "星評価")))
+            essentials.append(Row(
+                keys: "6–9",
+                label: lang.colorLabelKeysRow
+            ))
             if let k = key(.toggleFavorite) {
                 essentials.append(Row(keys: k, label: lang.t("Favorite", ja: "お気に入り")))
             }

@@ -50,14 +50,19 @@ enum ResolvedLanguage: Equatable {
     func surveyFooterHints(triage: Bool) -> String {
         if triage {
             return t(
-                "↑↓←→ select  |  K keep  |  O out  |  ⏎ decide  |  Esc grid",
-                ja: "↑↓←→ 選択  |  K Keep  |  O Out  |  ⏎ 決定  |  Esc グリッド"
+                "↑↓←→ select  |  K keep  |  O out  |  6–9 labels  |  ⏎ decide  |  Esc grid",
+                ja: "↑↓←→ 選択  |  K Keep  |  O Out  |  6–9 ラベル  |  ⏎ 決定  |  Esc グリッド"
             )
         }
         return t(
-            "↑↓←→ select  |  K favorite  |  O reject  |  0–5 stars  |  ⏎ decide  |  Esc grid",
-            ja: "↑↓←→ 選択  |  K お気に入り  |  O リジェクト  |  0–5 星  |  ⏎ 決定  |  Esc グリッド"
+            "↑↓←→ select  |  K favorite  |  O reject  |  0–5 stars  |  6–9 labels  |  ⏎ decide  |  Esc grid",
+            ja: "↑↓←→ 選択  |  K お気に入り  |  O リジェクト  |  0–5 星  |  6–9 ラベル  |  ⏎ 決定  |  Esc グリッド"
         )
+    }
+
+    /// Shortcut help row for color labels (6 Red … 9 Blue; Purple has no key).
+    var colorLabelKeysRow: String {
+        t("6 Red / 7 Yellow / 8 Green / 9 Blue", ja: "6 赤 / 7 黄 / 8 緑 / 9 青")
     }
 }
 
@@ -91,6 +96,8 @@ final class LocalizationStore: ObservableObject {
     func surveyFooterHints(triage: Bool) -> String {
         resolved.surveyFooterHints(triage: triage)
     }
+
+    var colorLabelKeysRow: String { resolved.colorLabelKeysRow }
 }
 
 // MARK: - Appearance
