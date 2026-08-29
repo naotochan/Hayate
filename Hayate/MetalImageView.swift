@@ -33,12 +33,20 @@ struct MetalImageView: NSViewRepresentable {
         Coordinator(device: device)
     }
 
-    class Coordinator: NSObject, MTKViewDelegate {
+    @MainActor
+    class Coordinator: NSObject, @preconcurrency MTKViewDelegate {
         var texture: MTLTexture?
         var zoomScale: Float = 1.0
         var panOffset: CGPoint = .zero
         private let commandQueue: MTLCommandQueue?
         private let pipelineState: MTLRenderPipelineState?
+        /// Bounds in-flight display command buffers so a backed-up GPU drops
+        /// frames instead of blocking the main thread on `currentDrawable`.
+        nonisolated let frameSemaphore = DispatchSemaphore(value: 2)
+        /// Frame-drop bookkeeping. Main thread only (draw and the completion
+        /// handler's main-hop both run there).
+        private var redrawPending = false
+        private weak var lastView: MTKView?
 
         init(device: MTLDevice) {
             self.commandQueue = device.makeCommandQueue()
@@ -68,55 +76,77 @@ struct MetalImageView: NSViewRepresentable {
         func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {}
 
         func draw(in view: MTKView) {
+            // Bound in-flight display work: when the GPU is backed up (heavy
+            // RAW renders during rapid navigation), drop the frame instead of
+            // blocking the main thread inside `view.currentDrawable` (drawable
+            // pool exhaustion). A blocked main thread froze the whole UI —
+            // and delayed folder switching — until the GPU drained.
+            guard frameSemaphore.wait(timeout: .now()) == .success else {
+                redrawPending = true
+                lastView = view
+                return
+            }
+
             guard let commandQueue = commandQueue,
                   let drawable = view.currentDrawable,
                   let descriptor = view.currentRenderPassDescriptor,
                   let commandBuffer = commandQueue.makeCommandBuffer(),
-                  let encoder = commandBuffer.makeRenderCommandEncoder(descriptor: descriptor) else { return }
-
-            guard let texture = texture, let pipelineState = pipelineState else {
-                // No texture yet: just clear to the background color.
-                encoder.endEncoding()
-                commandBuffer.present(drawable)
-                commandBuffer.commit()
+                  let encoder = commandBuffer.makeRenderCommandEncoder(descriptor: descriptor) else {
+                frameSemaphore.signal()
                 return
             }
 
-            // Aspect-fit base scale
-            let viewAspect = view.drawableSize.width / view.drawableSize.height
-            let texAspect = Double(texture.width) / Double(texture.height)
+            if let texture = texture, let pipelineState = pipelineState {
+                // Aspect-fit base scale
+                let viewAspect = view.drawableSize.width / view.drawableSize.height
+                let texAspect = Double(texture.width) / Double(texture.height)
 
-            var baseX: Float = 1.0
-            var baseY: Float = 1.0
+                var baseX: Float = 1.0
+                var baseY: Float = 1.0
 
-            if texAspect > viewAspect {
-                baseY = Float(viewAspect / texAspect)
-            } else {
-                baseX = Float(texAspect / viewAspect)
+                if texAspect > viewAspect {
+                    baseY = Float(viewAspect / texAspect)
+                } else {
+                    baseX = Float(texAspect / viewAspect)
+                }
+
+                // Apply zoom
+                let sx = baseX * zoomScale
+                let sy = baseY * zoomScale
+
+                // Apply pan (in NDC, clamped so image edge stays visible)
+                let maxPanX = max(0, sx - 1.0)
+                let maxPanY = max(0, sy - 1.0)
+                let px = min(max(Float(panOffset.x), -maxPanX), maxPanX)
+                let py = min(max(Float(panOffset.y), -maxPanY), maxPanY)
+
+                let vertices: [Float] = [
+                    -sx + px, -sy + py, 0.0, 0.0,
+                     sx + px, -sy + py, 1.0, 0.0,
+                    -sx + px,  sy + py, 0.0, 1.0,
+                     sx + px,  sy + py, 1.0, 1.0,
+                ]
+
+                encoder.setRenderPipelineState(pipelineState)
+                encoder.setVertexBytes(vertices, length: vertices.count * MemoryLayout<Float>.size, index: 0)
+                encoder.setFragmentTexture(texture, index: 0)
+                encoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
             }
+            // No texture yet: the render pass' clear color shows the background.
 
-            // Apply zoom
-            let sx = baseX * zoomScale
-            let sy = baseY * zoomScale
-
-            // Apply pan (in NDC, clamped so image edge stays visible)
-            let maxPanX = max(0, sx - 1.0)
-            let maxPanY = max(0, sy - 1.0)
-            let px = min(max(Float(panOffset.x), -maxPanX), maxPanX)
-            let py = min(max(Float(panOffset.y), -maxPanY), maxPanY)
-
-            let vertices: [Float] = [
-                -sx + px, -sy + py, 0.0, 0.0,
-                 sx + px, -sy + py, 1.0, 0.0,
-                -sx + px,  sy + py, 0.0, 1.0,
-                 sx + px,  sy + py, 1.0, 1.0,
-            ]
-
-            encoder.setRenderPipelineState(pipelineState)
-            encoder.setVertexBytes(vertices, length: vertices.count * MemoryLayout<Float>.size, index: 0)
-            encoder.setFragmentTexture(texture, index: 0)
-            encoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
             encoder.endEncoding()
+            commandBuffer.addCompletedHandler { [weak self] _ in
+                guard let self else { return }
+                self.frameSemaphore.signal()
+                Task { @MainActor in
+                    // A frame was dropped while the GPU was busy — draw the
+                    // latest state now that a slot freed up.
+                    if self.redrawPending, let view = self.lastView {
+                        self.redrawPending = false
+                        view.setNeedsDisplay(view.bounds)
+                    }
+                }
+            }
             commandBuffer.present(drawable)
             commandBuffer.commit()
         }
