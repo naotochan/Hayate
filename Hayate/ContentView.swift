@@ -608,8 +608,11 @@ struct ContentView: View {
         // Reset zoom for new photo
         resetZoom()
 
-        guard let file = session.currentFile,
-              let decoder = decoder else {
+        guard let file = session.currentFile else {
+            currentTexture = nil
+            return
+        }
+        guard decoder != nil else {
             currentTexture = nil
             return
         }
@@ -628,9 +631,20 @@ struct ContentView: View {
             let displaySize = previewDisplaySize
 
             if focusPeakingEnabled {
-                if let sendable = await decoder.decodeRAW(url: file, displaySize: displaySize, focusPeaking: true) {
+                if let sendable = await loadFocusPeakingTexture(
+                    for: file,
+                    displaySize: displaySize,
+                    onPartial: { partial in
+                        guard !Task.isCancelled, fullResDisplayedURL != file else { return }
+                        currentTexture = partial.texture
+                        decodeTimeMs = (CFAbsoluteTimeGetCurrent() - start) * 1000
+                        imageLoadFailed = false
+                    }
+                ) {
                     guard !Task.isCancelled else { return }
-                    currentTexture = sendable.texture
+                    if fullResDisplayedURL != file {
+                        currentTexture = sendable.texture
+                    }
                     decodeTimeMs = (CFAbsoluteTimeGetCurrent() - start) * 1000
                     isLoading = false
                     imageLoadFailed = false
@@ -760,19 +774,47 @@ struct ContentView: View {
 
     // MARK: - Full-resolution zoom
 
+    /// Load a display-sized texture with focus peaking derived from cached
+    /// display or full-resolution decodes when possible.
+    func loadFocusPeakingTexture(
+        for url: URL,
+        displaySize: CGSize,
+        onPartial: (@MainActor @Sendable (SendableTexture) -> Void)? = nil
+    ) async -> SendableTexture? {
+        guard let decoder = decoder, let prefetchManager = prefetchManager else { return nil }
+
+        if let base = await prefetchManager.cachedDisplayTexture(for: url),
+           let peaked = await decoder.applyFocusPeaking(to: base, displaySize: displaySize) {
+            return peaked
+        }
+        if let base = await prefetchManager.cachedFullResolution(for: url),
+           let peaked = await decoder.applyFocusPeaking(to: base, displaySize: displaySize) {
+            return peaked
+        }
+
+        guard let base = await prefetchManager.loadTexture(
+            for: url,
+            displaySize: displaySize,
+            onPartial: onPartial
+        ) else {
+            return nil
+        }
+        return await decoder.applyFocusPeaking(to: base, displaySize: displaySize)
+    }
+
     /// Decode the current photo at full resolution when zoomed in, swapping it
-    /// into `currentTexture` when ready. No-op if already loaded or loading for
-    /// this file. The texture is intentionally not cached — full-res textures
-    /// are large (~200 MB for 45 MP) and only one is alive at a time.
+    /// into `currentTexture` when ready. Reuses the PrefetchManager full-res LRU
+    /// so zoom-out → zoom-in on the same photo does not re-decode.
     func loadFullResolutionIfNeeded() {
         guard zoomScale > 1.01, !focusPeakingEnabled, !showGrid, !compareMode,
               let file = session.currentFile,
-              let decoder = decoder,
-              fullResURL != file else { return }
+              let prefetchManager = prefetchManager else { return }
+        if fullResDisplayedURL == file { return }
+        guard fullResURL != file else { return }
         fullResTask?.cancel()
         fullResURL = file
         fullResTask = Task {
-            guard let sendable = await decoder.decodeRAWFullResolution(url: file) else {
+            guard let sendable = await prefetchManager.loadFullResolution(for: file) else {
                 if !Task.isCancelled { fullResURL = nil }  // allow retry on next zoom event
                 return
             }
