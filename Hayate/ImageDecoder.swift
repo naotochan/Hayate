@@ -33,37 +33,85 @@ struct EXIFInfo: Sendable {
     }
 }
 
-/// Caps concurrent CIRAWFilter / full-res work so a large folder's prefetch +
-/// background build cannot flood Metal/ImageIO and starve the visible photo.
+/// Caps concurrent CIRAWFilter / full-res work. Cancelled waiters are dropped
+/// instead of becoming zombie decodes; interactive (visible photo) work is
+/// always scheduled ahead of prefetch.
 actor DecodeLimiter {
+    /// Interactive (visible photo) decodes jump ahead of prefetch work.
+    enum Tier { case high, low }
+
     private let maxConcurrent: Int
     private var inFlight = 0
-    private var waiters: [CheckedContinuation<Void, Never>] = []
+    private var highWaiters: [(id: UUID, cont: CheckedContinuation<Bool, Never>)] = []
+    private var lowWaiters: [(id: UUID, cont: CheckedContinuation<Bool, Never>)] = []
+    /// Remembers cancel races so a late onCancel flag can be cleared after
+    /// acquire's handler returns. The enqueue-path check is cheap defense only.
+    private var cancelledWaiterIDs: Set<UUID> = []
 
-    init(maxConcurrent: Int) {
-        self.maxConcurrent = max(1, maxConcurrent)
-    }
+    init(maxConcurrent: Int) { self.maxConcurrent = max(1, maxConcurrent) }
 
-    func withPermit<T: Sendable>(_ operation: @Sendable () async -> T) async -> T {
-        await acquire()
+    /// Returns nil when the caller was cancelled before a permit was granted.
+    /// Cancellation mid-operation cannot preempt CIRAWFilter; the decode runs
+    /// to completion and the permit is released normally.
+    func withPermit<T: Sendable>(tier: Tier = .high, _ operation: @Sendable () async -> T) async -> T? {
+        guard await acquire(tier: tier) else { return nil }
         let result = await operation()
         release()
         return result
     }
 
-    private func acquire() async {
-        while inFlight >= maxConcurrent {
-            await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
-                waiters.append(cont)
-            }
+    private func acquire(tier: Tier) async -> Bool {
+        guard !Task.isCancelled else { return false }
+        if inFlight < maxConcurrent {
+            inFlight += 1
+            return true
         }
-        inFlight += 1
+        let id = UUID()
+        let granted = await withTaskCancellationHandler {
+            await withCheckedContinuation { (cont: CheckedContinuation<Bool, Never>) in
+                // Cheap defense; enqueue is synchronous on the actor so this
+                // should not fire in practice.
+                if cancelledWaiterIDs.contains(id) {
+                    cancelledWaiterIDs.remove(id)
+                    cont.resume(returning: false)
+                } else if tier == .high {
+                    highWaiters.append((id, cont))
+                } else {
+                    lowWaiters.append((id, cont))
+                }
+            }
+        } onCancel: {
+            Task { await self.cancelWaiter(id: id) }
+        }
+        cancelledWaiterIDs.remove(id)  // clear stale cancel flag after handler returns
+        guard granted else { return false }
+        if Task.isCancelled {
+            // Cancelled just as the slot was handed over — pass it on.
+            release()
+            return false
+        }
+        return true
+    }
+
+    private func cancelWaiter(id: UUID) {
+        if let i = highWaiters.firstIndex(where: { $0.id == id }) {
+            highWaiters.remove(at: i).cont.resume(returning: false)
+        } else if let i = lowWaiters.firstIndex(where: { $0.id == id }) {
+            lowWaiters.remove(at: i).cont.resume(returning: false)
+        } else {
+            cancelledWaiterIDs.insert(id)
+        }
     }
 
     private func release() {
-        inFlight -= 1
-        if !waiters.isEmpty {
-            waiters.removeFirst().resume()
+        // Hand the slot directly to the oldest waiter (inFlight unchanged);
+        // interactive work is always drained before prefetch work.
+        if !highWaiters.isEmpty {
+            highWaiters.removeFirst().cont.resume(returning: true)
+        } else if !lowWaiters.isEmpty {
+            lowWaiters.removeFirst().cont.resume(returning: true)
+        } else {
+            inFlight -= 1
         }
     }
 }
@@ -104,11 +152,11 @@ final class ImageDecoder: @unchecked Sendable {
     /// Decode a RAW file to MTLTexture at the specified display size.
     /// Typically ~200-500ms depending on format and resolution.
     func decodeRAW(url: URL, displaySize: CGSize, focusPeaking: Bool = false) async -> SendableTexture? {
-        await rawLimiter.withPermit {
+        await rawLimiter.withPermit(tier: .high) {
             await Task.detached(priority: .userInitiated) { [self] in
                 decodeRAWSync(url: url, displaySize: displaySize, focusPeaking: focusPeaking)
             }.value
-        }
+        } ?? nil
     }
 
     /// Decode a RAW file to CGImage at the specified display size.
@@ -116,20 +164,21 @@ final class ImageDecoder: @unchecked Sendable {
     /// converted to MTLTexture (for memory cache) and written as HEIF (for disk cache)
     /// with only a single RAW decode pass.
     func decodeRAWToCGImage(url: URL, displaySize: CGSize, priority: TaskPriority = .userInitiated) async -> CGImage? {
-        await rawLimiter.withPermit {
+        let tier: DecodeLimiter.Tier = priority >= .userInitiated ? .high : .low
+        return await rawLimiter.withPermit(tier: tier) {
             await Task.detached(priority: priority) { [self] in
                 decodeRAWToCGImageSync(url: url, displaySize: displaySize)
             }.value
-        }
+        } ?? nil
     }
 
     /// Decode a RAW file at full resolution (for zoom).
     func decodeRAWFullResolution(url: URL) async -> SendableTexture? {
-        await rawLimiter.withPermit {
+        await rawLimiter.withPermit(tier: .high) {
             await Task.detached(priority: .userInitiated) { [self] in
                 decodeRAWFullResolutionSync(url: url)
             }.value
-        }
+        } ?? nil
     }
 
     /// Convert a CGImage (e.g. extracted JPEG) to MTLTexture.
