@@ -97,9 +97,7 @@ extension ContentView {
                     .font(.system(size: 11, weight: .bold, design: .monospaced))
                     .foregroundColor(.accentColor)
 
-                Text(cullingProfileTriage
-                      ? "←→ select  |  ⏎ keep  |  Tab skip  |  Esc exit"
-                      : "←→ select  |  ⏎ pick  |  Tab skip  |  Esc exit")
+                Text(L.compareFooterHints(triage: cullingProfileTriage))
                     .font(.system(size: 11))
                     .foregroundColor(.gray)
 
@@ -148,30 +146,17 @@ extension ContentView {
         let otherSlot = compareActiveSlot == 0 ? 1 : 0
         let rejectedIndex = compareIndices[otherSlot]
 
-        let pickedFileName = session.files[pickedIndex].lastPathComponent
-        let rejectedFileName = session.files[rejectedIndex].lastPathComponent
-
-        if cullingProfileTriage {
-            // Keep the picked one (setTriage toggles off if already Keep — skip then)
-            if CullingSession.TriageState.of(session.entries[pickedFileName]) != .keep {
-                session.currentIndex = pickedIndex
-                session.setTriage(.keep)
-            }
-            // Out the other
-            if CullingSession.TriageState.of(session.entries[rejectedFileName]) != .out {
-                session.currentIndex = rejectedIndex
-                session.setTriage(.out)
-            }
-        } else {
-            if session.entries[pickedFileName]?.isFavorite != true {
-                session.currentIndex = pickedIndex
-                session.toggleFavorite()
-            }
-            if session.entries[rejectedFileName]?.isRejected != true {
-                session.currentIndex = rejectedIndex
-                session.toggleRejected()
-            }
-        }
+        let restore = ModeRestore.compare(
+            indices: compareIndices,
+            activeSlot: compareActiveSlot,
+            currentIndex: session.currentIndex
+        )
+        session.applyComparePick(
+            pickedIndex: pickedIndex,
+            rejectedIndex: rejectedIndex,
+            triageMode: cullingProfileTriage,
+            restore: restore
+        )
 
         // Next photo = one after the rightmost in the current pair
         let maxIndex = compareIndices.max() ?? pickedIndex
@@ -196,6 +181,13 @@ extension ContentView {
     /// next photo loads on the right. Used when moving to a new angle.
     func skipToNextBaseline() {
         guard compareIndices.count == 2 else { return }
+
+        let restore = ModeRestore.compare(
+            indices: compareIndices,
+            activeSlot: compareActiveSlot,
+            currentIndex: session.currentIndex
+        )
+        session.recordModeRestore(restore)
 
         let rightIndex = compareIndices[1]
         let maxIndex = compareIndices.max() ?? rightIndex
@@ -224,14 +216,103 @@ extension ContentView {
         loadCurrentImage()
     }
 
+    /// Restore compare or survey UI after undoing a pick/skip/decide action.
+    func applyModeRestore(_ restore: ModeRestore?) {
+        guard let restore else {
+            if !compareMode && !surveyMode {
+                loadCurrentImage()
+            }
+            return
+        }
+
+        switch restore {
+        case .compare(let indices, let activeSlot, let currentIndex):
+            guard indices.count >= 2,
+                  indices.allSatisfy({ session.files.indices.contains($0) }),
+                  indices.indices.contains(activeSlot) else {
+                if !compareMode && !surveyMode {
+                    loadCurrentImage()
+                }
+                return
+            }
+
+            let enteringCompare = !compareMode
+
+            if surveyMode {
+                surveyTextureLoadTask?.cancel()
+                surveyTextureLoadTask = nil
+                surveyTextureGeneration &+= 1
+                surveyMode = false
+                surveyIndices = []
+                surveyTextures = [:]
+                surveyActiveSlot = 0
+            }
+
+            compareMode = true
+            showGrid = false
+            selectedIndices.removeAll()
+            compareIndices = indices
+            compareActiveSlot = activeSlot
+            session.currentIndex = currentIndex
+
+            if enteringCompare {
+                compareTextures = [:]
+                resetZoom()
+            } else {
+                let indexSet = Set(indices)
+                compareTextures = compareTextures.filter { indexSet.contains($0.key) }
+            }
+            loadCompareTextures()
+
+        case .survey(let indices, let activeSlot, let currentIndex):
+            guard indices.count >= 2,
+                  indices.allSatisfy({ session.files.indices.contains($0) }),
+                  indices.indices.contains(activeSlot) else {
+                if !compareMode && !surveyMode {
+                    loadCurrentImage()
+                }
+                return
+            }
+
+            let enteringSurvey = !surveyMode
+
+            if compareMode {
+                compareMode = false
+                compareIndices = []
+                compareTextures = [:]
+                compareActiveSlot = 0
+            }
+
+            surveyTextureLoadTask?.cancel()
+            surveyTextureLoadTask = nil
+            surveyTextureGeneration &+= 1
+            surveyMode = true
+            showGrid = false
+            selectedIndices.removeAll()
+            surveyIndices = indices
+            surveyActiveSlot = activeSlot
+            session.currentIndex = currentIndex
+
+            if enteringSurvey {
+                surveyTextures = [:]
+                resetZoom()
+            } else {
+                let indexSet = Set(indices)
+                surveyTextures = surveyTextures.filter { indexSet.contains($0.key) }
+            }
+            loadSurveyTextures()
+        }
+    }
+
     // MARK: - Texture loading
 
     /// Load textures for every slot in `compareIndices`. A single Task drives the
     /// loads sequentially so the `compareTextures` @State dictionary is never
     /// written concurrently from multiple tasks.
-    private func loadCompareTextures() {
+    func loadCompareTextures() {
         guard decoder != nil else { return }
-        let indices = compareIndices
+        let indices = compareIndices.filter { compareTextures[$0] == nil }
+        guard !indices.isEmpty else { return }
         Task {
             for fileIndex in indices {
                 await loadCompareTextureContent(for: fileIndex)
@@ -251,11 +332,18 @@ extension ContentView {
     /// JPEG → RAW). Focus peaking reuses cached RAW or full-res decodes when
     /// available, otherwise runs the same pipeline then derives peaking.
     private func loadCompareTextureContent(for fileIndex: Int) async {
+        guard compareMode,
+              compareIndices.contains(fileIndex),
+              session.files.indices.contains(fileIndex) else { return }
+
         let url = session.files[fileIndex]
         let displaySize = previewDisplaySize
 
         if focusPeakingEnabled {
             if let sendable = await loadFocusPeakingTexture(for: url, displaySize: displaySize) {
+                guard compareMode,
+                      compareIndices.contains(fileIndex),
+                      session.files.indices.contains(fileIndex) else { return }
                 compareTextures[fileIndex] = sendable.texture
             }
             return
@@ -263,8 +351,14 @@ extension ContentView {
 
         guard let prefetchManager = prefetchManager else { return }
         let result = await prefetchManager.loadTexture(for: url, displaySize: displaySize) { partial in
+            guard compareMode,
+                  compareIndices.contains(fileIndex),
+                  session.files.indices.contains(fileIndex) else { return }
             compareTextures[fileIndex] = partial.texture
         }
+        guard compareMode,
+              compareIndices.contains(fileIndex),
+              session.files.indices.contains(fileIndex) else { return }
         if let result = result {
             compareTextures[fileIndex] = result.texture
         }

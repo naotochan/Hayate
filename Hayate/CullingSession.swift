@@ -90,6 +90,12 @@ enum FolderColor: String, CaseIterable, Identifiable, Sendable {
     }
 }
 
+/// View state to restore when undoing compare pick/skip or survey decide.
+enum ModeRestore: Equatable {
+    case compare(indices: [Int], activeSlot: Int, currentIndex: Int)
+    case survey(indices: [Int], activeSlot: Int, currentIndex: Int)
+}
+
 /// Manages the culling session state: file list, ratings, favorites, JSON persistence, and undo.
 @MainActor
 class CullingSession: ObservableObject {
@@ -348,8 +354,11 @@ class CullingSession: ObservableObject {
         case rejectedChange(fileName: String, oldValue: Bool)
         /// Compound restore for triage (Keep/Out) so ⌘Z undoes in one step.
         case entrySnapshot(fileName: String, oldEntry: PhotoEntry?)
-        /// Multiple entry restores undone in one ⌘Z (e.g. survey decide).
-        case compositeEntrySnapshots([(fileName: String, oldEntry: PhotoEntry?)])
+        /// Multiple entry restores undone in one ⌘Z (e.g. survey decide, compare pick).
+        case compositeEntrySnapshots(
+            [(fileName: String, oldEntry: PhotoEntry?)],
+            restore: ModeRestore?
+        )
         case deletion(url: URL, index: Int, entry: PhotoEntry?)
     }
 
@@ -802,7 +811,12 @@ class CullingSession: ObservableObject {
     }
 
     /// Survey decide: Keep/favorite the winner and Out/reject all others as one undo step.
-    func applySurveyDecision(winnerIndex: Int, otherIndices: [Int], triageMode: Bool) {
+    func applySurveyDecision(
+        winnerIndex: Int,
+        otherIndices: [Int],
+        triageMode: Bool,
+        restore: ModeRestore
+    ) {
         guard files.indices.contains(winnerIndex) else { return }
         let winnerFileName = files[winnerIndex].lastPathComponent
         var snapshots: [(fileName: String, oldEntry: PhotoEntry?)] = []
@@ -817,8 +831,7 @@ class CullingSession: ObservableObject {
                     snapshots.append((fileName, entries[fileName]))
                 }
             }
-            guard !snapshots.isEmpty else { return }
-            undoStack.append(.compositeEntrySnapshots(snapshots))
+            undoStack.append(.compositeEntrySnapshots(snapshots, restore: restore))
             if TriageState.of(entries[winnerFileName]) != .keep {
                 applyTriage(.keep, toFileNamed: winnerFileName, recordUndo: false)
             }
@@ -838,8 +851,7 @@ class CullingSession: ObservableObject {
                     snapshots.append((fileName, entries[fileName]))
                 }
             }
-            guard !snapshots.isEmpty else { return }
-            undoStack.append(.compositeEntrySnapshots(snapshots))
+            undoStack.append(.compositeEntrySnapshots(snapshots, restore: restore))
             if entries[winnerFileName]?.isFavorite != true {
                 applyToggleFavorite(toFileNamed: winnerFileName, recordUndo: false)
             }
@@ -851,6 +863,27 @@ class CullingSession: ObservableObject {
             }
         }
         saveJSON()
+    }
+
+    /// Compare pick: Keep/favorite the winner and Out/reject the other as one undo step.
+    func applyComparePick(
+        pickedIndex: Int,
+        rejectedIndex: Int,
+        triageMode: Bool,
+        restore: ModeRestore
+    ) {
+        guard files.indices.contains(pickedIndex), files.indices.contains(rejectedIndex) else { return }
+        applySurveyDecision(
+            winnerIndex: pickedIndex,
+            otherIndices: [rejectedIndex],
+            triageMode: triageMode,
+            restore: restore
+        )
+    }
+
+    /// Record compare/survey view state for undo without changing entries (e.g. compare skip).
+    func recordModeRestore(_ restore: ModeRestore) {
+        undoStack.append(.compositeEntrySnapshots([], restore: restore))
     }
 
     // MARK: - Mutation primitives
@@ -1054,8 +1087,10 @@ class CullingSession: ObservableObject {
 
     // MARK: - Undo
 
-    func undo() {
-        guard let action = undoStack.popLast() else { return }
+    @discardableResult
+    func undo() -> ModeRestore? {
+        guard let action = undoStack.popLast() else { return nil }
+        var modeRestore: ModeRestore?
 
         switch action {
         case .ratingChange(let fileName, let oldRating):
@@ -1079,11 +1114,12 @@ class CullingSession: ObservableObject {
         case .entrySnapshot(let fileName, let oldEntry):
             entries[fileName] = oldEntry
 
-        case .compositeEntrySnapshots(let snapshots):
+        case .compositeEntrySnapshots(let snapshots, let restore):
             for snapshot in snapshots {
                 entries[snapshot.fileName] = snapshot.oldEntry
                 writeXMPSidecar(forFileNamed: snapshot.fileName)
             }
+            modeRestore = restore
 
         case .deletion:
             // File deletion undo is not supported (trashed items can be recovered via Finder)
@@ -1102,6 +1138,7 @@ class CullingSession: ObservableObject {
         }
 
         saveJSON()
+        return modeRestore
     }
 
     // MARK: - XMP Sidecar

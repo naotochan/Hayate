@@ -50,13 +50,26 @@ enum ResolvedLanguage: Equatable {
     func surveyFooterHints(triage: Bool) -> String {
         if triage {
             return t(
-                "↑↓←→ select  |  K keep  |  O out  |  6–9 labels  |  ⏎ decide  |  Esc grid",
-                ja: "↑↓←→ 選択  |  K Keep  |  O Out  |  6–9 ラベル  |  ⏎ 決定  |  Esc グリッド"
+                "↑↓←→ select  |  K keep  |  O out  |  6–9 labels  |  ⏎ decide  |  ⌘Z undo  |  Esc grid",
+                ja: "↑↓←→ 選択  |  K Keep  |  O Out  |  6–9 ラベル  |  ⏎ 決定  |  ⌘Z 戻る  |  Esc グリッド"
             )
         }
         return t(
-            "↑↓←→ select  |  K favorite  |  O reject  |  0–5 stars  |  6–9 labels  |  ⏎ decide  |  Esc grid",
-            ja: "↑↓←→ 選択  |  K お気に入り  |  O リジェクト  |  0–5 星  |  6–9 ラベル  |  ⏎ 決定  |  Esc グリッド"
+            "↑↓←→ select  |  K favorite  |  O reject  |  0–5 stars  |  6–9 labels  |  ⏎ decide  |  ⌘Z undo  |  Esc grid",
+            ja: "↑↓←→ 選択  |  K お気に入り  |  O リジェクト  |  0–5 星  |  6–9 ラベル  |  ⏎ 決定  |  ⌘Z 戻る  |  Esc グリッド"
+        )
+    }
+
+    func compareFooterHints(triage: Bool) -> String {
+        if triage {
+            return t(
+                "←→ select  |  ⏎ keep  |  Tab skip  |  ⌘Z undo  |  Esc exit",
+                ja: "←→ 選択  |  ⏎ Keep  |  Tab skip  |  ⌘Z 戻る  |  Esc 終了"
+            )
+        }
+        return t(
+            "←→ select  |  ⏎ pick  |  Tab skip  |  ⌘Z undo  |  Esc exit",
+            ja: "←→ 選択  |  ⏎ Pick  |  Tab skip  |  ⌘Z 戻る  |  Esc 終了"
         )
     }
 
@@ -106,6 +119,10 @@ final class LocalizationStore: ObservableObject {
 
     func surveyFooterHints(triage: Bool) -> String {
         resolved.surveyFooterHints(triage: triage)
+    }
+
+    func compareFooterHints(triage: Bool) -> String {
+        resolved.compareFooterHints(triage: triage)
     }
 
     var colorLabelKeysRow: String { resolved.colorLabelKeysRow }

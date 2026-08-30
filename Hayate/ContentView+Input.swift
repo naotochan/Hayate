@@ -335,8 +335,8 @@ extension ContentView {
             return true
 
         case .undo:
-            session.undo()
-            loadCurrentImage()
+            let restore = session.undo()
+            applyModeRestore(restore)
             return true
 
         case .selectAllGrid:
