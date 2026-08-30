@@ -318,16 +318,31 @@ struct FolderSidebar: View {
             .disabled(!available)
             .help(available ? url.path : "This folder is not currently reachable")
 
-            Button(action: pinAction) {
-                Image(systemName: pinned ? "pin.fill" : "pin")
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundColor(pinned ? .accentColor.opacity(0.85) : HayateTheme.fg(0.35))
-                    .frame(width: 22, height: 22)
-                    .contentShape(Rectangle())
+            if available {
+                Button(action: pinAction) {
+                    Image(systemName: pinned ? "pin.fill" : "pin")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundColor(pinned ? .accentColor.opacity(0.85) : HayateTheme.fg(0.35))
+                        .frame(width: 22, height: 22)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help(pinTitle)
+                .padding(.trailing, 4)
+            } else {
+                Button {
+                    session.forgetFolder(url)
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundColor(HayateTheme.fg(0.35))
+                        .frame(width: 22, height: 22)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help(L.t("Remove from sidebar", ja: "サイドバーから削除"))
+                .padding(.trailing, 4)
             }
-            .buttonStyle(.plain)
-            .help(pinTitle)
-            .padding(.trailing, 4)
         }
         .background(
             RoundedRectangle(cornerRadius: 6)
@@ -358,12 +373,19 @@ struct FolderSidebar: View {
             Divider()
             folderColorMenu(for: url, current: folderColor)
 
-            if session.recentFolders.contains(where: {
-                $0.standardizedFileURL.path == url.standardizedFileURL.path
-            }) {
+            if available {
+                if session.recentFolders.contains(where: {
+                    $0.standardizedFileURL.path == url.standardizedFileURL.path
+                }) {
+                    Divider()
+                    Button("Remove from Recent", role: .destructive) {
+                        session.removeFromRecents(url)
+                    }
+                }
+            } else {
                 Divider()
-                Button("Remove from Recent", role: .destructive) {
-                    session.removeFromRecents(url)
+                Button(L.t("Remove", ja: "削除"), role: .destructive) {
+                    session.forgetFolder(url)
                 }
             }
         }

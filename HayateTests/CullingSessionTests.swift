@@ -979,4 +979,76 @@ final class CullingSessionTests: XCTestCase {
             testDefaults.dictionary(forKey: CullingSession.folderColorsKey)?[base.standardizedFileURL.path]
         )
     }
+
+    // MARK: - forgetFolder
+
+    private func makeCachesFolder(_ label: String) throws -> URL {
+        let base = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("HayateForget-\(label)-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+        return base
+    }
+
+    func testForgetFolderRemovesFromPinnedAndRecents() throws {
+        let folder = try makeCachesFolder("both")
+        defer { try? FileManager.default.removeItem(at: folder) }
+
+        session.pinFolder(folder)
+        session.rememberFolders([folder])
+        XCTAssertTrue(session.isPinned(folder))
+        XCTAssertTrue(session.recentFolders.contains { $0.standardizedFileURL.path == folder.standardizedFileURL.path })
+
+        session.forgetFolder(folder)
+
+        XCTAssertFalse(session.isPinned(folder))
+        XCTAssertFalse(session.recentFolders.contains { $0.standardizedFileURL.path == folder.standardizedFileURL.path })
+    }
+
+    func testForgetFolderClearsPersistedDefaults() throws {
+        let folder = try makeCachesFolder("persist")
+        defer { try? FileManager.default.removeItem(at: folder) }
+
+        session.pinFolder(folder)
+        session.rememberFolders([folder])
+        session.forgetFolder(folder)
+
+        XCTAssertEqual(testDefaults.stringArray(forKey: CullingSession.pinnedFoldersKey), [])
+        XCTAssertEqual(testDefaults.stringArray(forKey: CullingSession.recentFoldersKey), [])
+    }
+
+    func testForgetFolderClearsFolderColor() throws {
+        let folder = try makeCachesFolder("color")
+        defer { try? FileManager.default.removeItem(at: folder) }
+
+        session.setFolderColor(.green, for: folder)
+        session.pinFolder(folder)
+        session.forgetFolder(folder)
+
+        XCTAssertEqual(session.color(for: folder), .none)
+        XCTAssertNil(
+            testDefaults.dictionary(forKey: CullingSession.folderColorsKey)?[folder.standardizedFileURL.path]
+        )
+    }
+
+    func testForgetFolderPinnedOnly() throws {
+        let folder = try makeCachesFolder("pinned-only")
+        defer { try? FileManager.default.removeItem(at: folder) }
+
+        session.pinFolder(folder)
+        session.forgetFolder(folder)
+
+        XCTAssertFalse(session.isPinned(folder))
+        XCTAssertTrue(session.recentFolders.isEmpty)
+    }
+
+    func testForgetFolderRecentsOnly() throws {
+        let folder = try makeCachesFolder("recents-only")
+        defer { try? FileManager.default.removeItem(at: folder) }
+
+        session.rememberFolders([folder])
+        session.forgetFolder(folder)
+
+        XCTAssertFalse(session.recentFolders.contains { $0.standardizedFileURL.path == folder.standardizedFileURL.path })
+        XCTAssertFalse(session.isPinned(folder))
+    }
 }
