@@ -8,7 +8,6 @@ enum CullThumbnailStyle {
         guard enabled else { return 1.0 }
         switch CullingSession.TriageState.of(entry) {
         case .keep: return 1.0
-        case .maybe: return 0.45
         case .out: return 0.08
         case .undecided: return 0.12
         }
@@ -27,7 +26,7 @@ struct PhotoBadgeView: View {
     var cornerRadius: CGFloat = 4
     /// Filmstrip style: numeric rating and a plain bold xmark instead of icons.
     var compact = false
-    /// Keep / Maybe / Out glyphs instead of stars.
+    /// Keep / Out glyphs instead of stars.
     var triageStyle = false
 
     private var colorLabel: CullingSession.ColorLabel {
@@ -58,15 +57,6 @@ struct PhotoBadgeView: View {
                     Image(systemName: "heart.fill")
                         .font(.system(size: iconSize))
                         .foregroundColor(.red)
-                }
-            }
-        case .maybe:
-            badge {
-                HStack(spacing: spacing) {
-                    if colorLabel != .none { colorDot(colorLabel) }
-                    Text("M")
-                        .font(.system(size: starSize, weight: .bold, design: .monospaced))
-                        .foregroundColor(.yellow)
                 }
             }
         case .out:

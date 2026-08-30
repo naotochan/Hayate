@@ -132,7 +132,6 @@ struct ShortcutsHelpOverlay: View {
         if triageMode {
             essentials.append(contentsOf: [
                 Row(keys: key(.toggleFavorite) ?? "K", label: "Keep"),
-                Row(keys: key(.setTriageMaybe) ?? "M", label: "Maybe"),
                 Row(keys: key(.toggleRejected) ?? "O", label: "Out"),
             ])
             essentials.append(Row(

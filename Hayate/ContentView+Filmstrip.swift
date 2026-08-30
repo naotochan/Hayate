@@ -226,17 +226,15 @@ extension ContentView {
         .accessibilityLabel(L.t("Switch photo folder", ja: "写真フォルダを切り替え"))
     }
 
-    /// Keep / Maybe / Out controls for triage profile (K / M / O).
+    /// Keep / Out controls for triage profile (K / O).
     private var triageStatusControls: some View {
         let state = CullingSession.TriageState.of(session.currentEntry)
+        let counts = session.triageCounts
         return HStack(spacing: 6) {
-            triageChip("Keep", key: "K", active: state == .keep, color: .red) {
+            triageChip("Keep", key: "K", count: counts.keep, active: state == .keep, color: .red) {
                 session.setTriage(.keep)
             }
-            triageChip("Maybe", key: "M", active: state == .maybe, color: .yellow) {
-                session.setTriage(.maybe)
-            }
-            triageChip("Out", key: "O", active: state == .out, color: .orange) {
+            triageChip("Out", key: "O", count: counts.out, active: state == .out, color: .orange) {
                 session.setTriage(.out)
             }
         }
@@ -245,6 +243,7 @@ extension ContentView {
     private func triageChip(
         _ title: String,
         key: String,
+        count: Int,
         active: Bool,
         color: Color,
         action: @escaping () -> Void
@@ -253,6 +252,10 @@ extension ContentView {
             HStack(spacing: 3) {
                 Text(title)
                     .fontWeight(active ? .bold : .regular)
+                Text("\(count)")
+                    .font(.system(size: 10, weight: .medium, design: .monospaced))
+                    .monospacedDigit()
+                    .opacity(0.85)
                 Text(key)
                     .font(.system(size: 9, weight: .bold, design: .monospaced))
                     .opacity(0.7)

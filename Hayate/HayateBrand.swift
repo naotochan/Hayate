@@ -9,6 +9,7 @@ struct HayateBrandScreen: View {
             onOpen: () -> Void,
             recentFolders: [URL],
             onOpenRecent: (URL) -> Void,
+            onRemoveUnavailable: (URL) -> Void,
             /// When set (e.g. folder opened but no photos), replaces the default subtitle.
             message: String? = nil
         )
@@ -35,7 +36,7 @@ struct HayateBrandScreen: View {
     private var subtitle: String {
         if isLoading { return "Preparing…" }
         if dropTargeted { return "Release to open folder(s)" }
-        if case .empty(_, _, _, let message) = mode, let message {
+        if case .empty(_, _, _, _, let message) = mode, let message {
             return message
         }
         return "Drop folders or open one to begin"
@@ -73,7 +74,7 @@ struct HayateBrandScreen: View {
                 }
                 .opacity(textOpacity)
 
-                if case .empty(let onOpen, let recent, let onOpenRecent, _) = mode {
+                if case .empty(let onOpen, let recent, let onOpenRecent, let onRemoveUnavailable, _) = mode {
                     Button("Open Folder…", action: onOpen)
                         .buttonStyle(.borderedProminent)
                         .tint(HayateTheme.wash(0.18))
@@ -82,7 +83,7 @@ struct HayateBrandScreen: View {
                         .padding(.top, 2)
 
                     if !recent.isEmpty {
-                        recentFoldersList(recent, onOpen: onOpenRecent)
+                        recentFoldersList(recent, onOpen: onOpenRecent, onRemoveUnavailable: onRemoveUnavailable)
                             .opacity(textOpacity)
                             .padding(.top, 8)
                     }
@@ -111,7 +112,11 @@ struct HayateBrandScreen: View {
         }
     }
 
-    private func recentFoldersList(_ folders: [URL], onOpen: @escaping (URL) -> Void) -> some View {
+    private func recentFoldersList(
+        _ folders: [URL],
+        onOpen: @escaping (URL) -> Void,
+        onRemoveUnavailable: @escaping (URL) -> Void
+    ) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("Recent Folders")
                 .font(.system(size: 11, weight: .semibold))
@@ -122,45 +127,62 @@ struct HayateBrandScreen: View {
 
             ForEach(folders.prefix(6), id: \.path) { url in
                 let available = FileManager.default.isReadableFile(atPath: url.path)
-                Button {
-                    guard available else { return }
-                    onOpen(url)
-                } label: {
-                    HStack(spacing: 10) {
-                        Image(systemName: "folder.fill")
-                            .font(.system(size: 13))
-                            .foregroundColor(available ? HayateTheme.fg(0.7) : HayateTheme.fg(0.25))
-                            .frame(width: 18)
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text(url.lastPathComponent)
-                                .font(.system(size: 13, weight: .medium))
-                                .foregroundColor(available ? HayateTheme.fg(0.9) : HayateTheme.fg(0.35))
-                                .lineLimit(1)
-                            Text(url.deletingLastPathComponent().path)
-                                .font(.system(size: 10))
-                                .foregroundColor(HayateTheme.fg(available ? 0.35 : 0.2))
-                                .lineLimit(1)
-                                .truncationMode(.middle)
+                HStack(spacing: 0) {
+                    Button {
+                        onOpen(url)
+                    } label: {
+                        HStack(spacing: 10) {
+                            Image(systemName: "folder.fill")
+                                .font(.system(size: 13))
+                                .foregroundColor(available ? HayateTheme.fg(0.7) : HayateTheme.fg(0.25))
+                                .frame(width: 18)
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(url.lastPathComponent)
+                                    .font(.system(size: 13, weight: .medium))
+                                    .foregroundColor(available ? HayateTheme.fg(0.9) : HayateTheme.fg(0.35))
+                                    .lineLimit(1)
+                                Text(url.deletingLastPathComponent().path)
+                                    .font(.system(size: 10))
+                                    .foregroundColor(HayateTheme.fg(available ? 0.35 : 0.2))
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                            }
+                            Spacer(minLength: 0)
+                            if !available {
+                                Text("Unavailable")
+                                    .font(.system(size: 10))
+                                    .foregroundColor(HayateTheme.fg(0.3))
+                            }
                         }
-                        Spacer(minLength: 0)
-                        if !available {
-                            Text("Unavailable")
-                                .font(.system(size: 10))
-                                .foregroundColor(HayateTheme.fg(0.3))
-                        }
+                        .padding(.leading, 12)
+                        .padding(.vertical, 8)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(Rectangle())
                     }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .frame(maxWidth: 360, alignment: .leading)
-                    .background(HayateTheme.wash(available ? 0.06 : 0.03))
-                    .cornerRadius(6)
-                    .contentShape(Rectangle())
+                    .buttonStyle(.plain)
+                    .disabled(!available)
+                    .help(available
+                          ? url.path
+                          : L.t("This folder is not currently reachable", ja: "このフォルダには現在アクセスできません"))
+
+                    if !available {
+                        Button {
+                            onRemoveUnavailable(url)
+                        } label: {
+                            Image(systemName: "xmark")
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundColor(HayateTheme.fg(0.35))
+                                .frame(width: 32, height: 32)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .help(L.t("Remove from Recents", ja: "最近使った項目から削除"))
+                        .padding(.trailing, 4)
+                    }
                 }
-                .buttonStyle(.plain)
-                .disabled(!available)
-                .help(available
-                      ? url.path
-                      : L.t("This folder is not currently reachable", ja: "このフォルダには現在アクセスできません"))
+                .frame(maxWidth: 360, alignment: .leading)
+                .background(HayateTheme.wash(available ? 0.06 : 0.03))
+                .cornerRadius(6)
             }
         }
     }

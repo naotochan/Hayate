@@ -174,12 +174,11 @@ struct FolderSidebar: View {
         if cullingProfileTriage {
             let triage = [
                 keyDisplay(for: .toggleFavorite),
-                keyDisplay(for: .setTriageMaybe),
                 keyDisplay(for: .toggleRejected),
             ].compactMap { $0 }.joined(separator: " ")
             if !triage.isEmpty {
-                // Keep / Maybe / Out are product terms — same in both languages.
-                rows.append(ShortcutHint(keys: triage, label: "Keep / Maybe / Out"))
+                // Keep / Out are product terms — same in both languages.
+                rows.append(ShortcutHint(keys: triage, label: "Keep / Out"))
             }
         } else {
             rows.append(ShortcutHint(keys: "1–5", label: L.t("Rate", ja: "評価")))
@@ -318,16 +317,31 @@ struct FolderSidebar: View {
             .disabled(!available)
             .help(available ? url.path : "This folder is not currently reachable")
 
-            Button(action: pinAction) {
-                Image(systemName: pinned ? "pin.fill" : "pin")
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundColor(pinned ? .accentColor.opacity(0.85) : HayateTheme.fg(0.35))
-                    .frame(width: 22, height: 22)
-                    .contentShape(Rectangle())
+            if available {
+                Button(action: pinAction) {
+                    Image(systemName: pinned ? "pin.fill" : "pin")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundColor(pinned ? .accentColor.opacity(0.85) : HayateTheme.fg(0.35))
+                        .frame(width: 22, height: 22)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help(pinTitle)
+                .padding(.trailing, 4)
+            } else {
+                Button {
+                    session.forgetFolder(url)
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundColor(HayateTheme.fg(0.35))
+                        .frame(width: 22, height: 22)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help(L.t("Remove from sidebar", ja: "サイドバーから削除"))
+                .padding(.trailing, 4)
             }
-            .buttonStyle(.plain)
-            .help(pinTitle)
-            .padding(.trailing, 4)
         }
         .background(
             RoundedRectangle(cornerRadius: 6)
@@ -358,12 +372,19 @@ struct FolderSidebar: View {
             Divider()
             folderColorMenu(for: url, current: folderColor)
 
-            if session.recentFolders.contains(where: {
-                $0.standardizedFileURL.path == url.standardizedFileURL.path
-            }) {
+            if available {
+                if session.recentFolders.contains(where: {
+                    $0.standardizedFileURL.path == url.standardizedFileURL.path
+                }) {
+                    Divider()
+                    Button("Remove from Recent", role: .destructive) {
+                        session.removeFromRecents(url)
+                    }
+                }
+            } else {
                 Divider()
-                Button("Remove from Recent", role: .destructive) {
-                    session.removeFromRecents(url)
+                Button(L.t("Remove", ja: "削除"), role: .destructive) {
+                    session.forgetFolder(url)
                 }
             }
         }
@@ -371,7 +392,7 @@ struct FolderSidebar: View {
 
     @ViewBuilder
     private func folderColorMenu(for url: URL, current: FolderColor) -> some View {
-        // Product term — keep English in both languages (like Keep / Maybe / Out).
+        // Product term — keep English in both languages (like Keep / Out).
         Menu("Color") {
             Button {
                 session.setFolderColor(.none, for: url)

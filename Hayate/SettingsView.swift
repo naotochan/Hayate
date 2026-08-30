@@ -123,7 +123,7 @@ struct SettingsView: View {
         switch item {
         case .general:
             return [
-                "appearance", "language", "culling", "keep", "maybe", "out", "stars",
+                "appearance", "language", "culling", "keep", "out", "stars",
                 "auto-advance", "skip", "xmp", "grid", "burst", "stack", "welcome", "coffee", "support",
                 "buy me a coffee", "assisted", "sharpness", "face", "quality", "review", "hint",
                 "外観", "言語", "選別", "自動", "スキップ", "グリッド",
@@ -221,8 +221,8 @@ struct SettingsView: View {
                     title: L.t("Culling profile", ja: "選別プロファイル"),
                     subtitle: cullingProfileTriage
                         ? L.t(
-                            "K = Keep, M = Maybe, O = Out. Same key again clears. Stored as favorite / rating 3 / reject so existing files stay compatible.",
-                            ja: "K = Keep、M = Maybe、O = Out。同じキーでもう一度押すと解除。favorite / rating 3 / reject として保存し、既存ファイルと互換を保ちます。"
+                            "K = Keep, O = Out. Same key again clears. Stored as favorite / reject so existing files stay compatible.",
+                            ja: "K = Keep、O = Out。同じキーでもう一度押すと解除。favorite / reject として保存し、既存ファイルと互換を保ちます。"
                         )
                         : L.t(
                             "Number keys 1–5 set stars; K favorites; O rejects.",
@@ -230,7 +230,7 @@ struct SettingsView: View {
                         )
                 ) {
                     Picker("", selection: $cullingProfileTriage) {
-                        Text("Keep / Maybe / Out").tag(true)
+                        Text("Keep / Out").tag(true)
                         Text(L.t("Stars (1–5)", ja: "星（1–5）")).tag(false)
                     }
                     .labelsHidden()
@@ -254,8 +254,8 @@ struct SettingsView: View {
                 HayateChrome.ToggleRow(
                     title: L.t("Auto-advance after rating", ja: "評価後に自動で次へ"),
                     subtitle: L.t(
-                        "Jump to the next photo after Keep / Maybe / Out (or stars / favorite / reject) in the single-photo view.",
-                        ja: "1枚表示で Keep / Maybe / Out（または星 / favorite / reject）のあと、次の写真へ進みます。"
+                        "Jump to the next photo after Keep / Out (or stars / favorite / reject) in the single-photo view.",
+                        ja: "1枚表示で Keep / Out（または星 / favorite / reject）のあと、次の写真へ進みます。"
                     ),
                     isOn: $autoAdvance
                 )
@@ -265,8 +265,8 @@ struct SettingsView: View {
                 HayateChrome.ToggleRow(
                     title: L.t("Skip decided photos", ja: "決定済みをスキップ"),
                     subtitle: L.t(
-                        "J / L and arrow keys jump to the next undecided photo. Already Keep / Maybe / Out (or rated / favorite / reject) are skipped. Use this for a second pass over leftovers.",
-                        ja: "J / L と矢印キーで未決定の写真だけへ進みます。Keep / Maybe / Out（または星 / favorite / reject）済みは飛ばします。残りの再周回向けです。"
+                        "J / L and arrow keys jump to the next undecided photo. Already Keep / Out (or rated / favorite / reject) are skipped. Use this for a second pass over leftovers.",
+                        ja: "J / L と矢印キーで未決定の写真だけへ進みます。Keep / Out（または星 / favorite / reject）済みは飛ばします。残りの再周回向けです。"
                     ),
                     isOn: $navigateUndecidedOnly
                 )
