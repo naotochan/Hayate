@@ -174,12 +174,11 @@ struct FolderSidebar: View {
         if cullingProfileTriage {
             let triage = [
                 keyDisplay(for: .toggleFavorite),
-                keyDisplay(for: .setTriageMaybe),
                 keyDisplay(for: .toggleRejected),
             ].compactMap { $0 }.joined(separator: " ")
             if !triage.isEmpty {
-                // Keep / Maybe / Out are product terms — same in both languages.
-                rows.append(ShortcutHint(keys: triage, label: "Keep / Maybe / Out"))
+                // Keep / Out are product terms — same in both languages.
+                rows.append(ShortcutHint(keys: triage, label: "Keep / Out"))
             }
         } else {
             rows.append(ShortcutHint(keys: "1–5", label: L.t("Rate", ja: "評価")))
@@ -393,7 +392,7 @@ struct FolderSidebar: View {
 
     @ViewBuilder
     private func folderColorMenu(for url: URL, current: FolderColor) -> some View {
-        // Product term — keep English in both languages (like Keep / Maybe / Out).
+        // Product term — keep English in both languages (like Keep / Out).
         Menu("Color") {
             Button {
                 session.setFolderColor(.none, for: url)

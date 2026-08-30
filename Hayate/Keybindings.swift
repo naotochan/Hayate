@@ -103,7 +103,6 @@ enum ActionID: String, Codable, CaseIterable, Identifiable {
     case navigateForward
     case toggleFavorite
     case toggleRejected
-    case setTriageMaybe
     case toggleGrid
     case toggleCompare
     case toggleSurvey
@@ -136,8 +135,6 @@ enum ActionID: String, Codable, CaseIterable, Identifiable {
             return lang.t("Toggle favorite / Keep", ja: "お気に入り / Keep")
         case .toggleRejected:
             return lang.t("Toggle rejected / Out", ja: "リジェクト / Out")
-        case .setTriageMaybe:
-            return lang.t("Maybe (triage)", ja: "Maybe（トリアージ）")
         case .toggleGrid:
             return lang.t("Toggle grid view", ja: "グリッド表示")
         case .toggleCompare:
@@ -173,15 +170,13 @@ enum ActionID: String, Codable, CaseIterable, Identifiable {
         }
     }
 
-    /// Overlay-friendly titles that reflect Keep/Maybe/Out vs stars.
+    /// Overlay-friendly titles that reflect Keep/Out vs stars.
     func helpTitle(triageMode: Bool, lang: ResolvedLanguage) -> String {
         switch self {
         case .toggleFavorite:
             return triageMode ? "Keep" : lang.t("Toggle favorite", ja: "お気に入り")
         case .toggleRejected:
             return triageMode ? "Out" : lang.t("Toggle rejected", ja: "リジェクト")
-        case .setTriageMaybe:
-            return triageMode ? "Maybe" : lang.t("Maybe (triage)", ja: "Maybe（トリアージ）")
         case .pickCompare:
             return triageMode
                 ? lang.t("Keep active (compare)", ja: "アクティブを Keep（比較）")
@@ -222,7 +217,7 @@ enum ActionID: String, Codable, CaseIterable, Identifiable {
     var category: Category {
         switch self {
         case .navigateBack, .navigateForward: return .navigation
-        case .toggleFavorite, .toggleRejected, .setTriageMaybe: return .rating
+        case .toggleFavorite, .toggleRejected: return .rating
         case .toggleGrid, .toggleCompare, .toggleSurvey, .toggleFitZoom, .toggleOneToOneZoom, .toggleFocusPeaking, .toggleInfo, .toggleHistogram, .toggleShortcutsHelp, .toggleSidebar: return .view
         case .deletePhoto, .undo, .selectAllGrid: return .editing
         case .openFolder: return .file
@@ -247,7 +242,6 @@ final class KeybindingStore: ObservableObject {
         .navigateForward: Shortcut(keyCode: 37),                        // L
         .toggleFavorite: Shortcut(keyCode: 40),                         // K (Keep)
         .toggleRejected: Shortcut(keyCode: 31),                         // O (Out) — plain O; ⌘O stays Open Folder
-        .setTriageMaybe: Shortcut(keyCode: 46),                         // M (Maybe)
         .toggleGrid: Shortcut(keyCode: 5),                              // G
         .toggleCompare: Shortcut(keyCode: 8),                           // C
         .toggleSurvey: Shortcut(keyCode: 45),                           // N
@@ -337,7 +331,7 @@ final class KeybindingStore: ObservableObject {
         rebuildReverseMap()
     }
 
-    /// One-shot: old defaults used P/X for Keep/Out; move to K/M/O for
+    /// One-shot: old defaults used P/X for Keep/Out; move to K/O for
     /// right-hand triage. Skips if the user rebound those actions.
     private func migrateTriageKeysPXtoKMOIfNeeded() {
         let flag = "keybindings.triageKMO.migrated"

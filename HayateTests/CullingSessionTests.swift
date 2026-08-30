@@ -100,7 +100,7 @@ final class CullingSessionTests: XCTestCase {
     func testNavigateBackSkipsDecidedInTriage() {
         loadTestFiles(count: 4)
         session.currentIndex = 1
-        session.setTriage(.maybe)
+        session.setTriage(.out)
         session.currentIndex = 2
         session.setTriage(.keep)
         session.currentIndex = 3
@@ -830,9 +830,9 @@ final class CullingSessionTests: XCTestCase {
         XCTAssertEqual(entry.colorLabel, .none)
     }
 
-    // MARK: - Triage (Keep / Maybe / Out)
+    // MARK: - Triage (Keep / Out)
 
-    func testTriageKeepMaybeOutExclusive() {
+    func testTriageKeepOutExclusive() {
         loadTestFiles(count: 1)
 
         session.setTriage(.keep)
@@ -840,16 +840,71 @@ final class CullingSessionTests: XCTestCase {
         XCTAssertTrue(session.currentEntry?.isFavorite == true)
         XCTAssertEqual(session.currentEntry?.rating, 0)
 
-        session.setTriage(.maybe)
-        XCTAssertEqual(CullingSession.TriageState.of(session.currentEntry), .maybe)
-        XCTAssertFalse(session.currentEntry?.isFavorite == true)
-        XCTAssertEqual(session.currentEntry?.rating, CullingSession.TriageState.maybeRating)
-
         session.setTriage(.out)
         XCTAssertEqual(CullingSession.TriageState.of(session.currentEntry), .out)
         XCTAssertTrue(session.currentEntry?.isRejected == true)
         XCTAssertFalse(session.currentEntry?.isFavorite == true)
         XCTAssertEqual(session.currentEntry?.rating, 0)
+    }
+
+    func testRatingOnlyEntryIsUndecided() {
+        loadTestFiles(count: 1)
+        session.entries["IMG_0001.CR3"] = CullingSession.PhotoEntry(
+            fileName: "IMG_0001.CR3",
+            rating: 3
+        )
+        XCTAssertEqual(CullingSession.TriageState.of(session.currentEntry), .undecided)
+    }
+
+    func testTriageCounts() {
+        loadTestFiles(count: 5)
+        session.setTriage(.keep)
+        session.currentIndex = 1
+        session.setTriage(.out)
+
+        let counts = session.triageCounts
+        XCTAssertEqual(counts.keep, 1)
+        XCTAssertEqual(counts.out, 1)
+        XCTAssertEqual(counts.undecided, 3)
+    }
+
+    func testOrganizeIntoTriageFoldersCopiesKeepAndOut() async throws {
+        loadTestFiles(count: 3)
+        session.setTriage(.keep)
+        session.currentIndex = 1
+        session.setTriage(.out)
+
+        let dest = tempDir.appendingPathComponent("export_dest", isDirectory: true)
+        try FileManager.default.createDirectory(at: dest, withIntermediateDirectories: true)
+
+        session.organizeIntoTriageFolders(into: dest, move: false)
+
+        for _ in 0..<200 {
+            if session.exportProgress?.finished == true { break }
+            try await Task.sleep(nanoseconds: 10_000_000)
+        }
+
+        XCTAssertEqual(session.exportProgress?.finished, true)
+
+        let keepDir = dest.appendingPathComponent("Keep", isDirectory: true)
+        let outDir = dest.appendingPathComponent("Out", isDirectory: true)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: keepDir.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: outDir.path))
+        XCTAssertTrue(FileManager.default.fileExists(
+            atPath: keepDir.appendingPathComponent("IMG_0001.CR3").path
+        ))
+        XCTAssertTrue(FileManager.default.fileExists(
+            atPath: outDir.appendingPathComponent("IMG_0002.CR3").path
+        ))
+        XCTAssertFalse(FileManager.default.fileExists(
+            atPath: keepDir.appendingPathComponent("IMG_0003.CR3").path
+        ))
+        XCTAssertFalse(FileManager.default.fileExists(
+            atPath: outDir.appendingPathComponent("IMG_0003.CR3").path
+        ))
+        XCTAssertTrue(FileManager.default.fileExists(
+            atPath: tempDir.appendingPathComponent("IMG_0003.CR3").path
+        ), "Undecided file should remain in the shoot")
     }
 
     func testTriageSameStateClearsToUndecided() {
@@ -863,7 +918,7 @@ final class CullingSessionTests: XCTestCase {
     func testTriageUndoRestoresPreviousEntry() {
         loadTestFiles(count: 1)
         session.setTriage(.keep)
-        session.setTriage(.maybe)
+        session.setTriage(.out)
         session.undo()
         XCTAssertEqual(CullingSession.TriageState.of(session.currentEntry), .keep)
         session.undo()

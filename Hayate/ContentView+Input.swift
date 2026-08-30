@@ -114,7 +114,7 @@ extension ContentView {
         }
 
         // Rating digits 0–5 (fixed — rating keys don't go through the store).
-        // Ignored in triage profile (use P / M / X instead).
+        // Ignored in triage profile (use K / O instead).
         if !cullingProfileTriage,
            !event.modifierFlags.contains(.command),
            let chars = event.charactersIgnoringModifiers,
@@ -244,11 +244,6 @@ extension ContentView {
                 session.toggleRejected()
                 autoAdvanceIfEnabled()
             }
-            return true
-
-        case .setTriageMaybe:
-            guard cullingProfileTriage else { return false }
-            applyTriage(.maybe, batch: batch, compareActive: compareActive, surveyActive: surveyActive)
             return true
 
         case .toggleGrid:

@@ -208,7 +208,6 @@ struct OnboardingOverlay: View {
                     )
                 HStack(spacing: 8) {
                     previewKeyCap(bindings[.toggleFavorite]?.display ?? "K", label: "Keep")
-                    previewKeyCap(bindings[.setTriageMaybe]?.display ?? "M", label: "Maybe")
                     previewKeyCap(bindings[.toggleRejected]?.display ?? "O", label: "Out")
                 }
             }
@@ -300,7 +299,6 @@ struct OnboardingOverlay: View {
 
     private var steps: [Step] {
         let keep = bindings[.toggleFavorite]?.display ?? "K"
-        let maybe = bindings[.setTriageMaybe]?.display ?? "M"
         let out = bindings[.toggleRejected]?.display ?? "O"
         let sidebar = bindings[.toggleSidebar]?.display ?? "⌘B"
         return [
@@ -324,8 +322,8 @@ struct OnboardingOverlay: View {
                 icon: "hand.tap",
                 title: L.t("Drop, then cull", ja: "ドロップして選別"),
                 body: L.t(
-                    "Drop folders in this area. Each becomes its own entry in the sidebar. Once photos open, use \(keep) Keep · \(maybe) Maybe · \(out) Out. Press ? anytime for every shortcut.",
-                    ja: "このエリアにフォルダをドロップ。それぞれ独立したフォルダとしてサイドバーに並びます。写真が開いたら \(keep) Keep · \(maybe) Maybe · \(out) Out。? でいつでも全ショートカットを表示できます。"
+                    "Drop folders in this area. Each becomes its own entry in the sidebar. Once photos open, use \(keep) Keep · \(out) Out. Press ? anytime for every shortcut.",
+                    ja: "このエリアにフォルダをドロップ。それぞれ独立したフォルダとしてサイドバーに並びます。写真が開いたら \(keep) Keep · \(out) Out。? でいつでも全ショートカットを表示できます。"
                 )
             ),
         ]
