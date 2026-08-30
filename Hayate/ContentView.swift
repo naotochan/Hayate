@@ -143,7 +143,7 @@ struct ContentView: View {
     /// Filmstrip / grid: desaturate non-favorites so Keep photos stand out.
     /// The main Metal viewer always stays full color.
     @AppStorage("colorizeKeepOnly") var colorizeKeepOnly = true
-    /// Keep / Maybe / Out instead of 1–5 stars (stored via favorite / rating / reject).
+    /// Keep / Out instead of 1–5 stars (stored via favorite / reject).
     @AppStorage("cullingProfileTriage") var cullingProfileTriage = true
     /// Grid hints from on-device sharpness / face-quality scores (folder-relative).
     @AppStorage("assistedCullingEnabled") var assistedCullingEnabled = true
@@ -167,13 +167,12 @@ struct ContentView: View {
         case rated
         case unrated
         case keep
-        case maybe
         case out
         case undecided
 
         static func visible(triage: Bool) -> [GridFilter] {
             triage
-                ? [.all, .keep, .maybe, .out, .undecided]
+                ? [.all, .keep, .out, .undecided]
                 : [.all, .favorites, .rejected, .rated, .unrated]
         }
 
@@ -186,9 +185,18 @@ struct ContentView: View {
             case .rated: return "★ Rated"
             case .unrated: return "Unrated"
             case .keep: return "Keep"
-            case .maybe: return "Maybe"
             case .out: return "Out"
             case .undecided: return "Undecided"
+            }
+        }
+
+        func tabTitle(counts: CullingSession.TriageCounts, total: Int) -> String {
+            switch self {
+            case .all: return "All \(total)"
+            case .keep: return "Keep \(counts.keep)"
+            case .out: return "Out \(counts.out)"
+            case .undecided: return "Undecided \(counts.undecided)"
+            default: return title
             }
         }
     }
@@ -450,13 +458,7 @@ struct ContentView: View {
             }
         }
         .sheet(isPresented: $showExportSheet) {
-            ExportSheet(onBulkDelete: {
-                // The displayed photo may have been trashed; currentIndex can
-                // keep its numeric value after reindexing, so onChange alone
-                // won't reload.
-                selectedIndices.removeAll()
-                loadCurrentImage()
-            })
+            ExportSheet()
         }
         .onDrop(of: [.fileURL], isTargeted: $isDropTargeted) { providers in
             guard !providers.isEmpty else { return false }

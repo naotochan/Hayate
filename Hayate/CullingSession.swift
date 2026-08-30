@@ -307,31 +307,46 @@ class CullingSession: ObservableObject {
         entry.rating > 0 || entry.isFavorite || entry.isRejected || entry.colorLabel != .none
     }
 
-    /// Three-value culling profile (Keep / Maybe / Out), stored on top of the
-    /// existing favorite / rating / reject fields so `.hayate.json` stays compatible.
+    /// Binary culling profile (Keep / Out), stored on top of the existing
+    /// favorite / rating / reject fields so `.hayate.json` stays compatible.
     enum TriageState: Equatable {
         case undecided
         case keep
-        case maybe
         case out
-
-        /// Rating written for Maybe (stars profile still uses the full 1–5 range).
-        static let maybeRating = 3
 
         static func of(_ entry: PhotoEntry?) -> TriageState {
             guard let entry else { return .undecided }
             if entry.isRejected { return .out }
             if entry.isFavorite { return .keep }
-            if entry.rating > 0 { return .maybe }
             return .undecided
         }
+    }
+
+    struct TriageCounts: Equatable {
+        var keep: Int
+        var out: Int
+        var undecided: Int
+    }
+
+    var triageCounts: TriageCounts {
+        var keep = 0
+        var out = 0
+        var undecided = 0
+        for url in files {
+            switch TriageState.of(entries[url.lastPathComponent]) {
+            case .keep: keep += 1
+            case .out: out += 1
+            case .undecided: undecided += 1
+            }
+        }
+        return TriageCounts(keep: keep, out: out, undecided: undecided)
     }
 
     enum UndoAction {
         case ratingChange(fileName: String, oldRating: Int)
         case favoriteChange(fileName: String, oldValue: Bool)
         case rejectedChange(fileName: String, oldValue: Bool)
-        /// Compound restore for triage (Keep/Maybe/Out) so ⌘Z undoes in one step.
+        /// Compound restore for triage (Keep/Out) so ⌘Z undoes in one step.
         case entrySnapshot(fileName: String, oldEntry: PhotoEntry?)
         /// Multiple entry restores undone in one ⌘Z (e.g. survey decide).
         case compositeEntrySnapshots([(fileName: String, oldEntry: PhotoEntry?)])
@@ -420,19 +435,15 @@ class CullingSession: ObservableObject {
         startExport(jobs: jobs, move: move)
     }
 
-    /// Place each Keep / Maybe / Out photo into sibling folders of that name
-    /// under the current shoot (`…/Keep`, `…/Maybe`, `…/Out`). Undecided
-    /// photos stay put. Creates the folders as needed.
-    func organizeIntoTriageFolders(move: Bool) {
-        guard let root = folderURL else { return }
+    /// Place each Keep / Out photo into `destination/Keep` and `destination/Out`.
+    /// Undecided photos stay put. Creates the folders as needed.
+    func organizeIntoTriageFolders(into destination: URL, move: Bool) {
         let jobs = files.compactMap { src -> (URL, URL)? in
             switch TriageState.of(entries[src.lastPathComponent]) {
             case .keep:
-                return (src, root.appendingPathComponent("Keep", isDirectory: true))
-            case .maybe:
-                return (src, root.appendingPathComponent("Maybe", isDirectory: true))
+                return (src, destination.appendingPathComponent("Keep", isDirectory: true))
             case .out:
-                return (src, root.appendingPathComponent("Out", isDirectory: true))
+                return (src, destination.appendingPathComponent("Out", isDirectory: true))
             case .undecided:
                 return nil
             }
@@ -914,7 +925,7 @@ class CullingSession: ObservableObject {
     }
 
     /// Apply an exclusive triage state. Same state again → undecided.
-    /// Mapping: Keep→favorite, Out→reject, Maybe→rating 3 (clears the other two).
+    /// Mapping: Keep→favorite, Out→reject (clears the other + rating).
     private func applyTriage(_ state: TriageState, toFileNamed fileName: String, recordUndo: Bool = true) {
         let previous = entries[fileName]
         let current = TriageState.of(previous)
@@ -934,10 +945,6 @@ class CullingSession: ObservableObject {
             entry.isFavorite = true
             entry.isRejected = false
             entry.rating = 0
-        case .maybe:
-            entry.isFavorite = false
-            entry.isRejected = false
-            entry.rating = TriageState.maybeRating
         case .out:
             entry.isFavorite = false
             entry.isRejected = true
@@ -1160,9 +1167,6 @@ class CullingSession: ObservableObject {
             attributes += "\n   xmp:Label=\"\(colorLabel.xmpValue)\""
         } else if isFavorite {
             attributes += "\n   xmp:Label=\"Red\""
-        } else if rating > 0 {
-            // Maybe (triage) — Bridge yellow label so it survives into other apps.
-            attributes += "\n   xmp:Label=\"Yellow\""
         }
 
         let xmp = """

@@ -51,7 +51,6 @@ extension ContentView {
             case .favorites, .keep: return entry?.isFavorite == true ? (index, url) : nil
             case .rejected, .out: return entry?.isRejected == true ? (index, url) : nil
             case .rated: return (entry?.rating ?? 0) > 0 ? (index, url) : nil
-            case .maybe: return triage == .maybe ? (index, url) : nil
             case .unrated: return (entry?.rating ?? 0) == 0 ? (index, url) : nil
             case .undecided: return triage == .undecided ? (index, url) : nil
             }
@@ -125,8 +124,13 @@ extension ContentView {
                     Button {
                         gridFilter = filter
                     } label: {
-                        Text(filter.title)
+                        Text(
+                            cullingProfileTriage
+                                ? filter.tabTitle(counts: session.triageCounts, total: session.files.count)
+                                : filter.title
+                        )
                             .font(.system(size: 11, weight: gridFilter == filter ? .bold : .regular))
+                            .monospacedDigit()
                             .foregroundColor(gridFilter == filter ? HayateTheme.fg(1) : .secondary)
                             .padding(.horizontal, 8)
                             .padding(.vertical, 4)
