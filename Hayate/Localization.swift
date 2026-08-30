@@ -3,40 +3,174 @@ import SwiftUI
 import AppKit
 
 /// User-facing language preference. Persisted via UserDefaults.
+///
+/// Raw values are stable — do not renumber/rename existing cases; UserDefaults
+/// already has them on disk for every installed user.
 enum AppLanguage: String, CaseIterable, Identifiable {
     case system
     case english
     case japanese
+    case chineseSimplified
+    case chineseTraditional
+    case korean
+    case spanish
+    case french
+    case german
+    case portuguese
+    case italian
+    case russian
+    case dutch
+    case polish
+    case turkish
+    case indonesian
+    case vietnamese
 
     var id: String { rawValue }
 
-    /// Picker labels stay bilingual so either language can find the control.
-    var pickerLabel: String {
+    /// Picker label. Every concrete language shows its own endonym; `system`
+    /// tracks the currently resolved language so the menu itself stays legible.
+    func pickerLabel(resolved: ResolvedLanguage) -> String {
         switch self {
-        case .system: return "System / システム"
+        case .system: return resolved.t("System", ja: "システム")
         case .english: return "English"
         case .japanese: return "日本語"
+        case .chineseSimplified: return "简体中文"
+        case .chineseTraditional: return "繁體中文"
+        case .korean: return "한국어"
+        case .spanish: return "Español"
+        case .french: return "Français"
+        case .german: return "Deutsch"
+        case .portuguese: return "Português"
+        case .italian: return "Italiano"
+        case .russian: return "Русский"
+        case .dutch: return "Nederlands"
+        case .polish: return "Polski"
+        case .turkish: return "Türkçe"
+        case .indonesian: return "Bahasa Indonesia"
+        case .vietnamese: return "Tiếng Việt"
         }
     }
 
     func resolve(preferredLanguages: [String] = Locale.preferredLanguages) -> ResolvedLanguage {
         switch self {
+        case .system: return Self.resolveSystem(preferredLanguages: preferredLanguages)
         case .english: return .english
         case .japanese: return .japanese
-        case .system:
-            let pref = preferredLanguages.first ?? "en"
-            return pref.hasPrefix("ja") ? .japanese : .english
+        case .chineseSimplified: return .chineseSimplified
+        case .chineseTraditional: return .chineseTraditional
+        case .korean: return .korean
+        case .spanish: return .spanish
+        case .french: return .french
+        case .german: return .german
+        case .portuguese: return .portuguese
+        case .italian: return .italian
+        case .russian: return .russian
+        case .dutch: return .dutch
+        case .polish: return .polish
+        case .turkish: return .turkish
+        case .indonesian: return .indonesian
+        case .vietnamese: return .vietnamese
+        }
+    }
+
+    /// Maps the first preferred BCP-47 language tag (e.g. "zh-Hant-TW") to a
+    /// `ResolvedLanguage`. Only the primary subtag drives the switch, except
+    /// for Chinese, where script/region distinguish Simplified vs Traditional.
+    private static func resolveSystem(preferredLanguages: [String]) -> ResolvedLanguage {
+        guard let tag = preferredLanguages.first, !tag.isEmpty else { return .english }
+        let lower = tag.lowercased()
+        let primary = lower.split(separator: "-").first.map(String.init) ?? lower
+
+        switch primary {
+        case "ja": return .japanese
+        case "zh":
+            let isTraditional = lower.contains("hant")
+                || lower.hasSuffix("-tw") || lower.contains("-tw-")
+                || lower.hasSuffix("-hk") || lower.contains("-hk-")
+                || lower.hasSuffix("-mo") || lower.contains("-mo-")
+            return isTraditional ? .chineseTraditional : .chineseSimplified
+        case "ko": return .korean
+        case "es": return .spanish
+        case "fr": return .french
+        case "de": return .german
+        case "pt": return .portuguese
+        case "it": return .italian
+        case "ru": return .russian
+        case "nl": return .dutch
+        case "pl": return .polish
+        case "tr": return .turkish
+        case "id": return .indonesian
+        case "vi": return .vietnamese
+        default: return .english
         }
     }
 }
 
-enum ResolvedLanguage: Equatable {
+/// Every language the app can render. `english` and `japanese` are the
+/// bilingual source-of-truth pair every call site already provides; every
+/// other case looks up the English key in `L10nCatalog`.
+enum ResolvedLanguage: String, CaseIterable, Hashable {
     case english
     case japanese
+    case chineseSimplified
+    case chineseTraditional
+    case korean
+    case spanish
+    case french
+    case german
+    case portuguese
+    case italian
+    case russian
+    case dutch
+    case polish
+    case turkish
+    case indonesian
+    case vietnamese
 
+    /// Pick the string for this language. English and Japanese come straight
+    /// from the call site; every other language resolves through
+    /// `L10nCatalog`, falling back to English when a key is missing.
     func t(_ english: String, ja japanese: String) -> String {
-        self == .japanese ? japanese : english
+        switch self {
+        case .english: return english
+        case .japanese: return japanese
+        default: return L10nCatalog.string(english, language: self) ?? english
+        }
     }
+
+    /// Format-string overload for call sites that used to interpolate
+    /// straight into the English/Japanese literals. `arguments` apply to
+    /// whichever template `t` resolves to — the English source, the JA
+    /// literal, and every catalog entry for that key must all use the same
+    /// `%d` / `%@` (or positional `%1$@`) order.
+    func t(_ english: String, ja japanese: String, _ arguments: CVarArg...) -> String {
+        String(format: t(english, ja: japanese), locale: formatLocale, arguments: arguments)
+    }
+
+    /// Locale used only for `%d` / number formatting inside `String(format:)`
+    /// — not a general locale for the rest of the app.
+    var formatLocale: Locale {
+        switch self {
+        case .english: return Locale(identifier: "en")
+        case .japanese: return Locale(identifier: "ja")
+        case .chineseSimplified: return Locale(identifier: "zh-Hans")
+        case .chineseTraditional: return Locale(identifier: "zh-Hant")
+        case .korean: return Locale(identifier: "ko")
+        case .spanish: return Locale(identifier: "es")
+        case .french: return Locale(identifier: "fr")
+        case .german: return Locale(identifier: "de")
+        case .portuguese: return Locale(identifier: "pt-BR")
+        case .italian: return Locale(identifier: "it")
+        case .russian: return Locale(identifier: "ru")
+        case .dutch: return Locale(identifier: "nl")
+        case .polish: return Locale(identifier: "pl")
+        case .turkish: return Locale(identifier: "tr")
+        case .indonesian: return Locale(identifier: "id")
+        case .vietnamese: return Locale(identifier: "vi")
+        }
+    }
+
+    var isJapanese: Bool { self == .japanese }
 
     /// Viewer: fit ↔ 1:1 (100%) zoom — one image pixel per physical screen pixel.
     var toggleFitOneToOneZoom: String {
@@ -77,7 +211,7 @@ enum ResolvedLanguage: Equatable {
     }
 }
 
-/// In-app JP/EN switching. Injected as an `EnvironmentObject`.
+/// In-app language switching. Injected as an `EnvironmentObject`.
 @MainActor
 final class LocalizationStore: ObservableObject {
     static let storageKey = "appLanguage"
@@ -100,6 +234,13 @@ final class LocalizationStore: ObservableObject {
     /// Pick the string for the current resolved language.
     func t(_ english: String, ja japanese: String) -> String {
         resolved.t(english, ja: japanese)
+    }
+
+    var formatLocale: Locale { resolved.formatLocale }
+
+    /// Format-string overload — see `ResolvedLanguage.t(_:ja:_:)`.
+    func t(_ english: String, ja japanese: String, _ arguments: CVarArg...) -> String {
+        String(format: t(english, ja: japanese), locale: formatLocale, arguments: arguments)
     }
 
     var surveyModeLabel: String { resolved.surveyModeLabel }

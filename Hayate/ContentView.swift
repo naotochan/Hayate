@@ -492,7 +492,7 @@ struct ContentView: View {
 
     private var deletionDialogTitle: String {
         if let count = pendingDeletionIndices?.count, count > 1 {
-            return L.t("Delete \(count) photos?", ja: "\(count) 枚の写真を削除しますか？")
+            return L.t("Delete %d photos?", ja: "%d 枚の写真を削除しますか？", count)
         }
         return L.t("Delete this photo?", ja: "この写真を削除しますか？")
     }
@@ -503,8 +503,9 @@ struct ContentView: View {
                 return session.files[only].lastPathComponent
             }
             return L.t(
-                "Move \(indices.count) selected photos to Trash.",
-                ja: "選択中の \(indices.count) 枚をゴミ箱に移します。"
+                "Move %d selected photos to Trash.",
+                ja: "選択中の %d 枚をゴミ箱に移します。",
+                indices.count
             )
         }
         return session.currentFile?.lastPathComponent ?? ""

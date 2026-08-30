@@ -94,7 +94,11 @@ enum HayateChrome {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
 
+                // Intrinsic width so a `.frame(maxWidth:)` inside `trailing`
+                // (e.g. a menu Picker) cannot claim leftover HStack space and
+                // get centered short of the row's true trailing edge.
                 trailing
+                    .fixedSize(horizontal: true, vertical: false)
             }
             .padding(.horizontal, HayateChrome.rowHorizontalPadding)
             .padding(.vertical, HayateChrome.rowVerticalPadding)

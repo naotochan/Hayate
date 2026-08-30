@@ -35,8 +35,10 @@
 		A10026 /* HayateChrome.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20027; };
 		A10027 /* ContentView+Survey.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20028; };
 		A10028 /* PhotoAnalysis.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20029; };
+		A10029 /* L10nCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20030; };
 		B10001 /* CullingSessionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20001; };
 		B10002 /* KeybindingsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20002; };
+		B10003 /* LocalizationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B20003; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -79,9 +81,11 @@
 		A20027 /* HayateChrome.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HayateChrome.swift; sourceTree = "<group>"; };
 		A20028 /* ContentView+Survey.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ContentView+Survey.swift"; sourceTree = "<group>"; };
 		A20029 /* PhotoAnalysis.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoAnalysis.swift; sourceTree = "<group>"; };
+		A20030 /* L10nCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = L10nCatalog.swift; sourceTree = "<group>"; };
 		A30001 /* Hayate.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Hayate.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		B20001 /* CullingSessionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CullingSessionTests.swift; sourceTree = "<group>"; };
 		B20002 /* KeybindingsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeybindingsTests.swift; sourceTree = "<group>"; };
+		B20003 /* LocalizationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalizationTests.swift; sourceTree = "<group>"; };
 		B30001 /* HayateTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = HayateTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -132,6 +136,7 @@
 				A20023 /* FolderSidebar.swift */,
 				A20024 /* OnboardingOverlay.swift */,
 				A20025 /* Localization.swift */,
+				A20030 /* L10nCatalog.swift */,
 				A20026 /* HayateTheme.swift */,
 				A20027 /* HayateChrome.swift */,
 				A20003 /* MetalImageView.swift */,
@@ -163,6 +168,7 @@
 			children = (
 				B20001 /* CullingSessionTests.swift */,
 				B20002 /* KeybindingsTests.swift */,
+				B20003 /* LocalizationTests.swift */,
 			);
 			path = HayateTests;
 			sourceTree = "<group>";
@@ -304,6 +310,7 @@
 				A10022 /* FolderSidebar.swift in Sources */,
 				A10023 /* OnboardingOverlay.swift in Sources */,
 				A10024 /* Localization.swift in Sources */,
+				A10029 /* L10nCatalog.swift in Sources */,
 				A10025 /* HayateTheme.swift in Sources */,
 				A10026 /* HayateChrome.swift in Sources */,
 				A10003 /* MetalImageView.swift in Sources */,
@@ -322,6 +329,7 @@
 			files = (
 				B10001 /* CullingSessionTests.swift in Sources */,
 				B10002 /* KeybindingsTests.swift in Sources */,
+				B10003 /* LocalizationTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -397,11 +405,11 @@
 				CODE_SIGN_ENTITLEMENTS = Hayate/Hayate.entitlements;
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "-";
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 86;
+				CURRENT_PROJECT_VERSION = 87;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_HARDENED_RUNTIME = NO;
 				INFOPLIST_FILE = Hayate/Info.plist;
-				MARKETING_VERSION = 0.15.1;
+				MARKETING_VERSION = 0.16.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.hayate.app;
 				PRODUCT_MODULE_NAME = Hayate;
 				PRODUCT_NAME = Hayate;
@@ -422,11 +430,11 @@
 				CODE_SIGN_ENTITLEMENTS = Hayate/Hayate.entitlements;
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "-";
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 86;
+				CURRENT_PROJECT_VERSION = 87;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_HARDENED_RUNTIME = NO;
 				INFOPLIST_FILE = Hayate/Info.plist;
-				MARKETING_VERSION = 0.15.1;
+				MARKETING_VERSION = 0.16.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.hayate.app;
 				PRODUCT_MODULE_NAME = Hayate;
 				PRODUCT_NAME = Hayate;
