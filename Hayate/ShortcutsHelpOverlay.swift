@@ -227,6 +227,12 @@ struct ShortcutsHelpOverlay: View {
             }
         }
         if !compare.isEmpty {
+            if let undo = bindings[.undo]?.display {
+                compare.append(Row(
+                    keys: undo,
+                    label: lang.t("Undo last pick / skip", ja: "直前の選択 / スキップを戻す")
+                ))
+            }
             result.append(Section(title: lang.t("Compare", ja: "比較"), rows: compare))
         }
 
@@ -268,6 +274,12 @@ struct ShortcutsHelpOverlay: View {
             keys: "⎋",
             label: lang.t("Exit to grid (survey)", ja: "グリッドへ戻る（サーベイ）")
         ))
+        if let undo = bindings[.undo]?.display {
+            survey.append(Row(
+                keys: undo,
+                label: lang.t("Undo decide (restore survey)", ja: "決定を戻す（サーベイを復元）")
+            ))
+        }
         if !survey.isEmpty {
             result.append(Section(title: lang.t("Survey", ja: "サーベイ"), rows: survey))
         }

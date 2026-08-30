@@ -208,7 +208,12 @@ extension ContentView {
         session.applySurveyDecision(
             winnerIndex: winnerIndex,
             otherIndices: otherIndices,
-            triageMode: cullingProfileTriage
+            triageMode: cullingProfileTriage,
+            restore: .survey(
+                indices: surveyIndices,
+                activeSlot: surveyActiveSlot,
+                currentIndex: session.currentIndex
+            )
         )
         session.currentIndex = winnerIndex
         exitSurveyMode()
@@ -273,12 +278,13 @@ extension ContentView {
 
     // MARK: - Texture loading
 
-    private func loadSurveyTextures() {
+    func loadSurveyTextures() {
         guard decoder != nil, surveyMode else { return }
 
         surveyTextureLoadTask?.cancel()
         let generation = surveyTextureGeneration
-        let indices = surveyIndices
+        let indices = surveyIndices.filter { surveyTextures[$0] == nil }
+        guard !indices.isEmpty else { return }
         surveyTextureLoadTask = Task {
             for fileIndex in indices {
                 guard !Task.isCancelled,

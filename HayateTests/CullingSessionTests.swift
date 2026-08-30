@@ -925,6 +925,129 @@ final class CullingSessionTests: XCTestCase {
         XCTAssertEqual(CullingSession.TriageState.of(session.currentEntry), .undecided)
     }
 
+    // MARK: - Compare / survey mode restore undo
+
+    func testComparePickUndoesBothEntriesInOneStep() {
+        loadTestFiles(count: 5)
+        let restore = ModeRestore.compare(indices: [0, 1], activeSlot: 0, currentIndex: 0)
+        session.applyComparePick(
+            pickedIndex: 0,
+            rejectedIndex: 1,
+            triageMode: true,
+            restore: restore
+        )
+
+        XCTAssertEqual(CullingSession.TriageState.of(session.entries["IMG_0001.CR3"]), .keep)
+        XCTAssertEqual(CullingSession.TriageState.of(session.entries["IMG_0002.CR3"]), .out)
+
+        let returned = session.undo()
+        XCTAssertEqual(returned, restore)
+        XCTAssertEqual(CullingSession.TriageState.of(session.entries["IMG_0001.CR3"]), .undecided)
+        XCTAssertEqual(CullingSession.TriageState.of(session.entries["IMG_0002.CR3"]), .undecided)
+    }
+
+    func testComparePickFavoriteModeUndoesBothEntriesInOneStep() {
+        loadTestFiles(count: 3)
+        let restore = ModeRestore.compare(indices: [0, 1], activeSlot: 1, currentIndex: 1)
+        session.applyComparePick(
+            pickedIndex: 1,
+            rejectedIndex: 0,
+            triageMode: false,
+            restore: restore
+        )
+
+        XCTAssertTrue(session.entries["IMG_0002.CR3"]?.isFavorite == true)
+        XCTAssertTrue(session.entries["IMG_0001.CR3"]?.isRejected == true)
+
+        let returned = session.undo()
+        XCTAssertEqual(returned, restore)
+        XCTAssertNil(session.entries["IMG_0002.CR3"])
+        XCTAssertNil(session.entries["IMG_0001.CR3"])
+    }
+
+    func testComparePickThenRatingUndoOrder() {
+        loadTestFiles(count: 5)
+        let restore = ModeRestore.compare(indices: [0, 1], activeSlot: 0, currentIndex: 0)
+        session.applyComparePick(
+            pickedIndex: 0,
+            rejectedIndex: 1,
+            triageMode: true,
+            restore: restore
+        )
+        session.currentIndex = 0
+        session.setTriage(.out)
+
+        XCTAssertNil(session.undo())
+        XCTAssertEqual(CullingSession.TriageState.of(session.entries["IMG_0001.CR3"]), .keep)
+
+        let returned = session.undo()
+        XCTAssertEqual(returned, restore)
+        XCTAssertEqual(CullingSession.TriageState.of(session.entries["IMG_0001.CR3"]), .undecided)
+        XCTAssertEqual(CullingSession.TriageState.of(session.entries["IMG_0002.CR3"]), .undecided)
+    }
+
+    func testCompareSkipUndoRestoresViewWithoutChangingEntries() {
+        loadTestFiles(count: 3)
+        session.setTriage(.keep)
+        let restore = ModeRestore.compare(indices: [0, 1], activeSlot: 0, currentIndex: 0)
+        session.recordModeRestore(restore)
+
+        let returned = session.undo()
+        XCTAssertEqual(returned, restore)
+        XCTAssertEqual(CullingSession.TriageState.of(session.entries["IMG_0001.CR3"]), .keep)
+    }
+
+    func testSurveyDecisionUndoRestoresEntriesAndView() {
+        loadTestFiles(count: 3)
+        let restore = ModeRestore.survey(indices: [0, 1, 2], activeSlot: 1, currentIndex: 1)
+        session.applySurveyDecision(
+            winnerIndex: 0,
+            otherIndices: [1, 2],
+            triageMode: true,
+            restore: restore
+        )
+
+        XCTAssertEqual(CullingSession.TriageState.of(session.entries["IMG_0001.CR3"]), .keep)
+        XCTAssertEqual(CullingSession.TriageState.of(session.entries["IMG_0002.CR3"]), .out)
+        XCTAssertEqual(CullingSession.TriageState.of(session.entries["IMG_0003.CR3"]), .out)
+
+        let returned = session.undo()
+        XCTAssertEqual(returned, restore)
+        XCTAssertEqual(CullingSession.TriageState.of(session.entries["IMG_0001.CR3"]), .undecided)
+        XCTAssertEqual(CullingSession.TriageState.of(session.entries["IMG_0002.CR3"]), .undecided)
+        XCTAssertEqual(CullingSession.TriageState.of(session.entries["IMG_0003.CR3"]), .undecided)
+    }
+
+    func testSurveyDecisionWithNoMetaChangeStillRecordsRestore() {
+        loadTestFiles(count: 3)
+        session.setTriage(.keep)
+        session.currentIndex = 1
+        session.setTriage(.out)
+        session.currentIndex = 2
+        session.setTriage(.out)
+
+        let restore = ModeRestore.survey(indices: [0, 1, 2], activeSlot: 0, currentIndex: 0)
+        session.applySurveyDecision(
+            winnerIndex: 0,
+            otherIndices: [1, 2],
+            triageMode: true,
+            restore: restore
+        )
+
+        let returned = session.undo()
+        XCTAssertEqual(returned, restore)
+        XCTAssertEqual(CullingSession.TriageState.of(session.entries["IMG_0001.CR3"]), .keep)
+        XCTAssertEqual(CullingSession.TriageState.of(session.entries["IMG_0002.CR3"]), .out)
+        XCTAssertEqual(CullingSession.TriageState.of(session.entries["IMG_0003.CR3"]), .out)
+    }
+
+    func testUndoRatingReturnsNilRestore() {
+        loadTestFiles(count: 1)
+        session.setRating(4)
+        XCTAssertNil(session.undo())
+        XCTAssertEqual(session.currentEntry?.rating, 0)
+    }
+
     // MARK: - Scene boundaries
 
     func testSceneBoundaryDetectsGap() {
