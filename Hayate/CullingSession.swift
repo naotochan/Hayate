@@ -619,6 +619,13 @@ class CullingSession: ObservableObject {
         defaults.set(paths, forKey: Self.pinnedFoldersKey)
     }
 
+    /// Remove a folder from pinned, recents, and folder colors in one step.
+    func forgetFolder(_ url: URL) {
+        unpinFolder(url)
+        removeFromRecents(url)
+        setFolderColor(.none, for: url)
+    }
+
     func togglePinned(_ url: URL) {
         if isPinned(url) {
             unpinFolder(url)

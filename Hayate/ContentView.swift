@@ -235,6 +235,7 @@ struct ContentView: View {
                             onOpen: { session.requestOpenFolder() },
                             recentFolders: session.recentFolders,
                             onOpenRecent: { session.requestOpen(folder: $0) },
+                            onRemoveUnavailable: { session.forgetFolder($0) },
                             message: session.folderURL.map { url in
                                 "No photos in “\(url.lastPathComponent)”"
                             }
