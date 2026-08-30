@@ -2,6 +2,38 @@ import SwiftUI
 import MetalKit
 import UniformTypeIdentifiers
 
+/// Caps concurrent disk-cache reads + ImageIO thumb extraction so fast grid
+/// scroll cannot flood the DiskCacheManager actor with hundreds of tasks.
+private enum ThumbnailIO {
+    static let limiter = DecodeLimiter(maxConcurrent: 6)
+}
+
+/// Pending thumbs and flush scheduling live in a reference type so enqueueing
+/// completions does not mutate `@State` until a batched flush merges into
+/// `thumbnails` / `thumbnailOrder`.
+@MainActor
+final class ThumbnailPendingBuffer {
+    private var pending: [URL: NSImage] = [:]
+    var flushScheduled = false
+
+    func contains(_ url: URL) -> Bool { pending[url] != nil }
+
+    func enqueue(_ image: NSImage, for url: URL) {
+        pending[url] = image
+    }
+
+    func takeBatch() -> [URL: NSImage] {
+        let batch = pending
+        pending.removeAll(keepingCapacity: true)
+        return batch
+    }
+
+    func clear() {
+        pending.removeAll()
+        flushScheduled = false
+    }
+}
+
 /// Root view. State lives here; the grid, compare, filmstrip, and input-handling
 /// behaviour is split across `ContentView+*.swift` extension files. Those
 /// extensions are part of the same type, so members shared across the file
@@ -59,9 +91,8 @@ struct ContentView: View {
     @State var thumbnails: [URL: NSImage] = [:]
     /// Insertion order of `thumbnails` keys, oldest first, for capped eviction.
     @State var thumbnailOrder: [URL] = []
-    /// Thumbs finished loading but not yet merged into `thumbnails` (batched flush).
-    @State var pendingThumbnails: [URL: NSImage] = [:]
-    @State var thumbnailFlushScheduled = false
+    /// Batched enqueue target; only `thumbnails` / `thumbnailOrder` `@State` flush.
+    @State var thumbnailPending = ThumbnailPendingBuffer()
     /// In-flight thumbnail loads keyed by file URL. Cells cancel on disappear so
     /// fast scrolling can't flood the disk-cache actor with stale reads.
     @State var thumbnailTasks: [URL: (task: Task<Void, Never>, token: UUID)] = [:]
@@ -70,9 +101,6 @@ struct ContentView: View {
     /// so 600 entries ≈ 300 MB worst case. Evicted thumbnails reload on demand
     /// via the placeholder's onAppear.
     static let thumbnailCacheLimit = 600
-    /// Caps concurrent disk-cache reads + ImageIO thumb extraction so fast grid
-    /// scroll cannot flood the DiskCacheManager actor with hundreds of tasks.
-    static let thumbnailIOLimiter = DecodeLimiter(maxConcurrent: 6)
     @State var zoomScale: CGFloat = 1.0
     @State var panOffset: CGPoint = .zero
     /// Latest `MTKView.drawableSize` from the primary image view (physical pixels).
@@ -630,8 +658,7 @@ struct ContentView: View {
         currentTexture = nil
         thumbnails.removeAll()
         thumbnailOrder.removeAll()
-        pendingThumbnails.removeAll()
-        thumbnailFlushScheduled = false
+        thumbnailPending.clear()
         decodeTimeMs = 0
         isLoading = false
         imageLoadFailed = false
@@ -919,14 +946,14 @@ struct ContentView: View {
 
     func loadThumbnail(for url: URL) {
         guard let decoder = decoder else { return }
-        guard thumbnails[url] == nil, pendingThumbnails[url] == nil else { return }
+        guard thumbnails[url] == nil, !thumbnailPending.contains(url) else { return }
         guard thumbnailTasks[url] == nil else { return }
         let cache = diskCache
         let token = UUID()
 
         let task = Task.detached(priority: .utility) {
             let loaded: (cgImage: CGImage, needsWarming: Bool)? =
-                await Self.thumbnailIOLimiter.withPermit(tier: .high) {
+                await ThumbnailIO.limiter.withPermit(tier: .high) { () -> (cgImage: CGImage, needsWarming: Bool)? in
                     if Task.isCancelled { return nil }
                     if let cache = cache, let cgImage = await cache.loadThumbnail(for: url) {
                         return (cgImage, false)
@@ -936,7 +963,7 @@ struct ContentView: View {
                         return (cgImage, true)
                     }
                     return nil
-                }
+                } ?? nil
 
             guard let loaded, !Task.isCancelled else {
                 await MainActor.run { removeThumbnailTask(for: url, token: token) }
@@ -974,13 +1001,13 @@ struct ContentView: View {
     /// Enqueue a loaded thumb; a single MainActor flush merges the batch so
     /// many completions in one runloop tick don't each trigger a full re-render.
     private func storeThumbnail(_ image: NSImage, for url: URL) {
-        pendingThumbnails[url] = image
+        thumbnailPending.enqueue(image, for: url)
         scheduleThumbnailFlush()
     }
 
     private func scheduleThumbnailFlush() {
-        guard !thumbnailFlushScheduled else { return }
-        thumbnailFlushScheduled = true
+        guard !thumbnailPending.flushScheduled else { return }
+        thumbnailPending.flushScheduled = true
         Task { @MainActor in
             await Task.yield()
             flushPendingThumbnails()
@@ -988,10 +1015,9 @@ struct ContentView: View {
     }
 
     private func flushPendingThumbnails() {
-        thumbnailFlushScheduled = false
-        guard !pendingThumbnails.isEmpty else { return }
-        let batch = pendingThumbnails
-        pendingThumbnails = [:]
+        thumbnailPending.flushScheduled = false
+        let batch = thumbnailPending.takeBatch()
+        guard !batch.isEmpty else { return }
         for (url, image) in batch {
             if thumbnails[url] == nil { thumbnailOrder.append(url) }
             thumbnails[url] = image
