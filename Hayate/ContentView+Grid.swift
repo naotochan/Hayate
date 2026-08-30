@@ -3,12 +3,26 @@ import SwiftUI
 /// Grid view: thumbnail overview with filtering and multi-selection.
 extension ContentView {
 
-    /// Layout constants shared by the LazyVGrid definition and the column
-    /// count estimate — change together or ↑↓ row navigation drifts.
-    static let gridItemMinWidth: CGFloat = 160
-    static let gridItemMaxWidth: CGFloat = 220
+    /// Base layout constants at `gridZoomScale == 1.0`. Derived sizes multiply by scale.
+    static let gridItemBaseMinWidth: CGFloat = 160
+    static let gridItemBaseMaxWidth: CGFloat = 220
+    static let gridCellBaseHeight: CGFloat = 140
     static let gridSpacing: CGFloat = 6
     static let gridPadding: CGFloat = 8
+    static let gridZoomScaleMin: Double = 0.5
+    static let gridZoomScaleMax: Double = 2.5
+
+    private var gridItemMinWidth: CGFloat { Self.gridItemBaseMinWidth * CGFloat(gridZoomScale) }
+    private var gridItemMaxWidth: CGFloat { Self.gridItemBaseMaxWidth * CGFloat(gridZoomScale) }
+    private var gridCellHeight: CGFloat { Self.gridCellBaseHeight * CGFloat(gridZoomScale) }
+
+    func clampGridZoomScale(_ scale: Double) -> Double {
+        max(Self.gridZoomScaleMin, min(Self.gridZoomScaleMax, scale))
+    }
+
+    func adjustGridZoomScale(multiplier: Double) {
+        gridZoomScale = clampGridZoomScale(gridZoomScale * multiplier)
+    }
 
     /// One visible grid slot — a single photo or a collapsed burst stack.
     struct GridDisplayItem: Identifiable {
@@ -120,6 +134,30 @@ extension ContentView {
 
                 Spacer()
 
+                HStack(spacing: 4) {
+                    Button {
+                        adjustGridZoomScale(multiplier: 0.9)
+                    } label: {
+                        Image(systemName: "minus.magnifyingglass")
+                            .font(.system(size: 11))
+                            .foregroundColor(HayateTheme.fg(0.55))
+                    }
+                    .buttonStyle(.plain)
+                    .help(L.t("Smaller thumbnails (⌥+scroll)", ja: "サムネイルを小さく（⌥+スクロール）"))
+                    .accessibilityLabel(L.t("Decrease grid thumbnail size", ja: "グリッドのサムネイルを縮小"))
+
+                    Button {
+                        adjustGridZoomScale(multiplier: 1.0 / 0.9)
+                    } label: {
+                        Image(systemName: "plus.magnifyingglass")
+                            .font(.system(size: 11))
+                            .foregroundColor(HayateTheme.fg(0.55))
+                    }
+                    .buttonStyle(.plain)
+                    .help(L.t("Larger thumbnails (⌥+scroll)", ja: "サムネイルを大きく（⌥+スクロール）"))
+                    .accessibilityLabel(L.t("Increase grid thumbnail size", ja: "グリッドのサムネイルを拡大"))
+                }
+
                 Text("\(filteredFiles.count) / \(session.files.count)")
                     .font(.system(size: 11, design: .monospaced))
                     .foregroundColor(.gray)
@@ -159,7 +197,7 @@ extension ContentView {
                                     sceneSeparator
                                 }
                                 LazyVGrid(
-                                    columns: [GridItem(.adaptive(minimum: Self.gridItemMinWidth, maximum: Self.gridItemMaxWidth), spacing: Self.gridSpacing)],
+                                    columns: [GridItem(.adaptive(minimum: gridItemMinWidth, maximum: gridItemMaxWidth), spacing: Self.gridSpacing)],
                                     spacing: Self.gridSpacing
                                 ) {
                                     ForEach(chunk.items) { item in
@@ -179,6 +217,9 @@ extension ContentView {
                     }
                     .onChange(of: geo.size.width) { _, width in
                         updateGridColumnCount(width: width)
+                    }
+                    .onChange(of: gridZoomScale) { _, _ in
+                        updateGridColumnCount(width: geo.size.width)
                     }
                     .onChange(of: session.currentIndex) { _, newIndex in
                         proxy.scrollTo(gridNavigationIndex(for: newIndex), anchor: nil)
@@ -310,7 +351,7 @@ extension ContentView {
     /// floor((width − h-padding + spacing) / (min item width + spacing)).
     private func updateGridColumnCount(width: CGFloat) {
         let usable = width - Self.gridPadding * 2 + Self.gridSpacing
-        gridColumnCount = max(1, Int(usable / (Self.gridItemMinWidth + Self.gridSpacing)))
+        gridColumnCount = max(1, Int(usable / (gridItemMinWidth + Self.gridSpacing)))
     }
 
     /// Move the current photo by `delta` positions within the *displayed* grid
@@ -455,13 +496,13 @@ extension ContentView {
                         .resizable()
                         .aspectRatio(contentMode: .fit)
                         .frame(maxWidth: .infinity)
-                        .frame(height: 140)
+                        .frame(height: gridCellHeight)
                         .background(Color.black)
                         .saturation(CullThumbnailStyle.saturation(for: entry, enabled: colorizeKeepOnly))
                 } else {
                     Rectangle()
                         .fill(Color.gray.opacity(0.2))
-                        .frame(height: 140)
+                        .frame(height: gridCellHeight)
                         .overlay {
                             ProgressView()
                                 .scaleEffect(0.5)
@@ -503,7 +544,7 @@ extension ContentView {
                     Spacer()
                 }
             }
-            .frame(height: 140)
+            .frame(height: gridCellHeight)
             .clipped()
 
             // File name

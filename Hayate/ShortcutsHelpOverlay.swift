@@ -171,6 +171,10 @@ struct ShortcutsHelpOverlay: View {
             }
         }
         viewRows.append(Row(keys: "⌘E", label: lang.t("Export picks", ja: "選別結果を書き出す")))
+        viewRows.append(Row(
+            keys: "⌥ scroll",
+            label: lang.t("Grid thumbnail size", ja: "グリッドの表示サイズ")
+        ))
         if !viewRows.isEmpty {
             result.append(Section(title: lang.t("View & export", ja: "表示・書き出し"), rows: viewRows))
         }

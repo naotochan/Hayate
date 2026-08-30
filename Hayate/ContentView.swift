@@ -98,6 +98,8 @@ struct ContentView: View {
     @AppStorage("sceneGapMinutes") var sceneGapMinutes = 15
     /// Collapse rapid-fire bursts into one grid cell (All filter only).
     @AppStorage("burstGroupingEnabled") var burstGroupingEnabled = true
+    /// Grid thumbnail display scale (1.0 = default cell size). Persisted.
+    @AppStorage("gridZoomScale") var gridZoomScale: Double = 1.0
     /// Max adjacent capture-time gap (seconds) within one burst. 0 = off.
     @AppStorage("burstGapSeconds") var burstGapSeconds = 2
     /// Advance to the next photo automatically after rating/favorite/reject.

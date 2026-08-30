@@ -49,6 +49,7 @@ struct SettingsView: View {
     @AppStorage("sceneGapMinutes") private var sceneGapMinutes = 15
     @AppStorage("burstGroupingEnabled") private var burstGroupingEnabled = true
     @AppStorage("burstGapSeconds") private var burstGapSeconds = 2
+    @AppStorage("gridZoomScale") private var gridZoomScale: Double = 1.0
     @AppStorage("assistedCullingEnabled") private var assistedCullingEnabled = true
     @AppStorage("appAppearance") private var appAppearance: AppAppearance = .system
     @AppStorage("previewCacheSizeLimitGB") private var cacheSizeLimitGB: Int = 10
@@ -283,6 +284,25 @@ struct SettingsView: View {
             }
 
             HayateChrome.Panel(title: L.t("Grid", ja: "グリッド")) {
+                HayateChrome.Row(
+                    title: L.t("Thumbnail size", ja: "サムネイルサイズ"),
+                    subtitle: L.t(
+                        "How large thumbnails appear in the grid. Adjust anytime with Option+scroll while viewing the grid.",
+                        ja: "グリッドのサムネイル表示サイズです。グリッド表示中は Option+スクロールでも変更できます。"
+                    )
+                ) {
+                    Slider(
+                        value: Binding(
+                            get: { gridZoomScale },
+                            set: { gridZoomScale = max(ContentView.gridZoomScaleMin, min(ContentView.gridZoomScaleMax, $0)) }
+                        ),
+                        in: ContentView.gridZoomScaleMin...ContentView.gridZoomScaleMax
+                    )
+                    .frame(maxWidth: 140)
+                }
+
+                HayateChrome.RowSeparator()
+
                 HayateChrome.Row(
                     title: L.t("Grid scene gap", ja: "グリッドのシーン区切り"),
                     subtitle: L.t(
