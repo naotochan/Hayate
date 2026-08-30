@@ -15,7 +15,9 @@ extension ContentView {
             return event
         }
         scrollMonitor = NSEvent.addLocalMonitorForEvents(matching: [.scrollWheel, .magnify]) { event in
-            handleScrollEvent(event)
+            if handleScrollEvent(event) {
+                return nil
+            }
             return event
         }
         dragMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDragged, .leftMouseDown, .leftMouseUp]) { event in
@@ -412,7 +414,22 @@ extension ContentView {
 
     // MARK: - Scroll & drag (zoom / pan)
 
-    private func handleScrollEvent(_ event: NSEvent) {
+    @discardableResult
+    private func handleScrollEvent(_ event: NSEvent) -> Bool {
+        if showGrid {
+            if event.type == .magnify {
+                let delta = event.magnification
+                gridZoomScale = clampGridZoomScale(gridZoomScale * (1.0 + delta))
+                return true
+            }
+            if event.type == .scrollWheel, event.modifierFlags.contains(.option) {
+                let delta = event.scrollingDeltaY * 0.01
+                gridZoomScale = clampGridZoomScale(gridZoomScale * (1.0 + delta))
+                return true
+            }
+            return false
+        }
+
         if event.type == .magnify {
             // Trackpad pinch-to-zoom
             let delta = event.magnification
@@ -439,6 +456,7 @@ extension ContentView {
                 )
             }
         }
+        return false
     }
 
     private func handleDragEvent(_ event: NSEvent) {
