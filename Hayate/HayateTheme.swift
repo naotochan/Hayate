@@ -76,6 +76,18 @@ enum HayateTheme {
         light: NSColor(red: 0.82, green: 0.52, blue: 0.08, alpha: 1)
     )
 
+    /// Burst / stack grouping accents (grid count badge, expanded-member chrome).
+    static let grouping = adaptive(
+        dark: NSColor(calibratedRed: 0.35, green: 0.62, blue: 0.98, alpha: 1),
+        light: NSColor(calibratedRed: 0.22, green: 0.45, blue: 0.88, alpha: 1)
+    )
+
+    /// Label on `grouping` fills (always near-white for contrast).
+    static let groupingOn = adaptive(
+        dark: NSColor(white: 1, alpha: 0.96),
+        light: NSColor(white: 1, alpha: 0.98)
+    )
+
     /// Metal letterbox / clear color matching `canvas`.
     static func metalClear(for colorScheme: ColorScheme?) -> MTLClearColor {
         let isDark: Bool
