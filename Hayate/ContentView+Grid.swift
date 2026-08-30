@@ -1,5 +1,27 @@
 import SwiftUI
 
+/// Namespaced scroll identities so scene chunks and photo cells never collide.
+enum GridScrollID: Hashable {
+    case scene(Int)
+    case row(Int, Int)
+    case photo(Int)
+}
+
+/// One lazy-stack slot: a full-width scene separator or a row of grid cells.
+enum GridStackItem: Identifiable {
+    case separator(scene: Int)
+    case row(scene: Int, rowIndex: Int, items: [ContentView.GridDisplayItem])
+
+    var id: GridScrollID {
+        switch self {
+        case .separator(let scene):
+            return .scene(scene)
+        case .row(let scene, let rowIndex, _):
+            return .row(scene, rowIndex)
+        }
+    }
+}
+
 /// Grid view: thumbnail overview with filtering and multi-selection.
 extension ContentView {
 
@@ -39,7 +61,7 @@ extension ContentView {
             let isRepresentative: Bool
         }
 
-        var id: Int { fileIndex }
+        var id: GridScrollID { .photo(fileIndex) }
     }
 
     var filteredFiles: [(index: Int, url: URL)] {
@@ -106,6 +128,56 @@ extension ContentView {
     /// a non-representative member of a collapsed burst.
     private func gridNavigationIndex(for fileIndex: Int) -> Int {
         collapsedBurstMemberMap[fileIndex] ?? fileIndex
+    }
+
+    /// Scroll the grid to the lazy-stack row containing `fileIndex`.
+    /// `anchor: .center` on open; `nil` keeps the row visible with minimal jump.
+    func revealGridSelection(_ proxy: ScrollViewProxy, fileIndex: Int, anchor: UnitPoint?) {
+        guard let scrollID = gridStackScrollID(for: fileIndex) else { return }
+        withAnimation(.easeInOut(duration: 0.15)) {
+            proxy.scrollTo(scrollID, anchor: anchor)
+        }
+    }
+
+    /// Lazy-stack scroll target for the row that contains `fileIndex` (after burst collapse).
+    func gridStackScrollID(for fileIndex: Int) -> GridScrollID? {
+        let nav = gridNavigationIndex(for: fileIndex)
+        for stackItem in gridStackItems {
+            if case .row(_, _, let items) = stackItem,
+               items.contains(where: { $0.fileIndex == nav }) {
+                return stackItem.id
+            }
+        }
+        return nil
+    }
+
+    /// Split display items into fixed-width rows for the 1D lazy stack layout.
+    func gridRows(for items: [GridDisplayItem]) -> [[GridDisplayItem]] {
+        let columns = max(1, gridColumnCount)
+        guard !items.isEmpty else { return [] }
+        var rows: [[GridDisplayItem]] = []
+        var i = 0
+        while i < items.count {
+            let end = min(i + columns, items.count)
+            rows.append(Array(items[i..<end]))
+            i = end
+        }
+        return rows
+    }
+
+    /// Flat list of separators and rows for a single-level LazyVStack.
+    private var gridStackItems: [GridStackItem] {
+        var stack: [GridStackItem] = []
+        for (chunkIndex, chunk) in sceneChunks.enumerated() {
+            guard case .scene(let sceneID) = chunk.id else { continue }
+            if chunkIndex > 0 {
+                stack.append(.separator(scene: sceneID))
+            }
+            for (rowIndex, row) in gridRows(for: chunk.items).enumerated() {
+                stack.append(.row(scene: sceneID, rowIndex: rowIndex, items: row))
+            }
+        }
+        return stack
     }
 
     var gridView: some View {
@@ -195,24 +267,33 @@ extension ContentView {
                 }
             }
 
-            // Grid — one LazyVGrid per scene so separators span the full width.
+            // Grid — LazyVStack rows are the scroll targets; cells keep photo ids for identity.
             GeometryReader { geo in
                 ScrollViewReader { proxy in
                     ScrollView {
                         LazyVStack(spacing: Self.gridSpacing) {
-                            ForEach(Array(sceneChunks.enumerated()), id: \.element.id) { chunkIndex, chunk in
-                                if chunkIndex > 0 {
-                                    sceneSeparator
-                                }
-                                LazyVGrid(
-                                    columns: [GridItem(.adaptive(minimum: gridItemMinWidth, maximum: gridItemMaxWidth), spacing: Self.gridSpacing)],
-                                    spacing: Self.gridSpacing
-                                ) {
-                                    ForEach(chunk.items) { item in
-                                        gridCell(for: item, currentNavIndex: currentNavIndex)
-                                            .id(item.fileIndex)
+                            ForEach(gridStackItems) { stackItem in
+                                Group {
+                                    switch stackItem {
+                                    case .separator:
+                                        sceneSeparator
+                                    case .row(_, _, let rowItems):
+                                        HStack(spacing: Self.gridSpacing) {
+                                            ForEach(rowItems) { item in
+                                                gridCell(for: item, currentNavIndex: currentNavIndex)
+                                                    .id(item.id)
+                                                    .frame(maxWidth: .infinity)
+                                                    .frame(maxWidth: gridItemMaxWidth)
+                                            }
+                                            if rowItems.count < max(1, gridColumnCount) {
+                                                ForEach(0..<(max(1, gridColumnCount) - rowItems.count), id: \.self) { _ in
+                                                    Color.clear.frame(maxWidth: .infinity)
+                                                }
+                                            }
+                                        }
                                     }
                                 }
+                                .id(stackItem.id)
                             }
                         }
                         .padding(Self.gridPadding)
@@ -220,7 +301,7 @@ extension ContentView {
                     .onAppear {
                         updateGridColumnCount(width: geo.size.width)
                         normalizeGridCurrentIndex()
-                        proxy.scrollTo(gridNavigationIndex(for: session.currentIndex), anchor: .center)
+                        revealGridSelection(proxy, fileIndex: session.currentIndex, anchor: .center)
                         refreshGridCaptureMetadata()
                     }
                     .onChange(of: geo.size.width) { _, width in
@@ -230,17 +311,17 @@ extension ContentView {
                         updateGridColumnCount(width: geo.size.width)
                     }
                     .onChange(of: session.currentIndex) { _, newIndex in
-                        proxy.scrollTo(gridNavigationIndex(for: newIndex), anchor: nil)
+                        revealGridSelection(proxy, fileIndex: newIndex, anchor: nil)
                     }
                     .onChange(of: expandedBurstIDs) { _, _ in
-                        proxy.scrollTo(gridNavigationIndex(for: session.currentIndex), anchor: nil)
+                        revealGridSelection(proxy, fileIndex: session.currentIndex, anchor: nil)
                     }
                     .onChange(of: burstGroups) { _, _ in
                         pruneSelectionForCollapsedBursts()
                         let before = session.currentIndex
                         normalizeGridCurrentIndex()
                         if session.currentIndex != before {
-                            proxy.scrollTo(gridNavigationIndex(for: session.currentIndex), anchor: nil)
+                            revealGridSelection(proxy, fileIndex: session.currentIndex, anchor: nil)
                         }
                     }
                     .onChange(of: gridFilter) { _, _ in
@@ -266,18 +347,18 @@ extension ContentView {
     }
 
     /// Display items split wherever `sceneStartIndices` marks a new scene.
-    private var sceneChunks: [(id: Int, items: [GridDisplayItem])] {
+    private var sceneChunks: [(id: GridScrollID, items: [GridDisplayItem])] {
         let items = gridDisplayItems
         guard !items.isEmpty else { return [] }
         guard sceneGapMinutes > 0, !sceneStartIndices.isEmpty else {
-            return [(id: items[0].fileIndex, items: items)]
+            return [(id: .scene(items[0].fileIndex), items: items)]
         }
-        var chunks: [(id: Int, items: [GridDisplayItem])] = []
+        var chunks: [(id: GridScrollID, items: [GridDisplayItem])] = []
         var current: [GridDisplayItem] = []
         var chunkId = items[0].fileIndex
         for item in items {
             if !current.isEmpty && sceneStartIndices.contains(item.fileIndex) {
-                chunks.append((id: chunkId, items: current))
+                chunks.append((id: .scene(chunkId), items: current))
                 current = [item]
                 chunkId = item.fileIndex
             } else {
@@ -285,7 +366,7 @@ extension ContentView {
             }
         }
         if !current.isEmpty {
-            chunks.append((id: chunkId, items: current))
+            chunks.append((id: .scene(chunkId), items: current))
         }
         return chunks
     }
