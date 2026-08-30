@@ -28,13 +28,15 @@ extension ContentView {
     struct GridDisplayItem: Identifiable {
         let fileIndex: Int
         let url: URL
-        /// Non-nil on the burst representative: collapsed stack or expanded header badge.
+        /// Burst membership when grouping is active; badge UI only on the representative.
         let burstBadge: BurstBadgeInfo?
 
         struct BurstBadgeInfo {
             let burstID: Int
             let count: Int
             let isCollapsed: Bool
+            /// Interactive count badge on the representative cell only.
+            let isRepresentative: Bool
         }
 
         var id: Int { fileIndex }
@@ -70,16 +72,18 @@ extension ContentView {
             guard let burstID = memberMap[item.index], let burst = burstByID[burstID] else {
                 return GridDisplayItem(fileIndex: item.index, url: item.url, burstBadge: nil)
             }
+            let isExpanded = expandedBurstIDs.contains(burstID)
             let badge = GridDisplayItem.BurstBadgeInfo(
                 burstID: burstID,
                 count: burst.memberIndices.count,
-                isCollapsed: !expandedBurstIDs.contains(burstID)
+                isCollapsed: !isExpanded,
+                isRepresentative: item.index == burstID
             )
-            if expandedBurstIDs.contains(burstID) {
+            if isExpanded {
                 return GridDisplayItem(
                     fileIndex: item.index,
                     url: item.url,
-                    burstBadge: item.index == burstID ? badge : nil
+                    burstBadge: badge
                 )
             }
             guard item.index == burstID else { return nil }
@@ -492,6 +496,7 @@ extension ContentView {
         let isSelected = selectedIndices.contains(index)
         let entry = session.entries[url.lastPathComponent]
         let showStackChrome = burstBadge?.isCollapsed == true
+        let isExpandedBurstMember = burstBadge?.isCollapsed == false
 
         return VStack(spacing: 0) {
             ZStack {
@@ -539,7 +544,7 @@ extension ContentView {
                                     .help(L.needsReviewBadgeHelp)
                                     .accessibilityLabel(L.needsReviewBadgeLabel)
                             }
-                            if let badge = burstBadge {
+                            if let badge = burstBadge, badge.isRepresentative {
                                 burstCountBadge(
                                     count: badge.count,
                                     burstID: badge.burstID,
@@ -566,8 +571,23 @@ extension ContentView {
                 .padding(.vertical, 3)
                 .background(isCurrent ? HayateTheme.wash(0.15) : Color.clear)
         }
-        .background(HayateTheme.wash(0.06))
+        .background(isExpandedBurstMember ? HayateTheme.wash(0.12) : HayateTheme.wash(0.06))
         .cornerRadius(4)
+        .overlay(alignment: .top) {
+            if isExpandedBurstMember {
+                Rectangle()
+                    .fill(HayateTheme.wash(0.35))
+                    .frame(height: 2)
+                    .allowsHitTesting(false)
+            }
+        }
+        .overlay {
+            if isExpandedBurstMember {
+                RoundedRectangle(cornerRadius: 4)
+                    .stroke(HayateTheme.wash(0.35), lineWidth: 1.5)
+                    .allowsHitTesting(false)
+            }
+        }
         .overlay(
             RoundedRectangle(cornerRadius: 4)
                 .stroke(
