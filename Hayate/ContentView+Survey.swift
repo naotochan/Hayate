@@ -243,19 +243,26 @@ extension ContentView {
         let row = slot / cols
         let col = slot % cols
 
-        var newRow = row
-        var newCol = col
-
+        let newSlot: Int
         switch keyCode {
-        case 123: newCol = max(0, col - 1)
-        case 124: newCol = min(cols - 1, col + 1)
-        case 126: newRow = max(0, row - 1)
-        case 125: newRow = min(rows - 1, row + 1)
+        case 123:
+            guard slot > 0 else { return }
+            newSlot = slot - 1
+        case 124:
+            guard slot + 1 < count else { return }
+            newSlot = slot + 1
+        case 126:
+            let newRow = max(0, row - 1)
+            let candidate = newRow * cols + col
+            guard candidate < count else { return }
+            newSlot = candidate
+        case 125:
+            let newRow = min(rows - 1, row + 1)
+            let candidate = newRow * cols + col
+            guard candidate < count else { return }
+            newSlot = candidate
         default: return
         }
-
-        let newSlot = newRow * cols + newCol
-        guard newSlot < count else { return }
 
         let newIndex = surveyIndices[newSlot]
         guard session.files.indices.contains(newIndex) else { return }
