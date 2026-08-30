@@ -268,16 +268,25 @@ extension ContentView {
         }
         captureDateTask = Task {
             var dates: [Date?] = Array(repeating: nil, count: files.count)
-            await withTaskGroup(of: (Int, Date?).self) { group in
-                for (i, url) in files.enumerated() {
-                    group.addTask {
-                        (i, ImageDecoder.captureDate(url: url))
+            let maxConcurrent = 8
+            var scanIndex = 0
+            while scanIndex < files.count {
+                guard !Task.isCancelled else { return }
+                let end = min(scanIndex + maxConcurrent, files.count)
+                await withTaskGroup(of: (Int, Date?).self) { group in
+                    for i in scanIndex..<end {
+                        let url = files[i]
+                        group.addTask {
+                            guard !Task.isCancelled else { return (i, nil) }
+                            return (i, ImageDecoder.captureDate(url: url))
+                        }
+                    }
+                    for await (i, date) in group {
+                        guard !Task.isCancelled else { return }
+                        dates[i] = date
                     }
                 }
-                for await (i, date) in group {
-                    guard !Task.isCancelled else { return }
-                    dates[i] = date
-                }
+                scanIndex = end
             }
             guard !Task.isCancelled else { return }
             let starts = sceneGap > 0
