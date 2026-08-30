@@ -661,7 +661,7 @@ extension ContentView {
         .overlay(alignment: .top) {
             if isExpandedBurstMember {
                 Rectangle()
-                    .fill(HayateTheme.wash(0.35))
+                    .fill(HayateTheme.grouping)
                     .frame(height: 2)
                     .allowsHitTesting(false)
             }
@@ -669,7 +669,7 @@ extension ContentView {
         .overlay {
             if isExpandedBurstMember {
                 RoundedRectangle(cornerRadius: 4)
-                    .stroke(HayateTheme.wash(0.35), lineWidth: 1.5)
+                    .stroke(HayateTheme.grouping, lineWidth: 1.5)
                     .allowsHitTesting(false)
             }
         }
@@ -731,10 +731,10 @@ extension ContentView {
         } label: {
             Text("\(count)")
                 .font(.system(size: 10, weight: .bold, design: .monospaced))
-                .foregroundColor(HayateTheme.fg(0.95))
+                .foregroundColor(HayateTheme.groupingOn)
                 .padding(.horizontal, 5)
                 .padding(.vertical, 3)
-                .background(HayateTheme.wash(0.55))
+                .background(HayateTheme.grouping)
                 .cornerRadius(4)
         }
         .buttonStyle(.plain)
