@@ -112,12 +112,23 @@ extension ContentView {
     func enterCompareMode() {
         guard decoder != nil else { return }
 
-        // Determine which photos to compare. Pick/Skip is a 2-photo tournament —
-        // keep the UI matched to that (extra grid selection is ignored).
-        if showGrid && selectedIndices.count >= 2 {
-            compareIndices = Array(selectedIndices.sorted().prefix(2))
+        if showGrid {
+            switch selectedIndices.count {
+            case 3...6:
+                enterSurveyFromGridSelection()
+                return
+            case 2:
+                compareIndices = Array(selectedIndices.sorted().prefix(2))
+            default:
+                showGrid = true
+                if selectedIndices.isEmpty {
+                    selectedIndices = [session.currentIndex]
+                    gridSelectionAnchor = session.currentIndex
+                }
+                return
+            }
         } else {
-            // From single view: current + next (or previous if at end)
+            // Single view: 2-photo tournament (current + neighbor).
             var indices = [session.currentIndex]
             if session.currentIndex < session.files.count - 1 {
                 indices.append(session.currentIndex + 1)
@@ -128,10 +139,12 @@ extension ContentView {
             compareIndices = indices
         }
 
+        if surveyMode { exitSurveyMode(returnToGrid: false) }
         compareActiveSlot = 0
         compareTextures = [:]
         showGrid = false
         selectedIndices.removeAll()
+        gridSelectionAnchor = nil
         compareMode = true
 
         loadCompareTextures()

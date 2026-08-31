@@ -78,8 +78,8 @@ enum HayateTheme {
 
     /// Burst / stack grouping accents (grid count badge, expanded-member chrome).
     static let grouping = adaptive(
-        dark: NSColor(calibratedRed: 0.35, green: 0.62, blue: 0.98, alpha: 1),
-        light: NSColor(calibratedRed: 0.22, green: 0.45, blue: 0.88, alpha: 1)
+        dark: NSColor(calibratedRed: 0.32, green: 0.72, blue: 0.40, alpha: 1),
+        light: NSColor(calibratedRed: 0.18, green: 0.56, blue: 0.30, alpha: 1)
     )
 
     /// Label on `grouping` fills (always near-white for contrast).

@@ -140,7 +140,7 @@ enum ActionID: String, Codable, CaseIterable, Identifiable {
         case .toggleCompare:
             return lang.t("Toggle compare mode", ja: "比較モード")
         case .toggleSurvey:
-            return lang.t("Toggle survey mode", ja: "サーベイモード")
+            return lang.t("Survey mode (use Compare)", ja: "サーベイ（Compare を使用）")
         case .toggleFitZoom:
             return lang.t("Toggle fit / 2× zoom", ja: "フィット / 2× ズーム")
         case .toggleOneToOneZoom:
@@ -181,8 +181,13 @@ enum ActionID: String, Codable, CaseIterable, Identifiable {
             return triageMode
                 ? lang.t("Keep active (compare)", ja: "アクティブを Keep（比較）")
                 : title(lang: lang)
+        case .toggleCompare:
+            return lang.t(
+                "Compare: 2 photos (grid or single), survey 3–6 (grid)",
+                ja: "比較: 2枚（グリッド/単一）、サーベイ: グリッドで3–6枚"
+            )
         case .toggleSurvey:
-            return lang.t("Survey: compare 2–6 photos", ja: "サーベイ: 2–6 枚を比較")
+            return lang.t("Survey (removed — use Compare)", ja: "サーベイ（廃止 — Compare を使用）")
         case .toggleShortcutsHelp:
             return lang.t("Show / hide this cheat sheet", ja: "この早見表の表示 / 非表示")
         default:
@@ -244,7 +249,6 @@ final class KeybindingStore: ObservableObject {
         .toggleRejected: Shortcut(keyCode: 31),                         // O (Out) — plain O; ⌘O stays Open Folder
         .toggleGrid: Shortcut(keyCode: 5),                              // G
         .toggleCompare: Shortcut(keyCode: 8),                           // C
-        .toggleSurvey: Shortcut(keyCode: 45),                           // N
         .toggleFitZoom: Shortcut(keyCode: 49),                          // Space
         .toggleOneToOneZoom: Shortcut(keyCode: 6),                      // Z
         .toggleFocusPeaking: Shortcut(keyCode: 3),                      // F

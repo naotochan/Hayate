@@ -161,7 +161,7 @@ struct ShortcutsHelpOverlay: View {
         ))
 
         var viewRows: [Row] = []
-        for action in [ActionID.toggleGrid, .toggleCompare, .toggleSurvey, .toggleFitZoom, .toggleOneToOneZoom] {
+        for action in [ActionID.toggleGrid, .toggleCompare, .toggleFitZoom, .toggleOneToOneZoom] {
             if let shortcut = bindings[action] {
                 viewRows.append(Row(
                     keys: shortcut.display,
@@ -218,6 +218,12 @@ struct ShortcutsHelpOverlay: View {
         }
 
         var compare: [Row] = []
+        if let c = bindings[.toggleCompare]?.display {
+            compare.append(Row(
+                keys: c,
+                label: ActionID.toggleCompare.helpTitle(triageMode: triageMode, lang: lang)
+            ))
+        }
         for action in [ActionID.pickCompare, .skipNextBaseline] {
             if let shortcut = bindings[action] {
                 compare.append(Row(
@@ -226,62 +232,51 @@ struct ShortcutsHelpOverlay: View {
                 ))
             }
         }
-        if !compare.isEmpty {
-            if let undo = bindings[.undo]?.display {
-                compare.append(Row(
-                    keys: undo,
-                    label: lang.t("Undo last pick / skip", ja: "直前の選択 / スキップを戻す")
-                ))
-            }
-            result.append(Section(title: lang.t("Compare", ja: "比較"), rows: compare))
-        }
-
-        var survey: [Row] = []
-        if let n = bindings[.toggleSurvey]?.display {
-            survey.append(Row(
-                keys: n,
-                label: ActionID.toggleSurvey.helpTitle(triageMode: triageMode, lang: lang)
+        if let undo = bindings[.undo]?.display {
+            compare.append(Row(
+                keys: undo,
+                label: lang.t("Undo last pick / skip", ja: "直前の選択 / スキップを戻す")
             ))
         }
-        survey.append(Row(
+        compare.append(Row(
             keys: "↑↓←→",
             label: lang.t("Move active pane (survey)", ja: "アクティブペイン移動（サーベイ）")
         ))
         if triageMode {
-            survey.append(contentsOf: [
+            compare.append(contentsOf: [
                 Row(keys: key(.toggleFavorite) ?? "K", label: lang.t("Keep active (survey)", ja: "アクティブを Keep（サーベイ）")),
                 Row(keys: key(.toggleRejected) ?? "O", label: lang.t("Out active (survey)", ja: "アクティブを Out（サーベイ）")),
             ])
         } else {
             if let k = key(.toggleFavorite) {
-                survey.append(Row(keys: k, label: lang.t("Favorite active (survey)", ja: "アクティブをお気に入り（サーベイ）")))
+                compare.append(Row(keys: k, label: lang.t("Favorite active (survey)", ja: "アクティブをお気に入り（サーベイ）")))
             }
             if let o = key(.toggleRejected) {
-                survey.append(Row(keys: o, label: lang.t("Reject active (survey)", ja: "アクティブをリジェクト（サーベイ）")))
+                compare.append(Row(keys: o, label: lang.t("Reject active (survey)", ja: "アクティブをリジェクト（サーベイ）")))
             }
-            survey.append(Row(
+            compare.append(Row(
                 keys: "0–5",
                 label: lang.t("Star rating active (survey)", ja: "アクティブに星評価（サーベイ）")
             ))
         }
         if let decide = bindings[.pickCompare]?.display {
-            survey.append(Row(
+            compare.append(Row(
                 keys: decide,
                 label: lang.t("Keep active, out others (survey)", ja: "アクティブを Keep、他を Out（サーベイ）")
             ))
         }
-        survey.append(Row(
+        compare.append(Row(
             keys: "⎋",
-            label: lang.t("Exit to grid (survey)", ja: "グリッドへ戻る（サーベイ）")
+            label: lang.t("Exit to grid (compare / survey)", ja: "グリッドへ戻る（比較 / サーベイ）")
         ))
         if let undo = bindings[.undo]?.display {
-            survey.append(Row(
+            compare.append(Row(
                 keys: undo,
                 label: lang.t("Undo decide (restore survey)", ja: "決定を戻す（サーベイを復元）")
             ))
         }
-        if !survey.isEmpty {
-            result.append(Section(title: lang.t("Survey", ja: "サーベイ"), rows: survey))
+        if !compare.isEmpty {
+            result.append(Section(title: lang.t("Compare & survey", ja: "比較 / サーベイ"), rows: compare))
         }
 
         return result

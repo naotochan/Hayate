@@ -88,17 +88,24 @@ extension ContentView {
         }
 
         // Unmodified arrow keys in the grid — move within the filtered order;
-        // ↑↓ jump by one (approximate) row, no-op at the edges. Modified
-        // arrows fall through to the keybinding store.
-        if showGrid, [123, 124, 125, 126].contains(event.keyCode),
-           event.modifierFlags.intersection(Shortcut.relevantModifiers).isEmpty {
-            switch event.keyCode {
-            case 123: moveGridSelection(by: -1)
-            case 124: moveGridSelection(by: 1)
-            case 125: moveGridSelection(by: gridColumnCount, clamping: false)
-            default:  moveGridSelection(by: -gridColumnCount, clamping: false)
+        // ↑↓ jump by one (approximate) row, no-op at the edges. Shift+arrow
+        // extends multi-select. Other modified arrows fall through to the store.
+        if showGrid, [123, 124, 125, 126].contains(event.keyCode) {
+            let mods = event.modifierFlags.intersection(Shortcut.relevantModifiers)
+            if mods == .shift {
+                extendGridSelectionWithArrow(keyCode: event.keyCode)
+                return true
             }
-            return true
+            if mods.isEmpty {
+                gridSelectionAnchor = nil
+                switch event.keyCode {
+                case 123: moveGridSelection(by: -1)
+                case 124: moveGridSelection(by: 1)
+                case 125: moveGridSelection(by: gridColumnCount, clamping: false)
+                default:  moveGridSelection(by: -gridColumnCount, clamping: false)
+                }
+                return true
+            }
         }
 
         // Arrow keys in survey — move the active pane within the grid layout.
@@ -253,12 +260,16 @@ extension ContentView {
             }
             if compareMode { exitCompareMode() }
             showGrid.toggle()
-            if !showGrid { selectedIndices.removeAll() }
+            if !showGrid {
+                selectedIndices.removeAll()
+                gridSelectionAnchor = nil
+            }
             return true
 
         case .toggleCompare:
-            if surveyMode { exitSurveyMode(returnToGrid: false) }
-            if compareMode {
+            if surveyMode {
+                exitSurveyMode(returnToGrid: true)
+            } else if compareMode {
                 exitCompareMode()
             } else {
                 enterCompareMode()
@@ -266,13 +277,7 @@ extension ContentView {
             return true
 
         case .toggleSurvey:
-            if compareMode { exitCompareMode() }
-            if surveyMode {
-                exitSurveyMode(returnToGrid: true)
-            } else {
-                enterSurveyMode()
-            }
-            return true
+            return false
 
         case .toggleFitZoom:
             if zoomScale > 1.01 {
@@ -345,6 +350,7 @@ extension ContentView {
             if selectedIndices.count == visibleCount,
                Set(gridDisplayItems.map(\.fileIndex)) == selectedIndices {
                 selectedIndices.removeAll()
+                gridSelectionAnchor = nil
             } else {
                 selectAllVisibleGridItems()
             }

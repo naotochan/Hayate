@@ -138,21 +138,11 @@ extension ContentView {
 
     // MARK: - Enter / exit
 
-    func enterSurveyMode() {
-        guard decoder != nil else { return }
+    /// Enter survey from a 3–6 photo grid selection (via Compare / C).
+    func enterSurveyFromGridSelection() {
+        guard selectedIndices.count >= 3 else { return }
 
-        if showGrid && selectedIndices.count >= 2 {
-            surveyIndices = Array(selectedIndices.sorted().prefix(6))
-        } else {
-            var indices = [session.currentIndex]
-            if session.currentIndex < session.files.count - 1 {
-                indices.append(session.currentIndex + 1)
-            } else if session.currentIndex > 0 {
-                indices.insert(session.currentIndex - 1, at: 0)
-            }
-            guard indices.count >= 2 else { return }
-            surveyIndices = indices
-        }
+        surveyIndices = Array(selectedIndices.sorted().prefix(6))
 
         compareMode = false
         compareIndices = []
@@ -162,13 +152,14 @@ extension ContentView {
         surveyTextureLoadTask?.cancel()
         surveyTextureLoadTask = nil
         surveyTextureGeneration &+= 1
-        surveyActiveSlot = 0
+        surveyActiveSlot = surveyIndices.firstIndex(of: session.currentIndex) ?? 0
         surveyTextures = [:]
         showGrid = false
         selectedIndices.removeAll()
+        gridSelectionAnchor = nil
         surveyMode = true
         resetZoom()
-        session.currentIndex = surveyIndices[0]
+        session.currentIndex = surveyIndices[surveyActiveSlot]
 
         loadSurveyTextures()
     }

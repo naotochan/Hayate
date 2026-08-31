@@ -99,7 +99,7 @@ struct MetalImageView: NSViewRepresentable {
         private var redrawPending = false
         private weak var lastView: MTKView?
 
-        private var reportedDrawableSize: Binding<CGSize>
+        var reportedDrawableSize: Binding<CGSize>
 
         init(device: MTLDevice, reportedDrawableSize: Binding<CGSize>) {
             self.reportedDrawableSize = reportedDrawableSize

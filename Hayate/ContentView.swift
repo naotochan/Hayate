@@ -119,6 +119,8 @@ struct ContentView: View {
     @State var lastDragPoint: NSPoint?
     @State var showGrid = false
     @State var selectedIndices: Set<Int> = []
+    /// Anchor for Shift+arrow / Shift+click range selection in the grid.
+    @State var gridSelectionAnchor: Int?
     @State var gridFilter: GridFilter = .all
     /// Approximate column count of the adaptive grid, for ↑↓ row navigation.
     @State var gridColumnCount = 5
@@ -222,6 +224,7 @@ struct ContentView: View {
                         onExport: { session.requestExport() },
                         onAfterTrashOut: {
                             selectedIndices.removeAll()
+                            gridSelectionAnchor = nil
                             loadCurrentImage()
                         },
                         onShowShortcuts: {
@@ -397,6 +400,7 @@ struct ContentView: View {
                 if let indices = pendingDeletionIndices {
                     let deleted = session.deleteFilesAtIndices(indices)
                     selectedIndices.removeAll()
+                    gridSelectionAnchor = nil
                     pendingDeletionIndices = nil
                     if deleted > 0 {
                         if surveyMode {
@@ -674,6 +678,7 @@ struct ContentView: View {
         // Grid / Compare / selection
         showGrid = false
         selectedIndices.removeAll()
+        gridSelectionAnchor = nil
         gridFilter = .all
         compareMode = false
         compareIndices.removeAll()

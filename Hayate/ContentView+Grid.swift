@@ -251,8 +251,12 @@ extension ContentView {
                         .background(Color.accentColor.opacity(0.5))
                         .cornerRadius(3)
 
-                    if selectedIndices.count >= 2 {
-                        Text(L.t("N survey", ja: "N サーベイ"))
+                    if selectedIndices.count >= 3 {
+                        Text(L.t("C survey (3–6)", ja: "C サーベイ（3–6）"))
+                            .font(.system(size: 11))
+                            .foregroundColor(.secondary)
+                    } else if selectedIndices.count == 2 {
+                        Text(L.t("C compare", ja: "C 比較"))
                             .font(.system(size: 11))
                             .foregroundColor(.secondary)
                     }
@@ -523,17 +527,35 @@ extension ContentView {
         return nil
     }
 
-    /// Shift+click range select along visible grid order (excludes collapsed burst members).
-    func selectGridDisplayRange(anchorFileIndex: Int, targetFileIndex: Int) {
+    /// Replace the grid selection with the visible range between anchor and target.
+    func setGridDisplayRangeSelection(anchorFileIndex: Int, targetFileIndex: Int) {
         let items = gridDisplayItems
         let anchor = gridNavigationIndex(for: anchorFileIndex)
+        let target = gridNavigationIndex(for: targetFileIndex)
         guard let anchorPos = items.firstIndex(where: { $0.fileIndex == anchor }),
-              let targetPos = items.firstIndex(where: { $0.fileIndex == targetFileIndex }) else {
+              let targetPos = items.firstIndex(where: { $0.fileIndex == target }) else {
             return
         }
-        for pos in min(anchorPos, targetPos)...max(anchorPos, targetPos) {
-            selectedIndices.insert(items[pos].fileIndex)
+        let range = min(anchorPos, targetPos)...max(anchorPos, targetPos)
+        selectedIndices = Set(range.map { items[$0].fileIndex })
+    }
+
+    /// Shift+arrow: extend multi-select from a fixed anchor through the new focus.
+    func extendGridSelectionWithArrow(keyCode: UInt16) {
+        if gridSelectionAnchor == nil {
+            gridSelectionAnchor = session.currentIndex
         }
+        guard let anchor = gridSelectionAnchor else { return }
+
+        switch keyCode {
+        case 123: moveGridSelection(by: -1)
+        case 124: moveGridSelection(by: 1)
+        case 125: moveGridSelection(by: gridColumnCount, clamping: false)
+        case 126: moveGridSelection(by: -gridColumnCount, clamping: false)
+        default: return
+        }
+
+        setGridDisplayRangeSelection(anchorFileIndex: anchor, targetFileIndex: session.currentIndex)
     }
 
     /// Visible grid slots only — excludes collapsed burst members.
@@ -567,6 +589,32 @@ extension ContentView {
         }
     }
 
+    private func handleGridCellTap(index: Int) {
+        if NSEvent.modifierFlags.contains(.shift) {
+            let anchor = gridSelectionAnchor ?? session.currentIndex
+            if gridSelectionAnchor == nil {
+                gridSelectionAnchor = anchor
+            }
+            setGridDisplayRangeSelection(anchorFileIndex: anchor, targetFileIndex: index)
+            session.currentIndex = index
+        } else if NSEvent.modifierFlags.contains(.command) {
+            if selectedIndices.isEmpty {
+                selectedIndices.insert(session.currentIndex)
+                gridSelectionAnchor = session.currentIndex
+            }
+            if selectedIndices.contains(index) {
+                selectedIndices.remove(index)
+            } else {
+                selectedIndices.insert(index)
+            }
+            session.currentIndex = index
+        } else {
+            selectedIndices.removeAll()
+            session.currentIndex = index
+            gridSelectionAnchor = index
+        }
+    }
+
     private func gridCell(for item: GridDisplayItem, currentNavIndex: Int) -> some View {
         gridCell(for: item.url, index: item.fileIndex, burstBadge: item.burstBadge, currentNavIndex: currentNavIndex)
     }
@@ -589,28 +637,39 @@ extension ContentView {
                     burstStackChrome
                 }
 
-                // Thumbnail: use .fit to prevent overflow
-                if let nsImage = thumbnails[url] {
-                    Image(nsImage: nsImage)
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: gridCellHeight)
-                        .background(Color.black)
-                        .saturation(CullThumbnailStyle.saturation(for: entry, enabled: colorizeKeepOnly))
-                } else {
-                    Rectangle()
-                        .fill(Color.gray.opacity(0.2))
-                        .frame(height: gridCellHeight)
-                        .overlay {
-                            ProgressView()
-                                .scaleEffect(0.5)
-                        }
-                        .onAppear { loadThumbnail(for: url) }
-                        .onDisappear { cancelThumbnailLoad(for: url) }
+                Group {
+                    if let nsImage = thumbnails[url] {
+                        Image(nsImage: nsImage)
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                    } else {
+                        Rectangle()
+                            .fill(Color.gray.opacity(0.2))
+                            .overlay {
+                                ProgressView()
+                                    .scaleEffect(0.5)
+                            }
+                            .onAppear { loadThumbnail(for: url) }
+                            .onDisappear { cancelThumbnailLoad(for: url) }
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .frame(height: gridCellHeight)
+                .background(Color.black)
+                .saturation(CullThumbnailStyle.saturation(for: entry, enabled: colorizeKeepOnly))
+                .contentShape(Rectangle())
+                .onTapGesture(count: 2) {
+                    session.currentIndex = index
+                    selectedIndices.removeAll()
+                    gridSelectionAnchor = nil
+                    showGrid = false
+                    loadCurrentImage()
+                }
+                .onTapGesture(count: 1) {
+                    handleGridCellTap(index: index)
                 }
 
-                // Selection checkmark (top left)
+                // Badges sit above the thumbnail tap target so burst expand stays clickable.
                 VStack {
                     HStack {
                         if isSelected {
@@ -620,7 +679,6 @@ extension ContentView {
                                 .padding(4)
                         }
                         Spacer()
-                        // Badges (top right)
                         HStack(spacing: 4) {
                             if assistedCullingEnabled, photoAnalysisStore.needsReview.contains(url) {
                                 Image(systemName: "exclamationmark.triangle.fill")
@@ -642,6 +700,7 @@ extension ContentView {
                     }
                     Spacer()
                 }
+                .allowsHitTesting(true)
             }
             .frame(height: gridCellHeight)
             .clipped()
@@ -655,6 +714,10 @@ extension ContentView {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 3)
                 .background(isCurrent ? HayateTheme.wash(0.15) : Color.clear)
+                .contentShape(Rectangle())
+                .onTapGesture(count: 1) {
+                    handleGridCellTap(index: index)
+                }
         }
         .background(isExpandedBurstMember ? HayateTheme.wash(0.12) : HayateTheme.wash(0.06))
         .cornerRadius(4)
@@ -681,33 +744,6 @@ extension ContentView {
                 )
         )
         .opacity(entry?.isRejected == true ? 0.5 : 1.0)
-        .onTapGesture(count: 2) {
-            // Double-click: open in single photo view
-            session.currentIndex = index
-            selectedIndices.removeAll()
-            showGrid = false
-            loadCurrentImage()
-        }
-        .onTapGesture(count: 1) {
-            if NSEvent.modifierFlags.contains(.shift) {
-                let anchor = selectedIndices.max() ?? session.currentIndex
-                selectGridDisplayRange(anchorFileIndex: anchor, targetFileIndex: index)
-            } else if NSEvent.modifierFlags.contains(.command) {
-                // Cmd+click: add currentIndex on first multi-select, then toggle
-                if selectedIndices.isEmpty {
-                    selectedIndices.insert(session.currentIndex)
-                }
-                if selectedIndices.contains(index) {
-                    selectedIndices.remove(index)
-                } else {
-                    selectedIndices.insert(index)
-                }
-            } else {
-                // Plain click: select single, clear multi-select
-                selectedIndices.removeAll()
-                session.currentIndex = index
-            }
-        }
     }
 
     /// Offset frames behind the representative thumbnail for a collapsed burst.
@@ -738,6 +774,7 @@ extension ContentView {
                 .cornerRadius(4)
         }
         .buttonStyle(.plain)
+        .zIndex(1)
         .help(
             isCollapsed
                 ? L.t("Expand burst", ja: "バーストを展開")

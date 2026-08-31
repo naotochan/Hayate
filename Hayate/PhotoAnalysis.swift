@@ -265,7 +265,7 @@ actor PhotoAnalysisRunner {
         files: [URL],
         decoder: ImageDecoder,
         maxConcurrent: Int = 2,
-        onBatch: @MainActor @Sendable ([(URL, PhotoAnalysisResult)]) -> Void
+        onBatch: @escaping @MainActor @Sendable ([(URL, PhotoAnalysisResult)]) -> Void
     ) {
         guard token == sessionToken else { return }
         workTask?.cancel()
@@ -274,7 +274,8 @@ actor PhotoAnalysisRunner {
             var index = 0
             while index < files.count {
                 guard !Task.isCancelled else { return }
-                guard token == await self.sessionToken else { return }
+                let currentToken = await self.sessionToken
+                guard token == currentToken else { return }
 
                 let end = min(index + parallelism, files.count)
                 let batchURLs = Array(files[index..<end])
@@ -303,7 +304,9 @@ actor PhotoAnalysisRunner {
                     }
                 }
 
-                guard !Task.isCancelled, token == await self.sessionToken else { return }
+                guard !Task.isCancelled else { return }
+                let batchToken = await self.sessionToken
+                guard token == batchToken else { return }
                 guard !batchResults.isEmpty else { continue }
                 await onBatch(batchResults)
             }
