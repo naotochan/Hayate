@@ -153,7 +153,7 @@ struct HayateApp: App {
                 }
                 .keyboardShortcut("o", modifiers: .command)
 
-                Menu("Open Recent") {
+                Menu(localization.t("Open Recent", ja: "最近使ったフォルダを開く")) {
                     ForEach(session.recentFolders, id: \.path) { url in
                         Button(url.lastPathComponent) {
                             session.requestOpen(folder: url)

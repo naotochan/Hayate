@@ -193,7 +193,7 @@ struct SettingsView: View {
                     }
                     .labelsHidden()
                     .pickerStyle(.menu)
-                    .frame(maxWidth: 140)
+                    .frame(width: 140, alignment: .trailing)
                 }
 
                 HayateChrome.RowSeparator()
@@ -207,12 +207,12 @@ struct SettingsView: View {
                 ) {
                     Picker("", selection: $L.language) {
                         ForEach(AppLanguage.allCases) { lang in
-                            Text(lang.pickerLabel).tag(lang)
+                            Text(lang.pickerLabel(resolved: L.resolved)).tag(lang)
                         }
                     }
                     .labelsHidden()
                     .pickerStyle(.menu)
-                    .frame(maxWidth: 160)
+                    .frame(width: 200, alignment: .trailing)
                 }
             }
 
@@ -235,7 +235,7 @@ struct SettingsView: View {
                     }
                     .labelsHidden()
                     .pickerStyle(.menu)
-                    .frame(maxWidth: 170)
+                    .frame(width: 170, alignment: .trailing)
                 }
 
                 HayateChrome.RowSeparator()
@@ -298,7 +298,7 @@ struct SettingsView: View {
                         ),
                         in: ContentView.gridZoomScaleMin...ContentView.gridZoomScaleMax
                     )
-                    .frame(maxWidth: 140)
+                    .frame(width: 140)
                 }
 
                 HayateChrome.RowSeparator()
@@ -320,7 +320,7 @@ struct SettingsView: View {
                     }
                     .labelsHidden()
                     .pickerStyle(.menu)
-                    .frame(maxWidth: 120)
+                    .frame(width: 120, alignment: .trailing)
                 }
 
                 HayateChrome.RowSeparator()
@@ -352,7 +352,7 @@ struct SettingsView: View {
                     }
                     .labelsHidden()
                     .pickerStyle(.menu)
-                    .frame(maxWidth: 120)
+                    .frame(width: 120, alignment: .trailing)
                     .disabled(!burstGroupingEnabled)
                 }
 
@@ -541,7 +541,7 @@ struct SettingsView: View {
                     }
                     .labelsHidden()
                     .pickerStyle(.menu)
-                    .frame(maxWidth: 120)
+                    .frame(width: 120, alignment: .trailing)
                 }
             }
 
@@ -549,8 +549,9 @@ struct SettingsView: View {
                 HayateChrome.Row(
                     title: L.t("Current Usage", ja: "現在の使用量"),
                     subtitle: L.t(
-                        "\(formattedSize(cacheUsageBytes)) — \(cacheFileCount) files",
-                        ja: "\(formattedSize(cacheUsageBytes)) — \(cacheFileCount) ファイル"
+                        "%@ — %d files",
+                        ja: "%@ — %d ファイル",
+                        formattedSize(cacheUsageBytes), cacheFileCount
                     )
                 ) {
                     Button(L.t("Clear Cache", ja: "キャッシュをクリア")) {
@@ -567,8 +568,9 @@ struct SettingsView: View {
             Button(L.t("Cancel", ja: "キャンセル"), role: .cancel) {}
         } message: {
             Text(L.t(
-                "This will delete all \(cacheFileCount) cached preview files (\(formattedSize(cacheUsageBytes))). Previews will be regenerated as you browse.",
-                ja: "キャッシュ済みプレビュー \(cacheFileCount) 件（\(formattedSize(cacheUsageBytes))）をすべて削除します。閲覧に応じて再生成されます。"
+                "This will delete all %d cached preview files (%@). Previews will be regenerated as you browse.",
+                ja: "キャッシュ済みプレビュー %d 件（%@）をすべて削除します。閲覧に応じて再生成されます。",
+                cacheFileCount, formattedSize(cacheUsageBytes)
             ))
         }
     }

@@ -158,8 +158,9 @@ extension ContentView {
                 // Background build progress
                 if buildProgress.isBuilding {
                     Text(L.t(
-                        "Building previews: \(buildProgress.completed)/\(buildProgress.total)",
-                        ja: "プレビュー生成中: \(buildProgress.completed)/\(buildProgress.total)"
+                        "Building previews: %d/%d",
+                        ja: "プレビュー生成中: %d/%d",
+                        buildProgress.completed, buildProgress.total
                     ))
                         .foregroundColor(.gray)
                         .font(.system(size: 11, design: .monospaced))
@@ -187,7 +188,7 @@ extension ContentView {
             let recent = session.otherRecentFolders
             if !recent.isEmpty {
                 Divider()
-                Section("Recent Folders") {
+                Section(L.t("Recent Folders", ja: "最近使ったフォルダ")) {
                     ForEach(recent, id: \.path) { url in
                         Button {
                             session.requestOpen(folder: url)
@@ -220,8 +221,9 @@ extension ContentView {
         .menuIndicator(.hidden)
         .fixedSize()
         .help(L.t(
-            "Switch folder — \(session.folderURL?.path ?? "")",
-            ja: "フォルダを切り替え — \(session.folderURL?.path ?? "")"
+            "Switch folder — %@",
+            ja: "フォルダを切り替え — %@",
+            session.folderURL?.path ?? ""
         ))
         .accessibilityLabel(L.t("Switch photo folder", ja: "写真フォルダを切り替え"))
     }
