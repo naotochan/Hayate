@@ -53,8 +53,9 @@ struct ExportSheet: View {
                 HayateChrome.Row(
                     title: L.t("Copy or move", ja: "コピーまたは移動"),
                     subtitle: L.t(
-                        "Keep \(counts.keep) / Out \(counts.out) will be placed into Keep/ and Out/ under the destination. Undecided photos stay in the shoot.",
-                        ja: "Keep \(counts.keep) / Out \(counts.out) を保存先の Keep/ と Out/ に振り分けます。未決定は撮影フォルダに残ります。"
+                        "Keep %d / Out %d will be placed into Keep/ and Out/ under the destination. Undecided photos stay in the shoot.",
+                        ja: "Keep %d / Out %d を保存先の Keep/ と Out/ に振り分けます。未決定は撮影フォルダに残ります。",
+                        counts.keep, counts.out
                     )
                 ) {
                     Picker("", selection: $move) {
@@ -63,7 +64,7 @@ struct ExportSheet: View {
                     }
                     .labelsHidden()
                     .pickerStyle(.segmented)
-                    .frame(maxWidth: 160)
+                    .fixedSize()
                 }
             }
 
@@ -130,14 +131,16 @@ struct ExportSheet: View {
         if progress.finished {
             return progress.failed > 0
                 ? L.t(
-                    "Done — \(progress.completed - progress.failed) exported, \(progress.failed) failed (already exists or unwritable)",
-                    ja: "完了 — \(progress.completed - progress.failed) 件書き出し、\(progress.failed) 件失敗（既存または書き込み不可）"
+                    "Done — %d exported, %d failed (already exists or unwritable)",
+                    ja: "完了 — %d 件書き出し、%d 件失敗（既存または書き込み不可）",
+                    progress.completed - progress.failed, progress.failed
                 )
-                : L.t("Done — \(progress.completed) exported", ja: "完了 — \(progress.completed) 件書き出し")
+                : L.t("Done — %d exported", ja: "完了 — %d 件書き出し", progress.completed)
         }
         return L.t(
-            "Exporting \(progress.completed)/\(progress.total)…",
-            ja: "書き出し中 \(progress.completed)/\(progress.total)…"
+            "Exporting %d/%d…",
+            ja: "書き出し中 %d/%d…",
+            progress.completed, progress.total
         )
     }
 

@@ -314,16 +314,18 @@ struct OnboardingOverlay: View {
                 icon: "sidebar.left",
                 title: L.t("Switch folders quickly", ja: "フォルダをすばやく切り替え"),
                 body: L.t(
-                    "Pinned folders stay at the top; recently opened folders appear below. Use \(sidebar) to show or hide this sidebar.",
-                    ja: "Pinned は上部に固定され、Recent はその下に並びます。\(sidebar) でサイドバーの表示を切り替えます。"
+                    "Pinned folders stay at the top; recently opened folders appear below. Use %@ to show or hide this sidebar.",
+                    ja: "Pinned は上部に固定され、Recent はその下に並びます。%@ でサイドバーの表示を切り替えます。",
+                    sidebar
                 )
             ),
             Step(
                 icon: "hand.tap",
                 title: L.t("Drop, then cull", ja: "ドロップして選別"),
                 body: L.t(
-                    "Drop folders in this area. Each becomes its own entry in the sidebar. Once photos open, use \(keep) Keep · \(out) Out. Press ? anytime for every shortcut.",
-                    ja: "このエリアにフォルダをドロップ。それぞれ独立したフォルダとしてサイドバーに並びます。写真が開いたら \(keep) Keep · \(out) Out。? でいつでも全ショートカットを表示できます。"
+                    "Drop folders in this area. Each becomes its own entry in the sidebar. Once photos open, use %@ Keep · %@ Out. Press ? anytime for every shortcut.",
+                    ja: "このエリアにフォルダをドロップ。それぞれ独立したフォルダとしてサイドバーに並びます。写真が開いたら %@ Keep · %@ Out。? でいつでも全ショートカットを表示できます。",
+                    keep, out
                 )
             ),
         ]

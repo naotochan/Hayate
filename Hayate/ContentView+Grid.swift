@@ -243,7 +243,7 @@ extension ContentView {
                     .foregroundColor(.gray)
 
                 if !selectedIndices.isEmpty {
-                    Text(L.t("\(selectedIndices.count) selected", ja: "\(selectedIndices.count) 件選択"))
+                    Text(L.t("%d selected", ja: "%d 件選択", selectedIndices.count))
                         .font(.system(size: 11))
                         .foregroundColor(HayateTheme.fg(1))
                         .padding(.horizontal, 6)
